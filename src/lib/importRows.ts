@@ -1,7 +1,20 @@
 import { normalizeHeader } from './parse'
 import type { FixtureMovement } from './fixture'
 
-const columnAliases: Record<keyof Omit<FixtureMovement, 'id'>, string[]> = {
+export type CoreMovementField =
+    | 'date'
+    | 'inv'
+    | 'from'
+    | 'to'
+    | 'permit'
+    | 'issue'
+    | 'item'
+    | 'price'
+    | 'qin'
+    | 'qout'
+    | 'notes'
+
+const columnAliases: Record<CoreMovementField, string[]> = {
     date: ['date', 'التاريخ', 'تاريخ الوارد', 'تاريخ'],
     inv: ['inv', 'invoice', 'invoice number', 'رقم الفاتورة', 'الفاتورة'],
     from: ['from', 'supplier', 'vendor', 'المورد', 'وارد من'],
@@ -15,7 +28,7 @@ const columnAliases: Record<keyof Omit<FixtureMovement, 'id'>, string[]> = {
     notes: ['notes', 'note', 'ملاحظات', 'ملاحظة'],
 }
 
-type MovementField = keyof Omit<FixtureMovement, 'id'>
+type MovementField = CoreMovementField
 
 function getCell(row: Record<string, unknown>, field: MovementField): unknown {
     const aliases = new Set(columnAliases[field].map(normalizeHeader))

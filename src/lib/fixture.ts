@@ -13,6 +13,12 @@ export type FixtureMovement = {
     qin: number | string
     qout: number | string
     notes: string
+    custodyApplied?: boolean
+    createdBy?: string
+    sourceWarehouseId?: string
+    destType?: 'warehouse' | 'custodian'
+    destWarehouseId?: string
+    custodianName?: string
 }
 
 export const fixtureMovements = originalData as FixtureMovement[]

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
   Activity,
@@ -34,6 +34,7 @@ import {
   Send,
   Settings2,
   ShieldAlert,
+  ShoppingCart,
   Smartphone,
   Sparkles,
   Sun,
@@ -81,6 +82,7 @@ import AuditLogPage from './pages/AuditLogPage'
 import AuthPage from './pages/AuthPage'
 import CustodyPage from './pages/CustodyPage'
 import ImportPage from './pages/ImportPage'
+import PurchasesPage from './pages/PurchasesPage'
 import QualityPage from './pages/QualityPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
@@ -326,7 +328,7 @@ function App() {
     }
 
     if (canViewPage(session, 'purchases')) {
-      items.push({ to: '/movements', label: 'سجل الحركة', mark: '', icon: ClipboardList })
+      items.push({ to: '/purchases', label: 'المشتريات والتوريدات', mark: '', icon: ShoppingCart })
     }
 
     if (canViewPage(session, 'reports')) {
@@ -1780,24 +1782,24 @@ function App() {
             }
           />
           <Route
-            path="/movements"
+            path="/purchases"
             element={
-              <MovementsPage
-                movements={visibleMovements}
-                totalCount={movements.length}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
+              <PurchasesPage
+                movements={movements}
                 currency={settings.currency}
                 onSaveMovement={addMovement}
-                onExport={() => exportMovements(movements)}
                 onEdit={canManageRecords ? (m) => setEditingMovement(m) : () => {}}
                 onDelete={canManageRecords ? (m) => setDeletingMovement(m) : () => {}}
                 onLoadDemoData={handleLoadDemoData}
                 canEdit={canEdit}
                 isSystemAdmin={isSystemAdmin}
+                session={session}
+                globalSearchTerm={searchTerm}
               />
             }
           />
+          <Route path="/movements" element={<Navigate to="/purchases" replace />} />
+          <Route path="/movements/new" element={<Navigate to="/purchases?tab=add" replace />} />
           <Route path="/custody" element={<CustodyPage settings={settings} session={session} globalSearchTerm={searchTerm} />} />
           <Route
             path="/reports"
@@ -1812,7 +1814,7 @@ function App() {
             }
           />
           <Route path="/imports" element={<ImportPage onImport={mergeImportedMovements} session={session} />} />
-          <Route path="/quality" element={<QualityPage movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/movements') }} />} />
+          <Route path="/quality" element={<QualityPage movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />} />
           <Route
             path="/audit"
             element={
