@@ -117,7 +117,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
     backupDate: timestamp,
     generator: {
       userId: session?.user?.id ?? null,
-      email: session?.user?.email ?? session?.user?.user_metadata?.username ?? 'admin',
+      email: session?.user?.email ?? ((session?.user?.app_metadata as Record<string, unknown>)?.username as string) ?? 'admin',
       role: 'admin',
     },
     metadata: {

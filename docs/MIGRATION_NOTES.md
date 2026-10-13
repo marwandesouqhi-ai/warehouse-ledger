@@ -1,95 +1,88 @@
-# دليل وملاحظات الترحيل وقواعد البيانات (Migration Notes)
+# دليل خطة الإطلاق التدريجي والرجوع (Rollout & Migration Guide)
 
-**تاريخ الإصدار:** 13 أكتوبر 2026  
-**المشروع:** `warehouse-ledger`  
-**الفرع:** `feat/purchases-transfers-roles`  
+هذا المستند يوثق الخطوات العملية بالترتيب الدقيق للانتقال من وضع المصادقة المحلي القديم (`legacy`) إلى وضع الحماية المعزز (`secure`) القائم على Supabase Auth وRLS المشددة، مع ضمان عدم قفل أي مستخدم (Zero Lockout) وحماية البيانات بنسبة 100%.
 
 ---
 
-## 1. الاستراتيجية العامة وقواعد عدم فقدان البيانات (Zero Data Loss Strategy)
-
-تم تصميم جميع التعديلات في هذا التحديث وفق القواعد الصارمة التالية:
-1. **الترقية التراكمية الإضافية حصراً (Additive Migrations Only):** استخدام `ADD COLUMN IF NOT EXISTS` مع قيم افتراضية آمنة.
-2. **منع الأوامر الهدامة:** لا يوجد أي استخدام لـ `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, أو `DELETE`.
-3. **التوافق التام مع الجلسات والبيانات القديمة (Backward Compatibility):** أي حركة أو مستخدم قديم يظل صالحاً ويعمل بسلاسة، حيث يتم تطبيع البيانات وقت القراءة فقط داخل طبقة التطبيق.
-4. **التحقق برمجياً قبل وبعد الترحيل:** اجتياز اختبار المطابقة `tests/unit/snapshot.test.ts` الذي يضمن بقاء سجل الحركات الأصلية (33 حركة، 391 وارد، 361 منصرف، 32 صنفاً) متطابقاً بنسبة 100%.
-
----
-
-## 2. ترتيب ملفات الترحيل الإضافية (Migration Files & Execution Order)
-
-يتم تشغيل الملفات التالية بالترتيب الزمني الموضح في نافذة **Supabase SQL Editor** أو عبر أداة `supabase db push`:
-
-### الملف 1: `20261013190000_additive_roles_permissions.sql`
-- **الغرض:** إضافة حقل الصلاحيات الإضافية لجدول المستخدمين.
-- **الاستعلام:**
-  ```sql
-  ALTER TABLE public.app_users
-    ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';
-
-  COMMENT ON COLUMN public.app_users.permissions IS 'Array of extra permissions granted by system admin (view_audit, view_settings, manage_records)';
-  ```
-
-### الملف 2: `20261013193000_purchases_idempotency.sql`
-- **الغرض:** إضافة حقول التتبع وتجنب تكرار التأثير على رصيد العهدة (Idempotency).
-- **الاستعلام:**
-  ```sql
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS custody_applied BOOLEAN DEFAULT FALSE;
-
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS created_by TEXT;
-
-  COMMENT ON COLUMN public.movements.custody_applied IS 'Flag indicating whether inward/outward custody balance has been applied';
-  COMMENT ON COLUMN public.movements.created_by IS 'Username or user ID of the staff member who registered the movement';
-  ```
-
-### الملف 3: `20261013200000_transfers_custody_sources.sql`
-- **الغرض:** دعم نقل وصرف العهدة من وإلى أي مخزن فرعي أو أمين عهدة.
-- **الاستعلام:**
-  ```sql
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS source_warehouse_id TEXT DEFAULT 'main';
-
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS dest_warehouse_id TEXT;
-
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS dest_type TEXT DEFAULT 'warehouse';
-
-  ALTER TABLE public.movements
-    ADD COLUMN IF NOT EXISTS custodian_name TEXT;
-
-  COMMENT ON COLUMN public.movements.source_warehouse_id IS 'ID of source warehouse for outward transfer (e.g. main, pharmacy, etc.)';
-  COMMENT ON COLUMN public.movements.dest_warehouse_id IS 'ID of destination warehouse for inter-branch transfer';
-  COMMENT ON COLUMN public.movements.dest_type IS 'Destination classification: warehouse (inter-branch transfer) or custodian (personal/departmental custody)';
-  COMMENT ON COLUMN public.movements.custodian_name IS 'Recipient employee or custodian name if dest_type is custodian';
-  ```
-
-### الملف الاختياري للمراجعة: `_proposed_rls_hardening.sql`
-- **تنبيه:** هذا الملف **مقترح للمراجعة فقط** ولا يُطبق تلقائياً على خادم الإنتاج. يحتوي على سياسات مشددة لربط الصلاحيات بجدول `app_users` وهويات المستخدمين.
+## ⚠️ تنبيه أمني حاسم حول تاريخ المشروع وكلمات المرور
+نظراً لأن الإصدارات السابقة ومجلدات البناء السابقة وتاريخ git كانت تحتوي على قيمة كلمة المرور القديمة الصريحة قبل هذا الإصلاح:
+1. **تغيير كلمة مرور مدير النظام (System Admin) يدويًا في Supabase إلزامي وفوري.**
+2. تم شطب وتجريد كلمة المرور الصريحة من ملفات المشروع والكود المصدري ومجلد `dist/` والميجريشن القديم (`-- redacted`).
+3. تم إدراج `dist/`, `.env*`, `.vercel/`, و`supabase/.temp/` في `.gitignore`.
+4. لإزالة الملفات المؤقتة المتتبعة في git من التتبع دون حذفها من جهازك، شغّل الأمر التالي:
+   ```bash
+   git rm -r --cached supabase/.temp/
+   git commit -m "chore: untrack supabase temp directory"
+   ```
 
 ---
 
-## 3. استعلامات التحقق بعد التنفيذ (Post-Migration Verification)
+## 🚀 مراحل الإطلاق التدريجي (خطوة بخطوة)
 
-للتأكد من نجاح الترحيل على قاعدة البيانات، قم بتشغيل الاستعلام التالي:
-```sql
--- التحقق من وجود الأعمدة الجديدة في جدول الحركات
-SELECT column_name, data_type, column_default 
-FROM information_schema.columns 
-WHERE table_name = 'movements' 
-  AND column_name IN ('source_warehouse_id', 'dest_warehouse_id', 'dest_type', 'custodian_name', 'custody_applied', 'created_by');
+### المرحلة 1: نشر الكود في الوضع القديم (Legacy Mode)
+- **الإجراء:** نشر الكود مع إبقاء متغير البيئة `VITE_AUTH_MODE=legacy` (وهو الوضع الافتراضي تلقائياً).
+- **الهدف:** استمرار جميع المستخدمين في الدخول بدون أي تغيير أو انقطاع في الخدمة.
 
--- التحقق من عمود الصلاحيات في جدول المستخدمين
-SELECT column_name, data_type, column_default 
-FROM information_schema.columns 
-WHERE table_name = 'app_users' 
-  AND column_name = 'permissions';
+### المرحلة 2: نشر وظائف السحابة (Edge Functions) وتشغيل الترحيل
+1. نشر Edge Functions الجديدة من جهازك عبر Supabase CLI:
+   ```bash
+   supabase functions deploy admin-users
+   supabase functions deploy migrate-users
+   ```
+2. تعيين المفاتيح السرية في Supabase (بواسطة مدير المشروع):
+   ```bash
+   supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ```
+3. يقوم مدير النظام (`marwan-desouky`) بتشغيل دالة `migrate-users`:
+   - يتم استدعاء الدالة إما عبر cURL أو من واجهة النظام.
+   - تقوم الدالة بقراءة مستخدمي `app_users`، وإنشاء حساب في Supabase Auth لكل مستخدم بنفس كلمة سره الحالية دون قفل الحساب، وتعيين بيانات `app_metadata` (`role`, `permissions`, `must_change_password: true`).
+   - الدالة **Idempotent**: يمكن تشغيلها أكثر من مرة دون تكرار الحسابات.
+4. مراجعة تقرير الترحيل: التأكد من عدد الحسابات المنقولة، وفي حال فشل أي حساب (مثلاً لكلمة مرور قصيرة أقل من 6 أحرف)، يتم تحديثه يدوياً بواسطة المدير.
+
+### المرحلة 3: تجربة تسجيل الدخول في وضع الحماية التجريبي
+1. تجربة تسجيل الدخول بتفعيل `VITE_AUTH_MODE=secure` على بيئة تجريبية أو جهاز واحد.
+2. اختبار الدخول بالحسابات التالية:
+   - مدير النظام (`marwan-desouky`) -> تحقق من الوصول الكامل لكل الصفحات وسجل العمليات.
+   - أدمن عادي -> تحقق من عدم الوصول للمستخدمين وسجل العمليات والإعدادات.
+   - موظف مخازن -> تحقق من الوصول لصفحات المخازن والمنصرف والعهدة فقط.
+   - موظف مشتريات -> تحقق من نطاق المشتريات بالكامل وعدم رؤية أرصدة المخازن أو المنصرف.
+
+### المرحلة 4: تفعيل الوضع الآمن للجميع (Secure Mode Flip)
+1. تغيير متغير البيئة في الاستضافة إلى:
+   ```env
+   VITE_AUTH_MODE=secure
+   ```
+2. عند تسجيل دخول الموظفين لأول مرة، ستظهر لهم شاشة "إلزامية تغيير كلمة المرور" (`must_change_password`) لتحديد كلمة مرور قوية جديدة (8 أحرف على الأقل).
+
+### المرحلة 5: تطبيق سياسات الحماية المشددة (Harden RLS)
+⚠️ **تنبيه:** لا تنفّذ هذا الميجريشن إلا بعد التأكد من تسجيل دخول الجميع في الوضع الآمن بنجاح.
+1. تنفيذ ملف `supabase/migrations/20261013213000_harden_rls.sql` داخل Supabase SQL Editor.
+2. هذا الميجريشن يلغي وصول `anon` تماماً، ويقفل جداول `app_users`، `custody_items`، و`movements`، ويجعل `audit_logs` جدولاً غير قابل للتعديل أو الحذف (Append-Only).
+
+### المرحلة 6: التطهير النهائي (بعد أسبوع من الاستقرار وبموافقة صريحة)
+بعد مرور أسبوع كامل من استقرار النظام وتأكيد عمل جميع المستخدمين بكلمات مرورهم الجديدة:
+1. أخذ نسخة احتياطية كاملة وشاملة من قاعدة البيانات.
+2. تشغيل استعلام تفريغ كلمات المرور القديمة من جدول `app_users`:
+   ```sql
+   UPDATE public.app_users SET password = '';
+   ```
+3. هذا الإجراء **ممنوع تشغيله تلقائياً**، ولا يتم إلا بعد موافقة يدوية صريحة.
+
+---
+
+## 🔄 خطة التراجع الفوري (Rollback Plan)
+
+في حال حدوث أي طارئ أو تعثر في دخول المستخدمين أثناء مرحلة الإطلاق:
+
+### 1. الرجوع الفوري عن وضع الحماية للواجهة:
+قم بتغيير متغير البيئة وإعادة النشر:
+```env
+VITE_AUTH_MODE=legacy
 ```
+سيعود النظام فوراً إلى نمط المصادقة والتخزين المحلي القديم دون أي قفل.
 
----
-
-## 4. خطة التراجع في حال الطوارئ (Rollback Plan)
-
-بما أن كافة الأعمدة المضافة اختيارية وتحمل قيماً افتراضية، فإن وجودها لا يعطل النسخ البرمجية السابقة مطلقاً. إذا لزم الأمر، يمكن ببساطة تجاهل الأعمدة برمجياً دون الحاجة لحذفها من قاعدة البيانات.
+### 2. التراجع عن سياسات RLS:
+في حال تم تشغيل `20261013213000_harden_rls.sql` وحصل تعارض في قراءة العميل:
+قم بتشغيل ملف الـ Rollback في Supabase SQL Editor فوراً:
+`supabase/migrations/20261013213000_harden_rls_rollback.sql`
+سيعيد السياسات السابقة المفتوحة ويلغي قيود RLS فوراً.
