@@ -118,20 +118,30 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             // Mode: signIn
             const cleanUser = username.trim().toLowerCase()
             if (!cleanUser) {
-                throw new Error('يرجى إدخال اسم المستخدم.')
-            }
-            if (cleanUser === 'marwandesouqhi@gmail.com') {
-                throw new Error('تم حذف هذا الحساب نهائياً من النظام ومحظور تسجيل الدخول به.')
+                throw new Error('يرجى إدخال اسم المستخدم أو البريد الإلكتروني.')
             }
             if (!password) {
                 throw new Error('يرجى إدخال كلمة المرور.')
             }
 
-            const syntheticEmail = toSyntheticEmail(cleanUser)
-            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email: syntheticEmail,
+            let targetEmail = toSyntheticEmail(cleanUser)
+            let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email: targetEmail,
                 password,
             })
+
+            // If sign-in failed and user entered username or email alias, try alternate address
+            if (signInError && (cleanUser === 'marwan-desouky' || cleanUser === 'marwandesouqhi@gmail.com')) {
+                const alternateEmail = cleanUser === 'marwan-desouky' ? 'marwandesouqhi@gmail.com' : 'marwan-desouky@warehouse.local'
+                const retry = await supabase.auth.signInWithPassword({
+                    email: alternateEmail,
+                    password,
+                })
+                if (!retry.error) {
+                    signInData = retry.data
+                    signInError = null
+                }
+            }
 
             if (signInError) {
                 if (signInError.message.toLowerCase().includes('invalid login credentials')) {
