@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+:root {
+  --bg: #f4f7f6;
+  --surface: #ffffff;
+  --ink: #192b27;
+  --muted: #667570;
+  --line: #dce6e2;
+  --accent: #087f68;
+  --accent-wash: #e9f5f1;
+  --warn-bg: #fff3de;
+  --warn: #b86e00;
+  --bad-bg: #fde8e6;
+  --bad: #b3261e;
+  --ok-bg: #e3f3ea;
+  --ok: #23704f;
+  --info-bg: #e8eef7;
+  --shadow: 0 4px 16px rgba(25, 43, 39, 0.045);
+  font-size: 17px;
+  line-height: 1.65;
+  font-family: 'IBM Plex Sans Arabic', Tahoma, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  direction: rtl;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='dark'] {
+  --bg: #111a18;
+  --surface: #1b2724;
+  --ink: #e8f0ed;
+  --muted: #a0b0aa;
+  --line: #30403a;
+  --accent: #56b99e;
+  --accent-wash: #203a32;
+  --warn-bg: rgba(240, 176, 74, 0.16);
+  --warn: #f0b04a;
+  --ok-bg: rgba(111, 208, 160, 0.14);
+  --ok: #6fd0a0;
+  --info-bg: rgba(95, 132, 255, 0.13);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans Arabic', Tahoma, 'Segoe UI', sans-serif;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+bdi {
+  unicode-bidi: isolate;
+}
+
+::selection {
+  background: rgba(79, 195, 204, 0.25);
+}

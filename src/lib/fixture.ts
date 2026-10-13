@@ -1,0 +1,18 @@
+import originalData from '../../fixtures/original-data.json'
+
+export type FixtureMovement = {
+    id: number | string
+    date: string
+    inv: number | string
+    from: string
+    to: string
+    permit: string | number
+    issue: string
+    item: string
+    price: string | number
+    qin: number | string
+    qout: number | string
+    notes: string
+}
+
+export const fixtureMovements = originalData as FixtureMovement[]

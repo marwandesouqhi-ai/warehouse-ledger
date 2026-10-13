@@ -1,0 +1,552 @@
+import { logAuditEvent } from './auditLogger'
+import { supabase } from './supabase'
+
+export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase.from('app_users').select('*').order('created_at', { ascending: true })
+    if (error || !data) return []
+    return data.map((row) => ({
+      id: row.id,
+      username: row.username,
+      displayName: row.display_name || row.username,
+      password: row.password,
+      role: (row.role || 'editor') as UserRole,
+      activationCode: row.activation_code || '',
+      status: (row.status || 'active') as UserStatus,
+      createdAt: row.created_at || new Date().toISOString(),
+      activatedAt: row.activated_at || undefined,
+      lastLoginAt: row.last_login_at || undefined,
+      notes: row.notes || undefined,
+    }))
+  } catch (err) {
+    console.warn('Could not fetch users from cloud:', err)
+    return []
+  }
+}
+
+export async function saveUserToCloud(user: LocalUser): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.from('app_users').upsert({
+      id: user.id,
+      username: user.username.toLowerCase(),
+      display_name: user.displayName,
+      password: user.password,
+      role: user.role,
+      activation_code: user.activationCode,
+      status: user.status,
+      notes: user.notes || '',
+      created_at: user.createdAt,
+      activated_at: user.activatedAt || null,
+      last_login_at: user.lastLoginAt || null,
+    }, { onConflict: 'username' })
+  } catch (err) {
+    console.warn('Could not save user to cloud:', err)
+  }
+}
+
+export async function deleteUserFromCloud(id: string): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.from('app_users').delete().eq('id', id)
+  } catch (err) {
+    console.warn('Could not delete user from cloud:', err)
+  }
+}
+
+export async function syncUsersWithCloud(): Promise<LocalUser[]> {
+  try {
+    const cloudUsers = await fetchUsersFromCloud()
+    if (cloudUsers.length > 0) {
+      const local = loadLocalUsers()
+      const mergedMap = new Map<string, LocalUser>()
+
+      // Cloud users take priority
+      cloudUsers.forEach((u) => mergedMap.set(u.username.toLowerCase(), u))
+      // Add local users that might not have been pushed yet
+      local.forEach((u) => {
+        if (!mergedMap.has(u.username.toLowerCase())) {
+          mergedMap.set(u.username.toLowerCase(), u)
+          void saveUserToCloud(u)
+        }
+      })
+
+      const merged = Array.from(mergedMap.values())
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(merged))
+          window.dispatchEvent(new CustomEvent('local-users-changed'))
+        }
+      } catch {
+        // ignore
+      }
+      return merged
+    } else {
+      // If cloud is empty, seed with current local users
+      const local = loadLocalUsers()
+      for (const u of local) {
+        void saveUserToCloud(u)
+      }
+      return local
+    }
+  } catch {
+    return loadLocalUsers()
+  }
+}
+
+export type UserRole = 'admin' | 'editor' | 'viewer'
+export type UserStatus = 'active' | 'pending_activation'
+
+export type LocalUser = {
+  id: string
+  username: string
+  displayName: string
+  password: string
+  role: UserRole
+  activationCode: string
+  status: UserStatus
+  createdAt: string
+  activatedAt?: string
+  lastLoginAt?: string
+  notes?: string
+}
+
+export type LocalUserSession = {
+  user: {
+    id: string
+    email: string
+    user_metadata: {
+      username: string
+      name: string
+      displayName: string
+      role: UserRole
+    }
+    app_metadata: {
+      role: UserRole
+      system_admin: boolean
+    }
+  }
+  access_token: string
+}
+
+export const LOCAL_USERS_STORAGE_KEY = 'warehouse-ledger-local-users'
+export const LOCAL_SESSION_STORAGE_KEY = 'warehouse-ledger-local-session'
+
+const DEFAULT_ADMIN: LocalUser = {
+  id: 'usr-admin-marwan',
+  username: 'marwan-desouky',
+  displayName: 'مروان دسوقي (مدير النظام)',
+  password: 'PMArwan.55',
+  role: 'admin',
+  activationCode: '1001',
+  status: 'active',
+  createdAt: new Date().toISOString(),
+}
+
+export function isProtectedUser(username?: string | null): boolean {
+  if (!username) return false
+  const clean = username.trim().toLowerCase()
+  return clean === 'marwan-desouky' || clean === 'admin'
+}
+
+export function purgeDeletedAccount(emailOrUsername = 'marwandesouqhi@gmail.com'): void {
+  try {
+    if (typeof window === 'undefined') return
+    const target = emailOrUsername.toLowerCase().trim()
+
+    // 1. Purge from local storage users
+    const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        if (Array.isArray(parsed)) {
+          const filtered = (parsed as LocalUser[]).filter(
+            (u) =>
+              u.username.toLowerCase() !== target &&
+              u.displayName.toLowerCase() !== target
+          )
+          if (filtered.length !== parsed.length) {
+            localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(filtered))
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Purge local session if it matches
+    const sessionRaw = sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY) || localStorage.getItem(LOCAL_SESSION_STORAGE_KEY)
+    if (sessionRaw && sessionRaw.toLowerCase().includes(target)) {
+      sessionStorage.removeItem(LOCAL_SESSION_STORAGE_KEY)
+      localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY)
+      window.dispatchEvent(new CustomEvent('local-auth-changed'))
+    }
+
+    // 3. Purge Supabase auth tokens containing target
+    const stores = [localStorage, sessionStorage]
+    stores.forEach((store) => {
+      try {
+        for (let i = store.length - 1; i >= 0; i--) {
+          const key = store.key(i)
+          if (!key) continue
+          if (key.includes('sb-') || key.includes('supabase') || key.includes('auth')) {
+            const val = store.getItem(key) || ''
+            if (val.toLowerCase().includes(target)) {
+              store.removeItem(key)
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })
+  } catch (err) {
+    console.warn('purgeDeletedAccount error:', err)
+  }
+}
+
+export function generateActivationPin(): string {
+  // Generate a clean 6-digit numeric activation code
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+export function loadLocalUsers(): LocalUser[] {
+  purgeDeletedAccount('marwandesouqhi@gmail.com')
+  try {
+    if (typeof window === 'undefined') return [DEFAULT_ADMIN]
+    const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let users = parsed as LocalUser[]
+        // Completely purge the deleted old account marwandesouqhi@gmail.com if present
+        const filtered = users.filter(
+          (u) =>
+            u.username.toLowerCase() !== 'marwandesouqhi@gmail.com' &&
+            u.displayName.toLowerCase() !== 'marwandesouqhi@gmail.com'
+        )
+        let needsSave = filtered.length !== users.length
+        users = filtered
+
+        const marwanIdx = users.findIndex((u) => u.username.toLowerCase() === 'marwan-desouky')
+
+        if (marwanIdx === -1) {
+          users.unshift(DEFAULT_ADMIN)
+          needsSave = true
+        } else {
+          // Keep password updated to the system admin password
+          if (users[marwanIdx].password !== 'PMArwan.55') {
+            users[marwanIdx].password = 'PMArwan.55'
+            users[marwanIdx].role = 'admin'
+            users[marwanIdx].status = 'active'
+            needsSave = true
+          }
+        }
+
+        if (needsSave) {
+          saveLocalUsers(users)
+        }
+        return users
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read local users from localStorage:', err)
+  }
+
+  // Seed default admin user if list is empty
+  const initial = [DEFAULT_ADMIN]
+  saveLocalUsers(initial)
+  return initial
+}
+
+export function saveLocalUsers(users: LocalUser[]): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(users))
+      window.dispatchEvent(new CustomEvent('local-users-changed'))
+    }
+  } catch (err) {
+    console.error('Could not save local users:', err)
+  }
+
+  // Asynchronously sync users to Supabase cloud
+  for (const user of users) {
+    void saveUserToCloud(user)
+  }
+}
+
+export function addLocalUser(data: {
+  username: string
+  displayName?: string
+  password: string
+  role: UserRole
+  activationCode?: string
+  requireActivation?: boolean
+  notes?: string
+}): LocalUser {
+  const users = loadLocalUsers()
+  const cleanUsername = data.username.trim().toLowerCase()
+
+  if (!cleanUsername) {
+    throw new Error('يرجى إدخال اسم المستخدم.')
+  }
+
+  if (cleanUsername === 'marwandesouqhi@gmail.com') {
+    throw new Error('تم حذف هذا الحساب نهائياً من النظام ومحظور إعادة إنشائه.')
+  }
+
+  if (cleanUsername.includes(' ')) {
+    throw new Error('اسم المستخدم يجب ألا يحتوي على مسافات (استخدم حروفاً أو أرقاماً).')
+  }
+
+  if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+    throw new Error(`اسم المستخدم "${cleanUsername}" مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر.`)
+  }
+
+  if (!data.password || data.password.length < 3) {
+    throw new Error('كلمة المرور يجب أن لا تقل عن 3 أحرف/أرقام.')
+  }
+
+  const activationCode = data.activationCode?.trim() || generateActivationPin()
+  const newUser: LocalUser = {
+    id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    username: cleanUsername,
+    displayName: data.displayName?.trim() || cleanUsername,
+    password: data.password,
+    role: data.role,
+    activationCode,
+    status: data.requireActivation ? 'pending_activation' : 'active',
+    createdAt: new Date().toISOString(),
+    notes: data.notes?.trim() || undefined,
+  }
+
+  const next = [newUser, ...users]
+  saveLocalUsers(next)
+
+  void logAuditEvent({
+    action: `إضافة مستخدم محلي جديد: ${newUser.username} (${newUser.role})`,
+    entity_type: 'local_user',
+    details: {
+      username: newUser.username,
+      displayName: newUser.displayName,
+      role: newUser.role,
+      status: newUser.status,
+      activationCode: newUser.activationCode,
+    },
+  })
+
+  return newUser
+}
+
+export function updateLocalUser(
+  id: string,
+  updates: Partial<Omit<LocalUser, 'id' | 'createdAt'>>
+): LocalUser {
+  const users = loadLocalUsers()
+  const idx = users.findIndex((u) => u.id === id)
+  if (idx === -1) {
+    throw new Error('المستخدم غير موجود.')
+  }
+
+  const current = users[idx]
+  if (isProtectedUser(current.username)) {
+    if (updates.username && updates.username.toLowerCase() !== current.username.toLowerCase()) {
+      throw new Error('لا يمكن تغيير اسم المستخدم لحساب مدير النظام الرئيسي.')
+    }
+    if (updates.role && updates.role !== 'admin') {
+      throw new Error('لا يمكن تقليص أو تغيير صلاحية حساب مدير النظام الرئيسي.')
+    }
+    if (updates.status && updates.status !== 'active') {
+      throw new Error('لا يمكن تعطيل أو تعليق حساب مدير النظام الرئيسي.')
+    }
+  }
+
+  if (updates.username && updates.username.toLowerCase() !== current.username.toLowerCase()) {
+    const cleanUsername = updates.username.trim().toLowerCase()
+    if (users.some((u) => u.id !== id && u.username.toLowerCase() === cleanUsername)) {
+      throw new Error(`اسم المستخدم "${cleanUsername}" مسجل لمستخدم آخر.`)
+    }
+  }
+
+  const updated: LocalUser = {
+    ...current,
+    ...updates,
+    username: updates.username ? updates.username.trim().toLowerCase() : current.username,
+  }
+
+  users[idx] = updated
+  saveLocalUsers(users)
+
+  // If current logged-in user updated, update local session
+  const currentSession = getLocalSession()
+  if (currentSession?.user.id === id) {
+    setLocalSession(updated)
+  }
+
+  return updated
+}
+
+export function deleteLocalUser(id: string): void {
+  const users = loadLocalUsers()
+  const target = users.find((u) => u.id === id)
+  if (!target) return
+
+  if (isProtectedUser(target.username)) {
+    throw new Error('لا يمكن حذف حساب مدير النظام الأساسي (marwan-desouky). هذا الحساب محمي بشكل دائم ضد الحذف.')
+  }
+
+  const next = users.filter((u) => u.id !== id)
+  saveLocalUsers(next)
+  void deleteUserFromCloud(id)
+
+  void logAuditEvent({
+    action: `حذف مستخدم محلي: ${target.username}`,
+    entity_type: 'local_user',
+    details: { username: target.username, role: target.role },
+  })
+}
+
+export function changeUserPassword(id: string, newPassword: string): LocalUser {
+  if (!newPassword || newPassword.length < 3) {
+    throw new Error('كلمة المرور يجب أن لا تقل عن 3 أحرف.')
+  }
+  const updated = updateLocalUser(id, { password: newPassword })
+  void logAuditEvent({
+    action: `تغيير كلمة مرور المستخدم: ${updated.username}`,
+    entity_type: 'local_user',
+    details: { username: updated.username, role: updated.role },
+  })
+  return updated
+}
+
+export function activateLocalUserWithCode(
+  username: string,
+  activationCode: string
+): LocalUser {
+  const users = loadLocalUsers()
+  const cleanUsername = username.trim().toLowerCase()
+  const cleanCode = activationCode.trim()
+
+  const user = users.find((u) => u.username.toLowerCase() === cleanUsername)
+  if (!user) {
+    throw new Error('اسم المستخدم غير مسجل في النظام.')
+  }
+
+  if (user.status === 'active') {
+    return user
+  }
+
+  if (user.activationCode !== cleanCode) {
+    throw new Error('كود تأكيد التفعيل غير صحيح. يرجى مراجعة مدير النظام للحصول على الكود الصحيح.')
+  }
+
+  const updated: LocalUser = {
+    ...user,
+    status: 'active',
+    activatedAt: new Date().toISOString(),
+  }
+
+  const idx = users.findIndex((u) => u.id === user.id)
+  users[idx] = updated
+  saveLocalUsers(users)
+
+  void logAuditEvent({
+    action: `تأكيد تفعيل حساب مستخدم محلي بكود التفعيل: ${user.username}`,
+    entity_type: 'local_user',
+    details: { username: user.username },
+  })
+
+  return updated
+}
+
+export function authenticateLocalUser(
+  username: string,
+  password: string
+): { user: LocalUser; needsActivation?: boolean } {
+  const users = loadLocalUsers()
+  const cleanUsername = username.trim().toLowerCase()
+  if (cleanUsername === 'marwandesouqhi@gmail.com') {
+    throw new Error('تم حذف هذا الحساب نهائياً من النظام ومحظور تسجيل الدخول به.')
+  }
+
+  const user = users.find((u) => u.username.toLowerCase() === cleanUsername)
+  if (!user) {
+    throw new Error('اسم المستخدم غير مسجل. يرجى التحقق من الاسم أو طلب إنشاء حساب من المسؤول.')
+  }
+
+  if (user.password !== password) {
+    throw new Error('كلمة المرور غير صحيحة. يرجى التحقق والمحاولة مجدداً.')
+  }
+
+  if (user.status === 'pending_activation') {
+    return { user, needsActivation: true }
+  }
+
+  // Update last login
+  user.lastLoginAt = new Date().toISOString()
+  const idx = users.findIndex((u) => u.id === user.id)
+  users[idx] = user
+  saveLocalUsers(users)
+
+  setLocalSession(user)
+  return { user }
+}
+
+export function getLocalSession(): LocalUserSession | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY) || localStorage.getItem(LOCAL_SESSION_STORAGE_KEY)
+    if (raw) {
+      return JSON.parse(raw) as LocalUserSession
+    }
+  } catch (err) {
+    console.warn('Could not read local session:', err)
+  }
+  return null
+}
+
+export function setLocalSession(user: LocalUser): LocalUserSession {
+  const sessionObj: LocalUserSession = {
+    user: {
+      id: user.id,
+      email: user.username, // using username as unique identifier
+      user_metadata: {
+        username: user.username,
+        name: user.displayName,
+        displayName: user.displayName,
+        role: user.role,
+      },
+      app_metadata: {
+        role: user.role,
+        system_admin: user.role === 'admin',
+      },
+    },
+    access_token: `local-token-${user.id}-${Date.now()}`,
+  }
+
+  try {
+    if (typeof window !== 'undefined') {
+      const serialized = JSON.stringify(sessionObj)
+      sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, serialized)
+      localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, serialized)
+      window.dispatchEvent(new CustomEvent('local-auth-changed'))
+    }
+  } catch (err) {
+    console.error('Could not save local session:', err)
+  }
+
+  return sessionObj
+}
+
+export function clearLocalSession(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(LOCAL_SESSION_STORAGE_KEY)
+      localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY)
+      window.dispatchEvent(new CustomEvent('local-auth-changed'))
+    }
+  } catch (err) {
+    console.error('Could not clear local session:', err)
+  }
+}
