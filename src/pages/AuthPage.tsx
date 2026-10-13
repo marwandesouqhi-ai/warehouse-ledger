@@ -156,7 +156,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             // If user is required to change password on first login
             const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
             if (userAppMeta.must_change_password === true) {
-                setActiveUserEmail(signInData.user?.email || syntheticEmail)
+                setActiveUserEmail(signInData.user?.email || targetEmail)
                 setMode('setNewPassword')
                 setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (12 حرفاً على الأقل).')
                 return
@@ -165,7 +165,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             void logAuditEvent({
                 action: 'تسجيل دخول موثّق إلى النظام عبر Supabase Auth',
                 entity_type: 'auth',
-                user: { id: signInData.user?.id, email: signInData.user?.email || cleanUser },
+                user: { id: signInData.user?.id || 'auth-user', email: signInData.user?.email || cleanUser },
             })
 
             setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
