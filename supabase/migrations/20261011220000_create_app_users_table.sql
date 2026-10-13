@@ -32,7 +32,7 @@ VALUES (
     'usr-admin-marwan',
     'marwan-desouky',
     'مروان دسوقي (مدير النظام)',
-    'PMArwan.55',
+    '-- redacted',
     'admin',
     '1001',
     'active',

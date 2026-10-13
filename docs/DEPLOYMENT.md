@@ -21,3 +21,8 @@
 - The publishable key is intended for browser use; database access is restricted by Auth and RLS.
 - Never expose a secret or service-role key in browser builds, logs, or client bundles.
 - Validate the security headers in `vercel.json` after the final production deployment.
+
+## Authentication Modes (`VITE_AUTH_MODE`)
+- `legacy` (default): Uses the existing mirrored local accounts. Guarantees zero lockout during transition.
+- `secure`: Switches completely to official Supabase Auth using synthetic emails `<username>@warehouse.local` and signed `app_metadata`. Requires running the `migrate-users` Edge Function first.
+
