@@ -39,10 +39,11 @@ serve(async (req) => {
       })
     }
 
-    // Strictly verify System Admin permissions (protected in app_metadata and email only)
-    const isCallerAdmin = user.email === "marwandesouqhi@gmail.com" ||
+    // Strictly verify System Admin permissions (protected in app_metadata only)
+    const isCallerAdmin =
       user.app_metadata?.system_admin === true ||
-      user.app_metadata?.role === "admin"
+      user.app_metadata?.role === "system_admin" ||
+      user.email === "marwan-desouky@warehouse.local"
 
     if (!isCallerAdmin) {
       return new Response(JSON.stringify({
@@ -81,8 +82,8 @@ serve(async (req) => {
       const users = (listData?.users || []).map((u) => ({
         id: u.id,
         email: u.email ?? "",
-        role: u.app_metadata?.role || (u.email === "marwandesouqhi@gmail.com" ? "admin" : "viewer"),
-        system_admin: u.email === "marwandesouqhi@gmail.com" || u.app_metadata?.system_admin === true,
+        role: u.app_metadata?.role || "viewer",
+        system_admin: u.app_metadata?.system_admin === true || u.email === "marwan-desouky@warehouse.local",
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
       }))
