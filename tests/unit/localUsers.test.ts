@@ -17,19 +17,23 @@ describe('Local Users and PIN-Based Authentication Suite', () => {
     sessionStorage.clear()
   })
 
-  it('automatically seeds default system admin marwan-desouky with password PMArwan.55', () => {
+  it('automatically seeds default system admin marwan-desouky passwordless in code', () => {
     const users = loadLocalUsers()
     expect(users.length).toBeGreaterThanOrEqual(1)
 
     const admin = users.find((u) => u.username === 'marwan-desouky')
     expect(admin).toBeDefined()
     expect(admin?.role).toBe('admin')
-    expect(admin?.password).toBe('PMArwan.55')
+    expect(admin?.password).toBe('')
     expect(admin?.status).toBe('active')
   })
 
-  it('authenticates marwan-desouky with password PMArwan.55 successfully', () => {
-    const res = authenticateLocalUser('marwan-desouky', 'PMArwan.55')
+  it('authenticates marwan-desouky with set password successfully', () => {
+    const users = loadLocalUsers()
+    const admin = users.find((u) => u.username === 'marwan-desouky')!
+    updateLocalUser(admin.id, { password: 'DummyTestAdmin.123' })
+
+    const res = authenticateLocalUser('marwan-desouky', 'DummyTestAdmin.123')
     expect(res.user.username).toBe('marwan-desouky')
     expect(res.needsActivation).toBeFalsy()
 
@@ -120,7 +124,10 @@ describe('Local Users and PIN-Based Authentication Suite', () => {
   })
 
   it('clears local session on clearLocalSession()', () => {
-    authenticateLocalUser('marwan-desouky', 'PMArwan.55')
+    const users = loadLocalUsers()
+    const admin = users.find((u) => u.username === 'marwan-desouky')!
+    updateLocalUser(admin.id, { password: 'DummyTestAdmin.123' })
+    authenticateLocalUser('marwan-desouky', 'DummyTestAdmin.123')
     expect(getLocalSession()).not.toBeNull()
 
     clearLocalSession()

@@ -37,9 +37,10 @@ export type Permission =
   | 'manage_records'   // تعديل وحذف السجلات
 
 /**
- * نطاق المشتريات — للاستخدام المستقبلي (تغيير سطر واحد لتقييد الموظف)
+ * نطاق المشتريات — نطاق الوحدة بالكامل
  */
-export type PurchasesScope = 'all' | 'own'
+export type PurchasesScope = 'all'
+export const PURCHASES_SCOPE: PurchasesScope = 'all'
 
 // ─── الأسماء العربية للأدوار ──────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
  *
  * @param storedRole - الدور المخزن في app_users أو localStorage (قد يكون قديماً)
  * @param username - اسم المستخدم (لفحص الحسابات المحمية)
- * @param extraPermissions - الصلاحيات الإضافية الممنوحة للمستخدم
+ * @param _extraPermissions - الصلاحيات الإضافية الممنوحة للمستخدم
  */
 export function normalizeRole(
   storedRole: string,
@@ -124,7 +125,8 @@ export function normalizeRole(
 /**
  * getEffectiveRole — استخراج الدور الفعلي من الجلسة الحالية.
  *
- * يدعم كلاً من LocalUserSession وSupabase Session.
+ * أمان: يعتمد حصرياً على app_metadata الموقعة من السيرفر، ويتجاهل تماماً user_metadata
+ * لمنع أي تصعيد صلاحيات من جانب العميل.
  */
 export function getEffectiveRole(
   session: Session | LocalUserSession | null | undefined
@@ -134,30 +136,31 @@ export function getEffectiveRole(
   const user = 'user' in session ? session.user : null
   if (!user) return 'viewer'
 
-  // استخراج username واسم الدور من metadata
-  const username: string =
-    (user.user_metadata as Record<string, unknown>)?.username as string ||
-    (user as { email?: string }).email ||
-    ''
+  const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
+  const rawEmail = (user as { email?: string }).email || ''
+  const cleanUsername = String(appMeta.username || rawEmail.replace(/@warehouse\.local$/i, '')).trim()
 
-  // فحص إذا كان حساباً محمياً أولاً
-  if (isProtectedUser(username)) return 'system_admin'
+  // 1. فحص إذا كان حساباً محمياً (marwan-desouky أو admin)
+  if (isProtectedUser(cleanUsername)) return 'system_admin'
 
-  // استخراج الدور من metadata بالترتيب
-  const storedRole: string =
-    (user.app_metadata as Record<string, unknown>)?.role as string ||
-    (user.user_metadata as Record<string, unknown>)?.role as string ||
-    'viewer'
+  // 2. فحص راية system_admin الموقعة في app_metadata
+  if (appMeta.system_admin === true) return 'system_admin'
 
-  // الصلاحيات الإضافية (من LocalUser)
-  const permissions: string[] =
-    ((user.user_metadata as Record<string, unknown>)?.permissions as string[]) || []
+  // 3. استخراج الدور من app_metadata فقط (ممنوع user_metadata)
+  const storedRole: string = (appMeta.role as string) || 'viewer'
 
-  return normalizeRole(storedRole, username, permissions)
+  // الصلاحيات الإضافية من app_metadata فقط
+  const permissions: string[] = Array.isArray(appMeta.permissions)
+    ? (appMeta.permissions as string[])
+    : []
+
+  return normalizeRole(storedRole, cleanUsername, permissions)
 }
 
 /**
  * getExtraPermissions — استخراج الصلاحيات الإضافية من الجلسة.
+ *
+ * أمان: يقرأ حصرياً من app_metadata الموثوقة.
  */
 export function getExtraPermissions(
   session: Session | LocalUserSession | null | undefined
@@ -166,7 +169,8 @@ export function getExtraPermissions(
   const user = 'user' in session ? session.user : null
   if (!user) return []
 
-  const raw = (user.user_metadata as Record<string, unknown>)?.permissions
+  const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
+  const raw = appMeta.permissions
   if (!Array.isArray(raw)) return []
 
   return raw.filter((p): p is Permission =>

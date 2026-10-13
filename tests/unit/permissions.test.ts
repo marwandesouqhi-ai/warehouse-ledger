@@ -42,8 +42,10 @@ function makeSession(
         permissions,
       },
       app_metadata: {
+        username,
         role: role as 'admin' | 'editor' | 'viewer',
-        system_admin: false,
+        system_admin: username === 'marwan-desouky' || username === 'admin' || role === 'system_admin',
+        permissions,
       },
     },
     access_token: `token-${username}`,
@@ -365,5 +367,59 @@ describe('التوافق الرجعي مع الأدوار القديمة', () =>
     expect(canAccessRoute(s, '/audit')).toBe(false)
     expect(canAccessRoute(s, '/users')).toBe(false)
     expect(canAccessRoute(s, '/settings')).toBe(false)
+  })
+})
+
+// ─── اختبارات الأمان ومكافحة التزوير ──────────────────────────────────────────
+
+describe('حماية الصلاحيات ضد تزوير user_metadata', () => {
+  it('يرفض تماماً أي قيم مزورة في user_metadata ويعتمد حصرياً على app_metadata', () => {
+    // محاكاة مستخدم خبيث قام بتعديل user_metadata عبر supabase.auth.updateUser()
+    const forgedSession = {
+      user: {
+        id: 'usr-attacker-999',
+        email: 'attacker@warehouse.local',
+        user_metadata: {
+          username: 'marwan-desouky', // محاولة انتحال شخصية مدير النظام
+          role: 'system_admin',
+          permissions: ['view_audit', 'view_settings', 'manage_records'],
+        },
+        app_metadata: {
+          username: 'attacker',
+          role: 'viewer',
+          system_admin: false,
+          permissions: [],
+        },
+      },
+      access_token: 'fake-jwt',
+    } as any
+
+    // يجب أن يحصل على دور viewer فقط ولا يملك أي صلاحية
+    expect(getEffectiveRole(forgedSession)).toBe('viewer')
+    expect(isSystemAdmin(forgedSession)).toBe(false)
+    expect(can(forgedSession, 'view_audit')).toBe(false)
+    expect(can(forgedSession, 'view_settings')).toBe(false)
+    expect(can(forgedSession, 'manage_records')).toBe(false)
+    expect(canAccessRoute(forgedSession, '/audit')).toBe(false)
+    expect(canAccessRoute(forgedSession, '/users')).toBe(false)
+  })
+
+  it('حساب عادي بدور viewer لا يمنح أي وصول حتى لو ادعى system_admin في user_metadata', () => {
+    const regularViewerSession = {
+      user: {
+        id: 'usr-normal-user',
+        email: 'user@warehouse.local',
+        user_metadata: {
+          role: 'system_admin',
+        },
+        app_metadata: {
+          role: 'viewer',
+          system_admin: false,
+        },
+      },
+    } as any
+
+    expect(getEffectiveRole(regularViewerSession)).toBe('viewer')
+    expect(isSystemAdmin(regularViewerSession)).toBe(false)
   })
 })

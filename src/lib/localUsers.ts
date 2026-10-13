@@ -1,16 +1,20 @@
 import { logAuditEvent } from './auditLogger'
 import { supabase } from './supabase'
+import { isAuthSecureMode } from './authMode'
 
 export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
   if (!supabase) return []
   try {
-    const { data, error } = await supabase.from('app_users').select('*').order('created_at', { ascending: true })
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions')
+      .order('created_at', { ascending: true })
     if (error || !data) return []
     return data.map((row) => ({
       id: row.id,
       username: row.username,
       displayName: row.display_name || row.username,
-      password: row.password,
+      password: '', // Never read passwords into memory from cloud
       role: (row.role || 'editor') as UserRole,
       activationCode: row.activation_code || '',
       status: (row.status || 'active') as UserStatus,
@@ -33,11 +37,10 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
 export async function saveUserToCloud(user: LocalUser): Promise<void> {
   if (!supabase) return
   try {
-    await supabase.from('app_users').upsert({
+    const payload: Record<string, unknown> = {
       id: user.id,
       username: user.username.toLowerCase(),
       display_name: user.displayName,
-      password: user.password,
       role: user.role,
       activation_code: user.activationCode,
       status: user.status,
@@ -46,7 +49,12 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       created_at: user.createdAt,
       activated_at: user.activatedAt || null,
       last_login_at: user.lastLoginAt || null,
-    }, { onConflict: 'username' })
+    }
+    // Only persist password in legacy mode if present; never write in secure mode
+    if (!isAuthSecureMode() && user.password) {
+      payload.password = user.password
+    }
+    await supabase.from('app_users').upsert(payload, { onConflict: 'username' })
   } catch (err) {
     console.warn('Could not save user to cloud:', err)
   }
@@ -141,6 +149,7 @@ export type LocalUserSession = {
       role: UserRole
       system_admin: boolean
       permissions?: string[]
+      username?: string
     }
   }
   access_token: string
@@ -153,7 +162,7 @@ const DEFAULT_ADMIN: LocalUser = {
   id: 'usr-admin-marwan',
   username: 'marwan-desouky',
   displayName: 'مروان دسوقي (مدير النظام)',
-  password: 'PMArwan.55',
+  password: '', // Redacted / passwordless in code
   role: 'admin',
   activationCode: '1001',
   status: 'active',
@@ -252,10 +261,8 @@ export function loadLocalUsers(): LocalUser[] {
           users.unshift(DEFAULT_ADMIN)
           needsSave = true
         } else {
-          // Keep password updated to the system admin password
-          if (users[marwanIdx].password !== 'PMArwan.55') {
-            users[marwanIdx].password = 'PMArwan.55'
-            users[marwanIdx].role = 'admin'
+          // Ensure system admin status and active state without overwriting custom password
+          if (users[marwanIdx].status !== 'active') {
             users[marwanIdx].status = 'active'
             needsSave = true
           }
@@ -280,7 +287,11 @@ export function loadLocalUsers(): LocalUser[] {
 export function saveLocalUsers(users: LocalUser[]): void {
   try {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(users))
+      // In secure mode, strip passwords from localStorage records
+      const storageUsers = isAuthSecureMode()
+        ? users.map((u) => ({ ...u, password: '' }))
+        : users
+      localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(storageUsers))
       window.dispatchEvent(new CustomEvent('local-users-changed'))
     }
   } catch (err) {
@@ -543,6 +554,7 @@ export function setLocalSession(user: LocalUser): LocalUserSession {
         role: user.role,
         system_admin: isSysAdmin,
         permissions: user.permissions || [],
+        username: user.username,
       },
     },
     access_token: `local-token-${user.id}-${Date.now()}`,

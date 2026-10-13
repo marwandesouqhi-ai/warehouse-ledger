@@ -20,6 +20,7 @@ import {
     syncUsersWithCloud,
 } from '../lib/localUsers'
 import { logAuditEvent } from '../lib/auditLogger'
+import { isAuthSecureMode, toSyntheticEmail } from '../lib/authMode'
 
 type AuthMode = 'signIn' | 'activateAccount' | 'forgotPassword' | 'setNewPassword'
 
@@ -96,8 +97,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'setNewPassword') {
-                if (password.length < 6) {
-                    throw new Error('كلمة المرور يجب أن لا تقل عن 6 أحرف.')
+                if (password.length < 8) {
+                    throw new Error('كلمة المرور يجب أن لا تقل عن 8 أحرف وأرقام للأمان.')
                 }
                 if (password !== confirmPassword) {
                     throw new Error('كلمتا المرور غير متطابقتين.')
@@ -149,7 +150,50 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 setIsPendingActivation(false)
             }
 
-            // 1. Try local authentication with cloud fallback
+            // 1. In secure auth mode, authenticate strictly via Supabase Auth
+            if (isAuthSecureMode()) {
+                if (!supabase) {
+                    throw new Error('خدمة Supabase Auth غير مهيأة على هذا الجهاز.')
+                }
+                const syntheticEmail = toSyntheticEmail(cleanUser)
+                const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                    email: syntheticEmail,
+                    password,
+                })
+
+                if (signInError) {
+                    if (signInError.message.toLowerCase().includes('invalid login credentials')) {
+                        throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم وكلمة المرور.')
+                    }
+                    if (signInError.message.toLowerCase().includes('email not confirmed')) {
+                        throw new Error('الحساب قيد الانتظار أو غير مفعّل. يرجى التواصل مع مدير النظام.')
+                    }
+                    throw signInError
+                }
+
+                // If user is required to change password on first login
+                const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
+                if (userAppMeta.must_change_password === true) {
+                    setActiveUserEmail(signInData.user?.email || syntheticEmail)
+                    setMode('setNewPassword')
+                    setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (8 أحرف على الأقل).')
+                    return
+                }
+
+                void logAuditEvent({
+                    action: 'تسجيل دخول موثّق إلى النظام (وضع الحماية)',
+                    entity_type: 'auth',
+                    user: { id: signInData.user?.id, email: signInData.user?.email || cleanUser },
+                })
+
+                setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
+                setTimeout(() => {
+                    onPasswordSet?.()
+                }, 500)
+                return
+            }
+
+            // 2. Legacy auth mode: Try local authentication with cloud fallback
             try {
                 let res: { user: import('../lib/localUsers').LocalUser; needsActivation?: boolean }
                 try {
@@ -316,8 +360,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={6}
-                                        placeholder="6 أحرف على الأقل"
+                                        minLength={8}
+                                        placeholder="8 أحرف على الأقل"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         required
@@ -340,8 +384,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showConfirmPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={6}
-                                        placeholder="أعد كتابة كلمة المرور"
+                                        minLength={8}
+                                        placeholder="أعد كتابة كلمة المرور (8 أحرف على الأقل)"
                                         value={confirmPassword}
                                         onChange={(event) => setConfirmPassword(event.target.value)}
                                         required

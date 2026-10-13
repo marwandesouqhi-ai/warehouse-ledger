@@ -60,7 +60,7 @@ describe('Security & Authorization Hardening Audit', { timeout: 30000 }, () => {
   it('6. Rejects deprecated account marwandesouqhi@gmail.com', async () => {
     const { error } = await client.auth.signInWithPassword({
       email: 'marwandesouqhi@gmail.com',
-      password: 'PMArwan.55',
+      password: 'DummyTestPassword123!',
     })
 
     expect(error).toBeDefined()

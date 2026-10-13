@@ -31,7 +31,8 @@ export const supabase = supabaseUrl && supabasePublishableKey
 
 /**
  * Check if the given session or user has System Admin privileges.
- * ⚠️ FIXED: Blanket `role === 'admin'` check removed to prevent non-system admins from gaining system admin privileges.
+ * ⚠️ SECURITY HARDENED: Checks strictly signed app_metadata and trusted identities.
+ * Never trusts user_metadata which can be forged via supabase.auth.updateUser.
  */
 export function checkIsSystemAdmin(sessionOrUser: Session | User | null | undefined): boolean {
     if (!sessionOrUser) return false
@@ -39,18 +40,19 @@ export function checkIsSystemAdmin(sessionOrUser: Session | User | null | undefi
     if (!user) return false
 
     const email = (user.email || '').trim().toLowerCase()
-    const username = (String(user.user_metadata?.username || '')).trim().toLowerCase()
-    const appRole = String(user.app_metadata?.role || '')
-    const userRole = String(user.user_metadata?.role || '')
-    const isSysAdminFlag = user.app_metadata?.system_admin === true
+    const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
+    const appUsername = String(appMeta.username || '').trim().toLowerCase()
+    const appRole = String(appMeta.role || '')
+    const isSysAdminFlag = appMeta.system_admin === true
 
     return (
         email === 'marwan-desouky' ||
         email === 'admin' ||
-        username === 'marwan-desouky' ||
-        username === 'admin' ||
+        email === 'marwan-desouky@warehouse.local' ||
+        email === 'admin@warehouse.local' ||
+        appUsername === 'marwan-desouky' ||
+        appUsername === 'admin' ||
         appRole === 'system_admin' ||
-        userRole === 'system_admin' ||
         isSysAdminFlag
     )
 }
@@ -64,11 +66,8 @@ export function getUserRole(sessionOrUser: Session | User | null | undefined): A
 
     if (checkIsSystemAdmin(user)) return 'admin'
 
-    const role = (
-        user.app_metadata?.role ||
-        user.user_metadata?.role ||
-        'viewer'
-    ) as string
+    const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
+    const role = (appMeta.role || 'viewer') as string
 
     if (role === 'admin') return 'admin'
     if (role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff') return 'editor'
@@ -80,7 +79,9 @@ export function canEditInventory(sessionOrUser: Session | User | null | undefine
     const user = 'user' in sessionOrUser ? sessionOrUser.user : sessionOrUser
     if (!user) return false
     if (checkIsSystemAdmin(user)) return true
-    const role = (user.app_metadata?.role || user.user_metadata?.role || '') as string
+
+    const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
+    const role = (appMeta.role || '') as string
     return role === 'admin' || role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff'
 }
 
