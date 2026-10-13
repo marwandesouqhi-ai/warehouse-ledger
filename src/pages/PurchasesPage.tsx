@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   Sparkles,
   Trash2,
+  UserCheck,
   X,
 } from 'lucide-react'
 import type { FixtureMovement } from '../lib/fixture'
@@ -71,6 +72,7 @@ export default function PurchasesPage({
   const [sortOption, setSortOption] = useState<'date-desc' | 'date-asc' | 'item-asc' | 'val-desc' | 'qty-desc' | 'supplier-asc'>('date-desc')
   const [pageSize, setPageSize] = useState<number>(15)
   const [currentPage, setCurrentPage] = useState<number>(1)
+  const [staffFilter, setStaffFilter] = useState<string>('all')
   const [addSuccessMessage, setAddSuccessMessage] = useState('')
 
   // New Purchase Form State
@@ -146,9 +148,25 @@ export default function PurchasesPage({
         if (!match) return false
       }
 
+      // Staff attribution filter
+      if (staffFilter !== 'all' && (m.createdBy || '').trim() !== staffFilter) {
+        return false
+      }
+
       return true
     })
-  }, [purchases, statusFilter, searchTerm])
+  }, [purchases, statusFilter, searchTerm, staffFilter])
+
+  // Unique staff members for attribution filter
+  const uniqueStaffMembers = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of purchases) {
+      if (p.createdBy && p.createdBy.trim()) {
+        set.add(p.createdBy.trim())
+      }
+    }
+    return Array.from(set).sort()
+  }, [purchases])
 
   // Sorting
   const sortedPurchases = useMemo(() => {
@@ -188,7 +206,7 @@ export default function PurchasesPage({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, sortOption, searchTerm])
+  }, [statusFilter, sortOption, searchTerm, staffFilter])
 
   // Status counts for filters
   const statusCounts = useMemo(() => {
@@ -224,6 +242,7 @@ export default function PurchasesPage({
         'الكمية المصروفة': qtyOut,
         'الرصيد المتبقي': Math.max(0, qtyIn - qtyOut),
         'حالة الصرف': derived.status === 'full' ? 'مكتمل الصرف' : derived.status === 'part' ? 'منصرف جزئياً' : 'متبقٍ بالرصيد',
+        'سُجِّلت بواسطة': sanitizeExcelCell(m.createdBy || '—'),
         'ملاحظات': sanitizeExcelCell(m.notes || ''),
       }
     })
@@ -267,7 +286,10 @@ export default function PurchasesPage({
         qin: qinNum,
         qout: 0,
         notes: formNotes.trim(),
-        createdBy: session?.user?.user_metadata?.username || session?.user?.email || 'مستخدم',
+        createdBy:
+          (session?.user?.app_metadata as Record<string, unknown>)?.username as string ||
+          session?.user?.email?.replace(/@warehouse\.local$/i, '') ||
+          'مستخدم',
         custodyApplied: false,
       }
 
@@ -633,6 +655,22 @@ export default function PurchasesPage({
               </button>
             </div>
 
+            {/* Staff filter dropdown */}
+            <div className="staff-filter-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <UserCheck size={15} style={{ opacity: 0.6 }} />
+              <select
+                className="sort-select"
+                value={staffFilter}
+                onChange={(e) => setStaffFilter(e.target.value)}
+                aria-label="تصفية حسب الموظف"
+              >
+                <option value="all">كل الموظفين ({purchases.length})</option>
+                {uniqueStaffMembers.map((staff) => (
+                  <option key={staff} value={staff}>{staff}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="sort-group">
               <ArrowUpDown size={15} style={{ opacity: 0.6 }} />
               <select
@@ -676,13 +714,14 @@ export default function PurchasesPage({
                   <th>سعر الوحدة</th>
                   <th>إجمالي الفاتورة</th>
                   <th>حالة الصرف</th>
+                  <th>سُجِّلت بواسطة</th>
                   <th className="actions-header">الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedPurchases.length === 0 ? (
                   <tr>
-                    <td className="table-empty" colSpan={10}>
+                    <td className="table-empty" colSpan={11}>
                       <div className="ledger-empty-box">
                         <div className="ledger-empty-icon">
                           <Package size={28} />
@@ -755,6 +794,11 @@ export default function PurchasesPage({
                             }}
                           >
                             {derived.status === 'full' ? 'مكتمل الصرف' : derived.status === 'part' ? 'منصرف جزئياً' : 'متبقٍ بالرصيد'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                            {movement.createdBy || '—'}
                           </span>
                         </td>
                         <td className="actions-cell">

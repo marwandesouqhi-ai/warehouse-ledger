@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 describe('Edge Functions Security & Idempotency Logic Suite', () => {
   // Helper to simulate admin-users authorization check
@@ -99,7 +99,7 @@ describe('Edge Functions Security & Idempotency Logic Suite', () => {
       app_metadata: { role: 'admin' },
     })
 
-    const appUsersTable = [
+    const appUsersTable: Array<{ id: string; username: string; password: string; role: string; auth_user_id: string | null }> = [
       { id: 'usr-1', username: 'marwan-desouky', password: 'KnownPassword.1', role: 'admin', auth_user_id: null },
       { id: 'usr-2', username: 'khaled_store', password: 'ValidPassword123', role: 'warehouse_staff', auth_user_id: null },
     ]

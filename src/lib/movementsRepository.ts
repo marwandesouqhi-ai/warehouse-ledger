@@ -105,7 +105,7 @@ export async function saveMovements(movements: FixtureMovement[], ownerId?: stri
         .from('movements')
         .upsert(rows, {
             onConflict: 'fingerprint',
-            ignoreDuplicates: false,
+            ignoreDuplicates: true,
         })
         .select('*')
 
