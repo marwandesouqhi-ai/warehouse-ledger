@@ -15,6 +15,12 @@ type MovementRow = {
     qty_in: string
     qty_out: string
     notes: string
+    custody_applied?: boolean
+    created_by?: string
+    source_warehouse_id?: string
+    dest_warehouse_id?: string
+    dest_type?: 'warehouse' | 'custodian'
+    custodian_name?: string
 }
 
 function fromRow(row: MovementRow): FixtureMovement {
@@ -31,6 +37,12 @@ function fromRow(row: MovementRow): FixtureMovement {
         qin: row.qty_in,
         qout: row.qty_out,
         notes: row.notes,
+        custodyApplied: row.custody_applied,
+        createdBy: row.created_by,
+        sourceWarehouseId: row.source_warehouse_id,
+        destWarehouseId: row.dest_warehouse_id,
+        destType: row.dest_type,
+        custodianName: row.custodian_name,
     }
 }
 
@@ -55,6 +67,12 @@ function toRow(movement: FixtureMovement, ownerId?: string) {
         qty_out: String(movement.qout ?? ''),
         notes: movement.notes ?? '',
         fingerprint: movementFingerprint(movement),
+        ...(movement.custodyApplied !== undefined ? { custody_applied: movement.custodyApplied } : {}),
+        ...(movement.createdBy ? { created_by: movement.createdBy } : {}),
+        ...(movement.sourceWarehouseId ? { source_warehouse_id: movement.sourceWarehouseId } : {}),
+        ...(movement.destWarehouseId ? { dest_warehouse_id: movement.destWarehouseId } : {}),
+        ...(movement.destType ? { dest_type: movement.destType } : {}),
+        ...(movement.custodianName ? { custodian_name: movement.custodianName } : {}),
     }
 
     if (isIdUuid) {

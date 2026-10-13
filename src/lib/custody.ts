@@ -740,57 +740,111 @@ export function syncOutwardMovementToCustody(movement: {
   to?: string
   permit?: string | number
   notes?: string
+  sourceWarehouseId?: string
+  destType?: 'warehouse' | 'custodian'
+  destWarehouseId?: string
+  custodianName?: string
+  custodyApplied?: boolean
 }): {
   deductedFromMain: boolean
   addedToTarget: boolean
   targetWarehouse?: WarehouseDefinition
+  deductedFromSource?: boolean
+  addedToCustodian?: boolean
 } {
+  if (movement.custodyApplied) {
+    return {
+      deductedFromMain: false,
+      addedToTarget: false,
+      deductedFromSource: false,
+      addedToCustodian: false,
+    }
+  }
+
   const items = loadCustodyItems()
   const cleanItemName = (movement.item || '').trim()
   const qty = Math.max(0, Number(movement.qout) || 0)
   const today = new Date().toISOString().slice(0, 10)
   const actionDate = movement.issue?.trim() || movement.date?.trim() || today
+  const sourceWhId = movement.sourceWarehouseId || 'main'
 
-  // 1. Find item in main warehouse and deduct quantity
-  const mainIdx = items.findIndex(
-    (i) => i.warehouseId === 'main' && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
+  // Validation: cannot disburse to the exact same warehouse
+  const explicitTargetWhId = movement.destWarehouseId
+  if (explicitTargetWhId && explicitTargetWhId === sourceWhId) {
+    throw new Error('لا يمكن صرف أو تحويل الصنف إلى نفس المستودع المصدر.')
+  }
+
+  // 1. Find item in source warehouse and deduct quantity
+  const sourceIdx = items.findIndex(
+    (i) => i.warehouseId === sourceWhId && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
   )
 
-  let mainItem: CustodyItem | undefined
-  let deductedFromMain = false
+  let sourceItem: CustodyItem | undefined
+  let deductedFromSource = false
 
-  if (mainIdx !== -1) {
-    mainItem = items[mainIdx]
-    const newQty = Math.max(0, mainItem.quantity - qty)
-    const unitPrice = mainItem.quantity > 0 ? mainItem.value / mainItem.quantity : (Number(movement.price) || 0)
-    items[mainIdx] = {
-      ...mainItem,
+  if (sourceIdx !== -1) {
+    sourceItem = items[sourceIdx]
+    if (sourceItem.quantity < qty) {
+      throw new Error(`الرصيد المتاح من «${cleanItemName}» في المخزن المصدر (${sourceItem.quantity}) غير كافٍ لصرف كمية ${qty}.`)
+    }
+    const newQty = Math.max(0, sourceItem.quantity - qty)
+    const unitPrice = sourceItem.quantity > 0 ? sourceItem.value / sourceItem.quantity : (Number(movement.price) || 0)
+    items[sourceIdx] = {
+      ...sourceItem,
       quantity: newQty,
       value: Math.max(0, Math.round(newQty * unitPrice)),
       notes: movement.to
-        ? `${mainItem.notes ? `${mainItem.notes} • ` : ''}صرف ${qty} ${mainItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
-        : mainItem.notes,
+        ? `${sourceItem.notes ? `${sourceItem.notes} • ` : ''}صرف ${qty} ${sourceItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
+        : sourceItem.notes,
     }
-    deductedFromMain = true
+    deductedFromSource = true
   }
 
-  // 2. Identify target warehouse (branch)
-  const targetWh = findWarehouseByRecipient(movement.to)
-  let addedToTarget = false
+  // 2. Identify target warehouse or custodian
+  const targetWh = explicitTargetWhId
+    ? WAREHOUSES.find((w) => w.id === explicitTargetWhId)
+    : findWarehouseByRecipient(movement.to)
 
-  if (targetWh && targetWh.id !== 'main') {
+  let addedToTarget = false
+  let addedToCustodian = false
+
+  if (movement.destType === 'custodian' || movement.custodianName) {
+    const custodianName = movement.custodianName || movement.to || 'أمين عهدة'
+    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
+
+    const newItem: CustodyItem = {
+      id: `c-cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      warehouseId: sourceWhId,
+      code: `CUS-${Date.now().toString().slice(-4)}`,
+      name: cleanItemName,
+      category: sourceItem?.category || guessCategory(cleanItemName),
+      custodian: custodianName,
+      quantity: qty,
+      unit: sourceItem?.unit || 'قطعة',
+      condition: 'excellent',
+      custodyType: 'شخصية',
+      roomLocation: movement.to || 'عهدة موظف',
+      acquisitionDate: actionDate,
+      unitPrice: unitPrice > 0 ? unitPrice : undefined,
+      value: unitPrice > 0 ? unitPrice * qty : 0,
+      serialNumber: '',
+      notes: `صرف كعهدة شخصية للموظف: ${custodianName}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
+    }
+    items.push(newItem)
+    addedToCustodian = true
+  } else if (targetWh && targetWh.id !== sourceWhId) {
     // Check if target warehouse already has this item
     const targetIdx = items.findIndex(
       (i) => i.warehouseId === targetWh.id && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
     )
 
-    const unitPrice = Number(movement.price) || (mainItem && mainItem.quantity > 0 ? mainItem.value / Math.max(1, mainItem.quantity) : 0)
+    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
 
     if (targetIdx !== -1) {
       const existingTarget = items[targetIdx]
       const newQty = existingTarget.quantity + qty
       const addedVal = unitPrice > 0 ? unitPrice * qty : 0
-      const extraNote = `صرف وتوريد من المخزن الرئيسي (${qty} ${existingTarget.unit})${movement.permit ? ` بإذن صرف ${movement.permit}` : ''}`
+      const extraNote = `صرف وتوريد من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)} (${qty} ${existingTarget.unit})${movement.permit ? ` بإذن صرف ${movement.permit}` : ''}`
       items[targetIdx] = {
         ...existingTarget,
         quantity: newQty,
@@ -810,10 +864,10 @@ export function syncOutwardMovementToCustody(movement: {
         warehouseId: targetWh.id,
         code,
         name: cleanItemName,
-        category: mainItem?.category || guessCategory(cleanItemName),
+        category: sourceItem?.category || guessCategory(cleanItemName),
         custodian: `أمين عهدة ${targetWh.shortName}`,
         quantity: qty,
-        unit: mainItem?.unit || 'قطعة',
+        unit: sourceItem?.unit || 'قطعة',
         condition: 'excellent',
         custodyType: 'مستديمة',
         roomLocation: targetWh.building,
@@ -821,7 +875,7 @@ export function syncOutwardMovementToCustody(movement: {
         unitPrice: unitPrice > 0 ? unitPrice : undefined,
         value: unitPrice > 0 ? unitPrice * qty : 0,
         serialNumber: '',
-        notes: `مصروف من المخزن الرئيسي${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
+        notes: `مصروف من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
       }
       items.push(newItem)
       addedToTarget = true
@@ -837,9 +891,13 @@ export function syncOutwardMovementToCustody(movement: {
     // ignore
   }
 
+  movement.custodyApplied = true
+
   return {
-    deductedFromMain,
+    deductedFromMain: sourceWhId === 'main' && deductedFromSource,
     addedToTarget,
     targetWarehouse: targetWh,
+    deductedFromSource,
+    addedToCustodian,
   }
 }

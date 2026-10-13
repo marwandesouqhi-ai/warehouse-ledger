@@ -724,7 +724,7 @@ function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  async function addMovement(movement: FixtureMovement) {
+  async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
     if (supabase && session) {
       try {
         const [savedMovement] = await saveMovements([movement], session.user.id)
@@ -767,7 +767,9 @@ function App() {
       },
       user: session?.user,
     })
-    navigate('/movements')
+    if (redirectPath !== null) {
+      navigate(redirectPath || '/purchases')
+    }
   }
 
   async function updateExistingMovement(updated: FixtureMovement) {
@@ -1800,7 +1802,18 @@ function App() {
           />
           <Route path="/movements" element={<Navigate to="/purchases" replace />} />
           <Route path="/movements/new" element={<Navigate to="/purchases?tab=add" replace />} />
-          <Route path="/custody" element={<CustodyPage settings={settings} session={session} globalSearchTerm={searchTerm} />} />
+          <Route
+            path="/custody"
+            element={
+              <CustodyPage
+                settings={settings}
+                session={session}
+                globalSearchTerm={searchTerm}
+                movements={movements}
+                onSaveMovement={addMovement}
+              />
+            }
+          />
           <Route
             path="/reports"
             element={

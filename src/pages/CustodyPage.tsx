@@ -43,6 +43,7 @@ import {
   getWarehouseStats,
   loadCustodyItems,
   saveCustodyItems,
+  syncOutwardMovementToCustody,
   WAREHOUSES,
   type CustodyCategory,
   type CustodyCondition,
@@ -61,6 +62,9 @@ import { logAuditEvent } from '../lib/auditLogger'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
 import { matchesSearch } from '../lib/searchUtils'
 import { canEditInventory, checkIsSystemAdmin } from '../lib/supabase'
+import type { FixtureMovement } from '../lib/fixture'
+import { getStoredMovements } from '../lib/backup'
+import { canCreateDisbursement } from '../lib/permissions'
 
 const ICONS_MAP: Record<WarehouseDefinition['iconKey'], React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   Warehouse,
@@ -83,16 +87,50 @@ type CustodyPageProps = {
   settings?: AppSettings
   session?: Session | null
   globalSearchTerm?: string
+  movements?: FixtureMovement[]
+  onSaveMovement?: (movement: FixtureMovement, redirectPath?: string | null) => Promise<void>
 }
 
-export default function CustodyPage({ currency: propCurrency, settings: propSettings, session, globalSearchTerm }: CustodyPageProps) {
+export default function CustodyPage({
+  currency: propCurrency,
+  settings: propSettings,
+  session,
+  globalSearchTerm,
+  movements: propMovements,
+  onSaveMovement,
+}: CustodyPageProps) {
   const canEdit = canEditInventory(session)
+  const canDisburse = canCreateDisbursement(session) || canEdit
   const isSystemAdmin = checkIsSystemAdmin(session)
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
   const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
 
   const [searchParams] = useSearchParams()
+  const [mainTab, setMainTab] = useState<'items' | 'disbursements'>(() => {
+    return searchParams.get('tab') === 'disbursements' ? 'disbursements' : 'items'
+  })
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam === 'disbursements') {
+      setMainTab('disbursements')
+    } else if (tabParam === 'items') {
+      setMainTab('items')
+    }
+  }, [searchParams])
+
+  const storedOrPropMovements = propMovements && propMovements.length > 0 ? propMovements : getStoredMovements()
+  const outwardMovements = useMemo(() => {
+    return storedOrPropMovements.filter((m) => (Number(m.qout) || 0) > 0)
+  }, [storedOrPropMovements])
+
+  // Disbursement search and filters
+  const [disbursementSearch, setDisbursementSearch] = useState('')
+  const [disbursementSourceWh, setDisbursementSourceWh] = useState<string>('all')
+  const [disbursementDestWh, setDisbursementDestWh] = useState<string>('all')
+  const [isNewDisbursementOpen, setIsNewDisbursementOpen] = useState(false)
+
   const urlWarehouseId = searchParams.get('warehouse')
   const [activeWarehouseId, setActiveWarehouseId] = useState<string>(() => {
     if (urlWarehouseId && WAREHOUSES.some((w) => w.id === urlWarehouseId)) {
@@ -211,6 +249,58 @@ export default function CustodyPage({ currency: propCurrency, settings: propSett
       return true
     })
   }, [activeWarehouseItems, selectedCategory, selectedCondition, selectedType, searchTerm])
+
+  const filteredDisbursements = useMemo(() => {
+    return outwardMovements.filter((m) => {
+      if (disbursementSourceWh !== 'all') {
+        const srcWh = WAREHOUSES.find((w) => w.id === disbursementSourceWh)
+        const matchSourceId = m.sourceWarehouseId === disbursementSourceWh
+        const matchSourceName = srcWh && m.from && (m.from.includes(srcWh.name) || m.from.includes(srcWh.shortName))
+        if (!matchSourceId && !matchSourceName) return false
+      }
+      if (disbursementDestWh !== 'all') {
+        const destWh = WAREHOUSES.find((w) => w.id === disbursementDestWh)
+        const matchDestId = m.destWarehouseId === disbursementDestWh
+        const matchDestName = destWh && m.to && (m.to.includes(destWh.name) || m.to.includes(destWh.shortName))
+        if (!matchDestId && !matchDestName) return false
+      }
+      if (disbursementSearch.trim()) {
+        const matches = matchesSearch(
+          [
+            m.item,
+            m.from,
+            m.to,
+            m.issue,
+            m.permit,
+            m.notes,
+            m.custodianName,
+          ],
+          disbursementSearch
+        )
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [outwardMovements, disbursementSourceWh, disbursementDestWh, disbursementSearch])
+
+  const disbursementStats = useMemo(() => {
+    let totalQty = 0
+    let totalVal = 0
+    const itemSet = new Set<string>()
+    for (const m of outwardMovements) {
+      const q = Number(m.qout) || 0
+      const p = Number(m.price) || 0
+      totalQty += q
+      totalVal += q * p
+      if (m.item) itemSet.add(m.item.trim())
+    }
+    return {
+      count: outwardMovements.length,
+      totalQty,
+      totalVal,
+      uniqueItems: itemSet.size,
+    }
+  }, [outwardMovements])
 
   function handleSaveItem(item: CustodyItem) {
     const exists = items.some((i) => i.id === item.id)
@@ -437,6 +527,61 @@ export default function CustodyPage({ currency: propCurrency, settings: propSett
       },
       user: session?.user,
     })
+  }
+
+  async function handleExportDisbursements() {
+    const XLSX = await import('xlsx')
+    const rows = filteredDisbursements.map((m, idx) => ({
+      'م': idx + 1,
+      'تاريخ الصرف': m.date || '—',
+      'اسم الصنف': m.item,
+      'الكمية المنصرفة': Number(m.qout) || 0,
+      'سعر الوحدة': Number(m.price) || 0,
+      'إجمالي القيمة': (Number(m.qout) || 0) * (Number(m.price) || 0),
+      'المخزن المصدر': m.from || 'المخزن الرئيسي',
+      'الوجهة / المستلم': m.to || '—',
+      'رقم الإذن': m.permit || m.issue || '—',
+      'ملاحظات': m.notes || '',
+    }))
+    const sheet = XLSX.utils.json_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'سجل المنصرف والتحويلات')
+    XLSX.writeFile(workbook, `سجل-المنصرف-والتحويل-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  async function handleCreateDisbursement(mv: FixtureMovement) {
+    if (onSaveMovement) {
+      await onSaveMovement(mv, null)
+    } else {
+      syncOutwardMovementToCustody(mv)
+    }
+    setItems(loadCustodyItems())
+    setIsNewDisbursementOpen(false)
+    setImportNotice(`تم تسجيل إذن الصرف وحفظ الحركة بنجاح (${mv.item} - ${mv.qout} وحدة)!`)
+    setTimeout(() => setImportNotice(''), 6000)
+  }
+
+  function handleOpenPermitForMovement(mv: FixtureMovement) {
+    const synthItem: CustodyItem = {
+      id: `perm-${mv.id}`,
+      warehouseId: mv.destWarehouseId || (mv.destType === 'warehouse' ? 'fci' : 'main'),
+      code: String(mv.permit || mv.issue || mv.id),
+      name: mv.item,
+      category: 'أجهزة ومعدات طبية',
+      custodian: mv.to || mv.custodianName || 'المستلم',
+      quantity: Number(mv.qout) || 1,
+      unit: 'قطعة',
+      condition: 'excellent',
+      custodyType: 'مستديمة',
+      roomLocation: mv.to || '',
+      acquisitionDate: mv.date || new Date().toISOString().slice(0, 10),
+      unitPrice: Number(mv.price) || 0,
+      value: (Number(mv.qout) || 1) * (Number(mv.price) || 0),
+      serialNumber: '',
+      notes: mv.notes || '',
+    }
+    setPermitInitialItems([synthItem])
+    setIsPermitModalOpen(true)
   }
 
   const ActiveIcon = ICONS_MAP[activeWarehouse.iconKey] || Warehouse
@@ -715,8 +860,39 @@ export default function CustodyPage({ currency: propCurrency, settings: propSett
         </div>
       )}
 
-      {/* 2. Warehouses Tabs Strip */}
-      <div className="warehouses-tabs-container card-surface" role="tablist" aria-label="أقسام ومخازن العهدة">
+      {/* 1.5 Primary View Navigation Tabs */}
+      <div className="custody-nav-tabs-bar no-print" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mainTab === 'items'}
+          className={`custody-nav-tab-btn ${mainTab === 'items' ? 'active' : ''}`}
+          onClick={() => setMainTab('items')}
+          id="tab-custody-items"
+        >
+          <Package size={18} />
+          <span>الأصناف والعهدة الحالية</span>
+          <span className="badge-pill">{items.length}</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mainTab === 'disbursements'}
+          className={`custody-nav-tab-btn ${mainTab === 'disbursements' ? 'active' : ''}`}
+          onClick={() => setMainTab('disbursements')}
+          id="tab-custody-disbursements"
+        >
+          <ArrowLeftRight size={18} />
+          <span>حركات المنصرف والتحويل</span>
+          <span className="badge-pill">{outwardMovements.length}</span>
+        </button>
+      </div>
+
+      {mainTab === 'items' ? (
+        <>
+          {/* 2. Warehouses Tabs Strip */}
+          <div className="warehouses-tabs-container card-surface" role="tablist" aria-label="أقسام ومخازن العهدة">
         <div className="warehouses-scroll-strip">
           {WAREHOUSES.map((wh) => {
             const Icon = ICONS_MAP[wh.iconKey] || Warehouse
@@ -1085,6 +1261,216 @@ export default function CustodyPage({ currency: propCurrency, settings: propSett
           </button>
         </div>
       </div>
+    </>
+  ) : (
+    /* Disbursements View */
+    <div className="custody-disbursements-view">
+      {/* 2. Disbursements KPI Strip */}
+      <div className="custody-kpis-grid">
+        <div className="custody-kpi-card card-surface tone-teal">
+          <div className="kpi-mini-head">
+            <span>إجمالي أذون المنصرف</span>
+            <ArrowLeftRight size={17} />
+          </div>
+          <strong className="kpi-big-num">{disbursementStats.count.toLocaleString('ar-EG')}</strong>
+          <small className="kpi-mini-sub">{disbursementStats.uniqueItems.toLocaleString('ar-EG')} صنف مختلف تم صرفه</small>
+        </div>
+
+        <div className="custody-kpi-card card-surface tone-emerald">
+          <div className="kpi-mini-head">
+            <span>إجمالي الوحدات المنصرفة</span>
+            <Package size={17} />
+          </div>
+          <strong className="kpi-big-num">{disbursementStats.totalQty.toLocaleString('ar-EG')}</strong>
+          <small className="kpi-mini-sub">قطعة / وحدة محولة ومنصرفة</small>
+        </div>
+
+        <div className="custody-kpi-card card-surface tone-blue">
+          <div className="kpi-mini-head">
+            <span>إجمالي القيمة التقديرية</span>
+            <FileSpreadsheet size={17} />
+          </div>
+          <strong className="kpi-big-num">{formatCurrency(disbursementStats.totalVal, currency)}</strong>
+          <small className="kpi-mini-sub">القيمة الدفترية للأصناف المنصرفة</small>
+        </div>
+
+        <div className="custody-kpi-card card-surface tone-amber">
+          <div className="kpi-mini-head">
+            <span>عدد المخازن المستفيدة</span>
+            <Warehouse size={17} />
+          </div>
+          <strong className="kpi-big-num">
+            {new Set(outwardMovements.map((m) => m.destWarehouseId || m.to).filter(Boolean)).size.toLocaleString('ar-EG')}
+          </strong>
+          <small className="kpi-mini-sub">كليات ومستودعات وجهات مستلمة</small>
+        </div>
+      </div>
+
+      {/* 3. Filter & Search Toolbar */}
+      <div className="custody-toolbar card-surface">
+        <div className="custody-search-wrap">
+          <Search size={16} />
+          <input
+            type="search"
+            value={disbursementSearch}
+            onChange={(e) => setDisbursementSearch(e.target.value)}
+            placeholder="ابحث في حركات المنصرف (الصنف، المستلم، المخزن المصدر، إذن الصرف)..."
+            id="input-disbursement-search"
+          />
+          {disbursementSearch && (
+            <button type="button" className="clear-search-btn" onClick={() => setDisbursementSearch('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="custody-filter-selects">
+          <div className="filter-select-group">
+            <Filter size={14} />
+            <select
+              value={disbursementSourceWh}
+              onChange={(e) => setDisbursementSourceWh(e.target.value)}
+              aria-label="تصفية حسب المخزن المصدر"
+            >
+              <option value="all">كافة المخازن المصدر</option>
+              {WAREHOUSES.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-select-group">
+            <select
+              value={disbursementDestWh}
+              onChange={(e) => setDisbursementDestWh(e.target.value)}
+              aria-label="تصفية حسب المخزن المستلم"
+            >
+              <option value="all">كافة الوجهات والمخازن المستلمة</option>
+              {WAREHOUSES.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {canDisburse && (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => setIsNewDisbursementOpen(true)}
+              id="btn-add-disbursement-toolbar"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={16} />
+              <span>إذن صرف / تحويل جديد</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={handleExportDisbursements}
+            title="تصدير كشف المنصرف والتحويلات إلى Excel"
+          >
+            <FileSpreadsheet size={16} />
+            <span>تصدير Excel</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Disbursements Table */}
+      <div className="custody-table-card card-surface">
+        <div className="table-scroll-container">
+          <table className="custody-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>تاريخ الصرف</th>
+                <th>اسم الصنف</th>
+                <th>الكمية المنصرفة</th>
+                <th>سعر الوحدة</th>
+                <th>إجمالي القيمة</th>
+                <th>المخزن المصدر</th>
+                <th>الوجهة / المستلم</th>
+                <th>رقم المستند / الإذن</th>
+                <th>ملاحظات</th>
+                <th className="actions-header">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDisbursements.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="table-empty">
+                    <div className="ledger-empty-box">
+                      <div className="ledger-empty-icon">
+                        <ArrowLeftRight size={28} />
+                      </div>
+                      <h3>
+                        {disbursementSearch || disbursementSourceWh !== 'all' || disbursementDestWh !== 'all'
+                          ? 'لا توجد حركات منصرف مطابقة للبحث أو التصفية'
+                          : 'لا توجد حركات منصرف أو تحويل مسجلة بعد'}
+                      </h3>
+                      <p>
+                        {canDisburse
+                          ? 'يمكنك تسجيل أول حركة صرف أو تحويل بين المخازن بالضغط على «إذن صرف / تحويل جديد» أعلاه.'
+                          : 'لم يتم تسجيل أية أذون صرف في النظام حتى الآن.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredDisbursements.map((m, idx) => {
+                  const qty = Number(m.qout) || 0
+                  const price = Number(m.price) || 0
+                  const total = qty * price
+                  return (
+                    <tr key={m.id || idx}>
+                      <td>{idx + 1}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{m.date || m.issue || '—'}</td>
+                      <td style={{ fontWeight: 600 }}>{m.item}</td>
+                      <td style={{ fontWeight: 700, color: '#e11d48' }}>{qty}</td>
+                      <td>{formatCurrency(price, currency)}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{formatCurrency(total, currency)}</td>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem' }}>
+                          <Warehouse size={13} style={{ color: 'var(--accent)' }} />
+                          <span>{m.from || 'المخزن الرئيسي'}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600 }}>{m.to || m.custodianName || '—'}</span>
+                      </td>
+                      <td>
+                        {m.permit || m.issue ? (
+                          <code style={{ fontSize: '0.82rem', padding: '2px 6px', background: 'var(--bg)', borderRadius: '4px' }}>
+                            {m.permit || m.issue}
+                          </code>
+                        ) : '—'}
+                      </td>
+                      <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.notes || '—'}
+                      </td>
+                      <td className="actions-cell">
+                        <button
+                          type="button"
+                          className="table-action-btn"
+                          onClick={() => handleOpenPermitForMovement(m)}
+                          title="طباعة إذن صرف رسمي معتمد لهذا البند"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', padding: '4px 8px' }}
+                        >
+                          <Printer size={14} />
+                          <span>إذن رسمي</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )}
 
       {/* 6. Add/Edit Modal */}
       {(isAddingNew || (isSystemAdmin && editingItem)) && (
@@ -1213,6 +1599,16 @@ export default function CustodyPage({ currency: propCurrency, settings: propSett
           allWarehouseItems={activeWarehouseItems}
           settings={settings}
           onClose={() => setIsPermitModalOpen(false)}
+        />
+      )}
+
+      {/* 9.5 New Disbursement / Transfer Modal */}
+      {isNewDisbursementOpen && (
+        <NewDisbursementModal
+          items={items}
+          currency={currency}
+          onClose={() => setIsNewDisbursementOpen(false)}
+          onSubmit={handleCreateDisbursement}
         />
       )}
 
@@ -2532,4 +2928,337 @@ function ImportCustodyModal({
     </div>
   )
 }
+
+function NewDisbursementModal({
+  items,
+  currency,
+  onClose,
+  onSubmit,
+}: {
+  items: CustodyItem[]
+  currency: AppSettings['currency']
+  onClose: () => void
+  onSubmit: (movement: FixtureMovement) => Promise<void>
+}) {
+  const [sourceWarehouseId, setSourceWarehouseId] = useState<string>('main')
+  const [destType, setDestType] = useState<'warehouse' | 'custodian'>('warehouse')
+  const [destWarehouseId, setDestWarehouseId] = useState<string>('fci')
+  const [custodianName, setCustodianName] = useState<string>('')
+
+  // Available items in source warehouse
+  const sourceItems = useMemo(() => {
+    return items.filter((i) => i.warehouseId === sourceWarehouseId && i.quantity > 0)
+  }, [items, sourceWarehouseId])
+
+  const [selectedItemName, setSelectedItemName] = useState<string>(() => sourceItems[0]?.name || '')
+
+  useEffect(() => {
+    if (sourceItems.length > 0 && !sourceItems.some((i) => i.name === selectedItemName)) {
+      setSelectedItemName(sourceItems[0].name)
+    }
+  }, [sourceWarehouseId, sourceItems, selectedItemName])
+
+  const currentItem = useMemo(() => {
+    return sourceItems.find((i) => i.name === selectedItemName)
+  }, [sourceItems, selectedItemName])
+
+  const availableQty = currentItem ? currentItem.quantity : 0
+
+  const [quantity, setQuantity] = useState<number>(1)
+  const [unitPrice, setUnitPrice] = useState<number>(() => currentItem?.unitPrice || 0)
+
+  useEffect(() => {
+    if (currentItem) {
+      setUnitPrice(currentItem.unitPrice || 0)
+    }
+  }, [currentItem])
+
+  const [permitNo, setPermitNo] = useState<string>(() => {
+    return `DSP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+  })
+  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [notes, setNotes] = useState<string>('')
+  const [errorMsg, setErrorMsg] = useState<string>('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const sourceWh = WAREHOUSES.find((w) => w.id === sourceWarehouseId) || WAREHOUSES[0]
+  const targetWh = WAREHOUSES.find((w) => w.id === destWarehouseId)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setErrorMsg('')
+
+    const cleanItem = selectedItemName.trim()
+    if (!cleanItem) {
+      setErrorMsg('يرجى اختيار أو تحديد الصنف المراد صرفه.')
+      return
+    }
+
+    if (quantity <= 0) {
+      setErrorMsg('الكمية المراد صرفها يجب أن تكون أكبر من الصفر.')
+      return
+    }
+
+    if (availableQty > 0 && quantity > availableQty) {
+      setErrorMsg(`الكمية المطلوبة (${quantity}) تتجاوز الرصيد المتوفر في ${sourceWh.name} (${availableQty} قطعة).`)
+      return
+    }
+
+    if (destType === 'warehouse') {
+      if (!destWarehouseId) {
+        setErrorMsg('يرجى اختيار المخزن المستلم.')
+        return
+      }
+      if (destWarehouseId === sourceWarehouseId) {
+        setErrorMsg('لا يمكن التحويل لنفس المخزن المصدر.')
+        return
+      }
+    } else {
+      if (!custodianName.trim()) {
+        setErrorMsg('يرجى إدخال اسم أمين العهدة أو الموظف المستلم.')
+        return
+      }
+    }
+
+    setIsSubmitting(true)
+    try {
+      const targetName = destType === 'warehouse' ? (targetWh?.name || 'مخزن فرعي') : custodianName.trim()
+      const newMovement: FixtureMovement = {
+        id: Date.now(),
+        date: date || new Date().toISOString().slice(0, 10),
+        inv: '',
+        from: sourceWh.name,
+        to: targetName,
+        permit: permitNo.trim(),
+        issue: date || new Date().toISOString().slice(0, 10),
+        item: cleanItem,
+        price: unitPrice || 0,
+        qin: 0,
+        qout: quantity,
+        notes: notes.trim(),
+        sourceWarehouseId,
+        destType,
+        destWarehouseId: destType === 'warehouse' ? destWarehouseId : undefined,
+        custodianName: destType === 'custodian' ? custodianName.trim() : undefined,
+      }
+      await onSubmit(newMovement)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'تعذر حفظ إذن الصرف.')
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="disbursement-modal-backdrop" onClick={onClose}>
+      <div className="disbursement-modal-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title-wrap">
+            <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+              <ArrowLeftRight size={20} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--ink)' }}>
+                إنشاء إذن صرف / تحويل عهدة جديد
+              </h3>
+              <span className="modal-subtitle">
+                خصم الكمية من المخزن المصدر وتحويلها ذرياً إلى الوجهة المستهدفة
+              </span>
+            </div>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body-scroll" style={{ padding: '20px 24px', display: 'grid', gap: '16px' }}>
+            {errorMsg && (
+              <div className="inline-message error" role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={18} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                المخزن المصدر:
+                <select
+                  value={sourceWarehouseId}
+                  onChange={(e) => setSourceWarehouseId(e.target.value)}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                >
+                  {WAREHOUSES.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} {w.isHub ? '(المخزن الرئيسي)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                الصنف المراد صرفه:
+                {sourceItems.length > 0 ? (
+                  <select
+                    value={selectedItemName}
+                    onChange={(e) => setSelectedItemName(e.target.value)}
+                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  >
+                    {sourceItems.map((it) => (
+                      <option key={it.id} value={it.name}>
+                        {it.name} (المتاح: {it.quantity} {it.unit})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={selectedItemName}
+                    onChange={(e) => setSelectedItemName(e.target.value)}
+                    placeholder="اسم الصنف المراد صرفه..."
+                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  />
+                )}
+              </label>
+            </div>
+
+            {currentItem && (
+              <div style={{ background: 'rgba(14, 124, 134, 0.08)', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.86rem' }}>
+                <span style={{ color: 'var(--ink)' }}>الرصيد المتوفر في {sourceWh.shortName}: <strong>{availableQty} {currentItem.unit}</strong></span>
+                <span style={{ color: 'var(--muted)' }}>سعر الوحدة المقدر: {formatCurrency(currentItem.unitPrice || 0, currency)}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>نوع الوجهة المستلمة:</span>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                  <input
+                    type="radio"
+                    name="destType"
+                    checked={destType === 'warehouse'}
+                    onChange={() => setDestType('warehouse')}
+                  />
+                  <span>مخزن فرعي / كلية</span>
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                  <input
+                    type="radio"
+                    name="destType"
+                    checked={destType === 'custodian'}
+                    onChange={() => setDestType('custodian')}
+                  />
+                  <span>أمين عهدة / موظف محدد</span>
+                </label>
+              </div>
+            </div>
+
+            {destType === 'warehouse' ? (
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                المخزن المستلم (الكلية):
+                <select
+                  value={destWarehouseId}
+                  onChange={(e) => setDestWarehouseId(e.target.value)}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                >
+                  {WAREHOUSES.filter((w) => w.id !== sourceWarehouseId).map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                اسم أمين العهدة / الموظف المستلم:
+                <input
+                  type="text"
+                  value={custodianName}
+                  onChange={(e) => setCustodianName(e.target.value)}
+                  placeholder="مثال: د. أحمد مصطفى / معمل الحاسب..."
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  required
+                />
+              </label>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                الكمية المنصرفة:
+                <input
+                  type="number"
+                  min={1}
+                  max={availableQty > 0 ? availableQty : undefined}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  required
+                />
+              </label>
+
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                سعر الوحدة ({currency}):
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={unitPrice}
+                  onChange={(e) => setUnitPrice(Number(e.target.value))}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                />
+              </label>
+
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                تاريخ الصرف:
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  required
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                رقم إذن الصرف / المستند:
+                <input
+                  type="text"
+                  value={permitNo}
+                  onChange={(e) => setPermitNo(e.target.value)}
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                />
+              </label>
+
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                الغرض / ملاحظات الصرف:
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="مثال: تجهيز معمل الذكاء الاصطناعي للعام الجديد..."
+                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                />
+              </label>
+            </div>
+
+            <div style={{ background: 'var(--bg)', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 600 }}>
+              <span>إجمالي قيمة إذن الصرف:</span>
+              <span style={{ color: 'var(--accent)', fontSize: '1.05rem' }}>{formatCurrency(quantity * unitPrice, currency)}</span>
+            </div>
+          </div>
+
+          <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '16px 24px', borderTop: '1px solid var(--line)' }}>
+            <button type="button" className="secondary-btn" onClick={onClose} disabled={isSubmitting}>
+              إلغاء
+            </button>
+            <button type="submit" className="primary-btn" disabled={isSubmitting} id="btn-submit-new-disbursement">
+              <CheckCircle2 size={17} />
+              <span>{isSubmitting ? 'جاري الصرف والتحويل...' : 'اعتماد وحفظ إذن الصرف'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 
