@@ -18,6 +18,11 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
       activatedAt: row.activated_at || undefined,
       lastLoginAt: row.last_login_at || undefined,
       notes: row.notes || undefined,
+      permissions: Array.isArray(row.permissions)
+        ? row.permissions
+        : typeof row.permissions === 'string'
+          ? (() => { try { return JSON.parse(row.permissions) } catch { return [] } })()
+          : [],
     }))
   } catch (err) {
     console.warn('Could not fetch users from cloud:', err)
@@ -37,6 +42,7 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       activation_code: user.activationCode,
       status: user.status,
       notes: user.notes || '',
+      permissions: user.permissions || [],
       created_at: user.createdAt,
       activated_at: user.activatedAt || null,
       last_login_at: user.lastLoginAt || null,
@@ -95,7 +101,14 @@ export async function syncUsersWithCloud(): Promise<LocalUser[]> {
   }
 }
 
-export type UserRole = 'admin' | 'editor' | 'viewer'
+export type UserRole =
+  | 'system_admin'
+  | 'admin'
+  | 'warehouse_staff'
+  | 'purchasing_staff'
+  | 'editor'
+  | 'viewer'
+
 export type UserStatus = 'active' | 'pending_activation'
 
 export type LocalUser = {
@@ -110,6 +123,7 @@ export type LocalUser = {
   activatedAt?: string
   lastLoginAt?: string
   notes?: string
+  permissions?: string[]
 }
 
 export type LocalUserSession = {
@@ -121,10 +135,12 @@ export type LocalUserSession = {
       name: string
       displayName: string
       role: UserRole
+      permissions?: string[]
     }
     app_metadata: {
       role: UserRole
       system_admin: boolean
+      permissions?: string[]
     }
   }
   access_token: string
@@ -142,6 +158,7 @@ const DEFAULT_ADMIN: LocalUser = {
   activationCode: '1001',
   status: 'active',
   createdAt: new Date().toISOString(),
+  permissions: ['view_audit', 'view_settings', 'manage_records'],
 }
 
 export function isProtectedUser(username?: string | null): boolean {
@@ -284,6 +301,7 @@ export function addLocalUser(data: {
   activationCode?: string
   requireActivation?: boolean
   notes?: string
+  permissions?: string[]
 }): LocalUser {
   const users = loadLocalUsers()
   const cleanUsername = data.username.trim().toLowerCase()
@@ -319,6 +337,7 @@ export function addLocalUser(data: {
     status: data.requireActivation ? 'pending_activation' : 'active',
     createdAt: new Date().toISOString(),
     notes: data.notes?.trim() || undefined,
+    permissions: data.permissions || [],
   }
 
   const next = [newUser, ...users]
@@ -333,6 +352,7 @@ export function addLocalUser(data: {
       role: newUser.role,
       status: newUser.status,
       activationCode: newUser.activationCode,
+      permissions: newUser.permissions,
     },
   })
 
@@ -354,7 +374,7 @@ export function updateLocalUser(
     if (updates.username && updates.username.toLowerCase() !== current.username.toLowerCase()) {
       throw new Error('لا يمكن تغيير اسم المستخدم لحساب مدير النظام الرئيسي.')
     }
-    if (updates.role && updates.role !== 'admin') {
+    if (updates.role && updates.role !== 'admin' && updates.role !== 'system_admin') {
       throw new Error('لا يمكن تقليص أو تغيير صلاحية حساب مدير النظام الرئيسي.')
     }
     if (updates.status && updates.status !== 'active') {
@@ -507,6 +527,7 @@ export function getLocalSession(): LocalUserSession | null {
 }
 
 export function setLocalSession(user: LocalUser): LocalUserSession {
+  const isSysAdmin = isProtectedUser(user.username) || user.role === 'system_admin'
   const sessionObj: LocalUserSession = {
     user: {
       id: user.id,
@@ -516,10 +537,12 @@ export function setLocalSession(user: LocalUser): LocalUserSession {
         name: user.displayName,
         displayName: user.displayName,
         role: user.role,
+        permissions: user.permissions || [],
       },
       app_metadata: {
         role: user.role,
-        system_admin: user.role === 'admin',
+        system_admin: isSysAdmin,
+        permissions: user.permissions || [],
       },
     },
     access_token: `local-token-${user.id}-${Date.now()}`,

@@ -24,6 +24,13 @@ import {
 import { matchesSearch } from '../lib/searchUtils'
 import { checkIsSystemAdmin } from '../lib/supabase'
 import {
+    ASSIGNABLE_ROLES,
+    ROLE_LABELS,
+    PERMISSION_LABELS,
+    type Permission,
+    type EffectiveRole,
+} from '../lib/permissions'
+import {
     addLocalUser,
     changeUserPassword,
     deleteLocalUser,
@@ -64,6 +71,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [newPassword, setNewPassword] = useState('')
     const [showNewPassword, setShowNewPassword] = useState(false)
     const [newRole, setNewRole] = useState<UserRole>('editor')
+    const [newPermissions, setNewPermissions] = useState<string[]>([])
     const [newActivationCode, setNewActivationCode] = useState(() => generateActivationPin())
     const [newRequireActivation, setNewRequireActivation] = useState(false)
     const [newNotes, setNewNotes] = useState('')
@@ -75,6 +83,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [editingUser, setEditingUser] = useState<LocalUser | null>(null)
     const [editDisplayName, setEditDisplayName] = useState('')
     const [editRole, setEditRole] = useState<UserRole>('editor')
+    const [editPermissions, setEditPermissions] = useState<string[]>([])
     const [editPassword, setEditPassword] = useState('')
     const [showEditPassword, setShowEditPassword] = useState(false)
     const [editActivationCode, setEditActivationCode] = useState('')
@@ -133,6 +142,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                 activationCode: newActivationCode,
                 requireActivation: newRequireActivation,
                 notes: newNotes,
+                permissions: newPermissions,
             })
 
             reloadUsers()
@@ -141,6 +151,7 @@ export default function UsersPage({ session }: UsersPageProps) {
             setNewDisplayName('')
             setNewPassword('')
             setNewNotes('')
+            setNewPermissions([])
             setNewActivationCode(generateActivationPin())
             setNewRequireActivation(false)
         } catch (err) {
@@ -152,6 +163,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setEditingUser(user)
         setEditDisplayName(user.displayName)
         setEditRole(user.role)
+        setEditPermissions(user.permissions || [])
         setEditPassword('')
         setEditActivationCode(user.activationCode)
         setEditStatus(user.status)
@@ -168,6 +180,7 @@ export default function UsersPage({ session }: UsersPageProps) {
             updateLocalUser(editingUser.id, {
                 displayName: editDisplayName,
                 role: editRole,
+                permissions: editPermissions,
                 activationCode: editActivationCode.trim(),
                 status: editStatus,
                 ...(editPassword ? { password: editPassword } : {}),
@@ -447,11 +460,33 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 onChange={(e) => setNewRole(e.target.value as UserRole)}
                                 style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
                             >
-                                <option value="admin">مدير نظام (Admin) — كامل الصلاحيات</option>
-                                <option value="editor">محرر عهدة ومخزن (Editor) — إضافة وتعديل</option>
-                                <option value="viewer">مشاهد فقط (Viewer) — استعراض وتقارير</option>
+                                {ASSIGNABLE_ROLES.map((r) => (
+                                    <option key={r.value} value={r.value}>{r.label}</option>
+                                ))}
                             </select>
                         </label>
+
+                        <div style={{ gridColumn: '1 / -1', background: 'rgba(14, 124, 134, 0.05)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', marginBottom: '8px', color: 'var(--ink)' }}>
+                                صلاحيات استثنائية إضافية (تمنح للمستخدم بصرف النظر عن دوره):
+                            </span>
+                            <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+                                {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
+                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={newPermissions.includes(p)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) setNewPermissions([...newPermissions, p])
+                                                else setNewPermissions(newPermissions.filter(x => x !== p))
+                                            }}
+                                            style={{ accentColor: 'var(--accent)' }}
+                                        />
+                                        <span>{PERMISSION_LABELS[p]}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
 
                         <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -626,16 +661,50 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </td>
                                         <td>{user.displayName || '—'}</td>
                                         <td>
-                                            <span style={{
-                                                fontSize: '0.78rem',
-                                                padding: '3px 8px',
-                                                borderRadius: '6px',
-                                                fontWeight: 600,
-                                                background: user.role === 'admin' ? 'rgba(14, 124, 134, 0.12)' : user.role === 'editor' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(107, 114, 128, 0.12)',
-                                                color: user.role === 'admin' ? 'var(--accent)' : user.role === 'editor' ? '#2563eb' : 'var(--muted)',
-                                            }}>
-                                                {user.role === 'admin' ? 'مدير نظام' : user.role === 'editor' ? 'محرر' : 'مشاهد'}
-                                            </span>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                <span style={{
+                                                    fontSize: '0.78rem',
+                                                    padding: '3px 8px',
+                                                    borderRadius: '6px',
+                                                    fontWeight: 600,
+                                                    background: (user.role === 'system_admin' || user.role === 'admin')
+                                                        ? 'rgba(14, 124, 134, 0.12)'
+                                                        : (user.role === 'warehouse_staff' || user.role === 'editor')
+                                                            ? 'rgba(59, 130, 246, 0.12)'
+                                                            : user.role === 'purchasing_staff'
+                                                                ? 'rgba(16, 185, 129, 0.12)'
+                                                                : 'rgba(107, 114, 128, 0.12)',
+                                                    color: (user.role === 'system_admin' || user.role === 'admin')
+                                                        ? 'var(--accent)'
+                                                        : (user.role === 'warehouse_staff' || user.role === 'editor')
+                                                            ? '#2563eb'
+                                                            : user.role === 'purchasing_staff'
+                                                                ? '#059669'
+                                                                : 'var(--muted)',
+                                                }}>
+                                                    {ROLE_LABELS[user.role as EffectiveRole] || user.role}
+                                                </span>
+                                                {Array.isArray(user.permissions) && user.permissions.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                                                        {user.permissions.map((p) => (
+                                                            <span
+                                                                key={p}
+                                                                style={{
+                                                                    fontSize: '0.68rem',
+                                                                    padding: '1px 5px',
+                                                                    borderRadius: '4px',
+                                                                    background: 'rgba(245, 158, 11, 0.12)',
+                                                                    color: '#d97706',
+                                                                    fontWeight: 500,
+                                                                }}
+                                                                title={PERMISSION_LABELS[p as Permission] || p}
+                                                            >
+                                                                +{p === 'view_audit' ? 'سجل' : p === 'view_settings' ? 'إعدادات' : 'تعديل/حذف'}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td>
                                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 0, 0, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
@@ -849,11 +918,33 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         disabled={isProtectedUser(editingUser?.username)}
                                         style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
                                     >
-                                        <option value="admin">مدير نظام (Admin)</option>
-                                        <option value="editor">محرر عهدة ومخزن (Editor)</option>
-                                        <option value="viewer">مشاهد فقط (Viewer)</option>
+                                        {ASSIGNABLE_ROLES.map((r) => (
+                                            <option key={r.value} value={r.value}>{r.label}</option>
+                                        ))}
                                     </select>
                                 </label>
+
+                                <div style={{ background: 'rgba(14, 124, 134, 0.05)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
+                                    <span style={{ fontSize: '0.84rem', fontWeight: 600, display: 'block', marginBottom: '6px', color: 'var(--ink)' }}>
+                                        صلاحيات استثنائية إضافية:
+                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
+                                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editPermissions.includes(p)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setEditPermissions([...editPermissions, p])
+                                                        else setEditPermissions(editPermissions.filter(x => x !== p))
+                                                    }}
+                                                    style={{ accentColor: 'var(--accent)' }}
+                                                />
+                                                <span>{PERMISSION_LABELS[p]}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
 
                                 <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
                                     تغيير كلمة المرور (اتركه فارغاً للإبقاء على الحالية)

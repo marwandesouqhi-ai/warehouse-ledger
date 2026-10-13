@@ -52,7 +52,14 @@ import { movementFingerprint } from './lib/importRows'
 import { deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
 import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, type AppSettings } from './lib/settings'
-import { supabase, checkIsSystemAdmin, canEditInventory, getUserRole } from './lib/supabase'
+import { supabase } from './lib/supabase'
+import {
+  isSystemAdmin as permsIsSystemAdmin,
+  can,
+  getEffectiveRole,
+  canViewPage,
+  ROLE_LABELS,
+} from './lib/permissions'
 import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
 import {
   loadCustodyItems,
@@ -298,9 +305,10 @@ function App() {
     ? Math.max(0, Math.min(100, Math.round(100 - (totalQualityIssues / movements.length) * 20)))
     : 100
 
-  const isSystemAdmin = checkIsSystemAdmin(session)
-  const canEdit = canEditInventory(session)
-  const userRole = getUserRole(session)
+  const effectiveRole = getEffectiveRole(session)
+  const isSystemAdmin = permsIsSystemAdmin(session)
+  const canManageRecords = isSystemAdmin || can(session, 'manage_records')
+  const canEdit = canManageRecords || ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(effectiveRole)
   const activeUserDisplayName = (
     session?.user?.user_metadata?.displayName ||
     session?.user?.user_metadata?.name ||
@@ -311,29 +319,42 @@ function App() {
   const dynamicNavItems = useMemo(() => {
     const items = [
       { to: '/', label: 'الرئيسية (التحليلات)', mark: '', icon: LayoutDashboard },
-      { to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 },
-      { to: '/movements', label: 'سجل الحركة', mark: '', icon: ClipboardList },
-      { to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet },
     ]
 
-    // استيراد Excel متاح فقط للمحررين ومديري النظام
-    if (canEdit) {
+    if (canViewPage(session, 'custody')) {
+      items.push({ to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 })
+    }
+
+    if (canViewPage(session, 'purchases')) {
+      items.push({ to: '/movements', label: 'سجل الحركة', mark: '', icon: ClipboardList })
+    }
+
+    if (canViewPage(session, 'reports')) {
+      items.push({ to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet })
+    }
+
+    if (canViewPage(session, 'imports')) {
       items.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
     }
 
-    items.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues} تنبيه` : '', icon: ShieldAlert })
+    if (canViewPage(session, 'quality')) {
+      items.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues} تنبيه` : '', icon: ShieldAlert })
+    }
 
-    // سجل المراقبة وإدارة المستخدمين والإعدادات مخصصة حصرياً لمدير النظام (System Admin)
-    if (isSystemAdmin) {
-      items.push(
-        { to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History },
-        { to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound },
-        { to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 },
-      )
+    if (canViewPage(session, 'audit')) {
+      items.push({ to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History })
+    }
+
+    if (canViewPage(session, 'users')) {
+      items.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
+    }
+
+    if (canViewPage(session, 'settings')) {
+      items.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
     }
 
     return items
-  }, [totalQualityIssues, isSystemAdmin, canEdit])
+  }, [totalQualityIssues, session])
 
   const stockStatusConfig = useMemo(() => {
     if (movements.length === 0) {
@@ -1179,8 +1200,8 @@ function App() {
             {session && (
               <div className="topbar-user-wrap" title={`الحساب الحالي: ${activeUserDisplayName}`}>
                 <span className="topbar-user-name">{activeUserDisplayName}</span>
-                <span className={`topbar-role-badge role-${userRole}`}>
-                  {userRole === 'admin' ? 'مدير النظام' : userRole === 'editor' ? 'محرر مخزن' : 'مشاهد (قراءة)'}
+                <span className={`topbar-role-badge role-${effectiveRole}`}>
+                  {ROLE_LABELS[effectiveRole] || effectiveRole}
                 </span>
                 <button
                   type="button"
@@ -1769,8 +1790,8 @@ function App() {
                 currency={settings.currency}
                 onSaveMovement={addMovement}
                 onExport={() => exportMovements(movements)}
-                onEdit={isSystemAdmin ? (m) => setEditingMovement(m) : () => {}}
-                onDelete={isSystemAdmin ? (m) => setDeletingMovement(m) : () => {}}
+                onEdit={canManageRecords ? (m) => setEditingMovement(m) : () => {}}
+                onDelete={canManageRecords ? (m) => setDeletingMovement(m) : () => {}}
                 onLoadDemoData={handleLoadDemoData}
                 canEdit={canEdit}
                 isSystemAdmin={isSystemAdmin}
@@ -1795,13 +1816,13 @@ function App() {
           <Route
             path="/audit"
             element={
-              isSystemAdmin ? (
+              (isSystemAdmin || can(session, 'view_audit')) ? (
                 <AuditLogPage session={session} />
               ) : (
                 <RestrictedScreen
                   title="سجل العمليات والتدقيق"
                   subtitle="مراقبة العمليات والأمان"
-                  message="سجل العمليات والمراقبة مخصص حصرياً لمدير النظام (System Admin)."
+                  message="سجل العمليات والمراقبة مخصص حصرياً لمدير النظام أو الحسابات المخولة بصلاحية عرض السجل."
                 />
               )
             }
@@ -1823,20 +1844,20 @@ function App() {
           <Route
             path="/settings"
             element={
-              isSystemAdmin ? (
+              (isSystemAdmin || can(session, 'view_settings')) ? (
                 <SettingsPage settings={settings} darkMode={darkMode} session={session} onSave={handleSaveSettings} onToggleTheme={() => setDarkMode((value) => !value)} />
               ) : (
                 <RestrictedScreen
                   title="إعدادات المؤسسة"
                   subtitle="لوحة إدارة المخزن"
-                  message="إعدادات وبيانات المؤسسة والشعار مخصصة حصرياً لمدير النظام (System Admin)."
+                  message="إعدادات وبيانات المؤسسة والشعار مخصصة حصرياً لمدير النظام أو الحسابات المخولة بصلاحية الإعدادات."
                 />
               )
             }
           />
         </Routes>
 
-        {isSystemAdmin && editingMovement && (
+        {canManageRecords && editingMovement && (
           <div className="modal-backdrop" onClick={() => setEditingMovement(null)}>
             <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
@@ -1866,7 +1887,7 @@ function App() {
           </div>
         )}
 
-        {isSystemAdmin && deletingMovement && (
+        {canManageRecords && deletingMovement && (
           <div className="modal-backdrop" onClick={() => !isDeleting && setDeletingMovement(null)}>
             <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">

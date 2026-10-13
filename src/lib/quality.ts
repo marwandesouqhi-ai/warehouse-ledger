@@ -66,7 +66,7 @@ export function evaluateQuality(row: Record<string, unknown>, currentDate = new 
     return findings
 }
 
-export function summarizeQuality(rows: Array<Record<string, unknown>>): Record<string, number> {
+export function summarizeQuality(rows: Array<Record<string, unknown>>, currentDate = new Date()): Record<string, number> {
     const counts: Record<string, number> = {
         future: 0,
         order: 0,
@@ -80,7 +80,7 @@ export function summarizeQuality(rows: Array<Record<string, unknown>>): Record<s
     }
 
     for (const row of rows) {
-        const findings = evaluateQuality(row)
+        const findings = evaluateQuality(row, currentDate)
         for (const finding of findings) {
             if (finding.rule in counts) {
                 counts[finding.rule] += 1

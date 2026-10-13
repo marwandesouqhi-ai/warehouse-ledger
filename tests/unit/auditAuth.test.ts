@@ -40,7 +40,7 @@ describe('System Admin Access Verification for Audit Log', () => {
         expect(checkIsSystemAdmin(session)).toBe(true)
     })
 
-    it('grants System Admin access when app_metadata.role is admin', () => {
+    it('denies System Admin access when app_metadata.role is regular admin (not system_admin)', () => {
         const session = {
             user: {
                 id: '789',
@@ -50,16 +50,29 @@ describe('System Admin Access Verification for Audit Log', () => {
             } as unknown as User,
         } as unknown as Session
 
-        expect(checkIsSystemAdmin(session)).toBe(true)
+        expect(checkIsSystemAdmin(session)).toBe(false)
     })
 
-    it('grants System Admin access when user_metadata.role is admin', () => {
+    it('denies System Admin access when user_metadata.role is regular admin (not system_admin)', () => {
         const session = {
             user: {
                 id: '789-meta',
                 email: 'admin_meta@example.com',
                 app_metadata: {},
                 user_metadata: { role: 'admin' },
+            } as unknown as User,
+        } as unknown as Session
+
+        expect(checkIsSystemAdmin(session)).toBe(false)
+    })
+
+    it('grants System Admin access when app_metadata.role is system_admin', () => {
+        const session = {
+            user: {
+                id: '789-sys',
+                email: 'admin_sys@example.com',
+                app_metadata: { role: 'system_admin' },
+                user_metadata: {},
             } as unknown as User,
         } as unknown as Session
 

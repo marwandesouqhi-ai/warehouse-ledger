@@ -31,19 +31,27 @@ export const supabase = supabaseUrl && supabasePublishableKey
 
 /**
  * Check if the given session or user has System Admin privileges.
+ * ⚠️ FIXED: Blanket `role === 'admin'` check removed to prevent non-system admins from gaining system admin privileges.
  */
 export function checkIsSystemAdmin(sessionOrUser: Session | User | null | undefined): boolean {
     if (!sessionOrUser) return false
     const user = 'user' in sessionOrUser ? sessionOrUser.user : sessionOrUser
     if (!user) return false
 
-    return Boolean(
-        user.email === 'marwan-desouky' ||
-        user.email === 'admin' ||
-        user.user_metadata?.username === 'marwan-desouky' ||
-        user.app_metadata?.system_admin === true ||
-        user.app_metadata?.role === 'admin' ||
-        user.user_metadata?.role === 'admin'
+    const email = (user.email || '').trim().toLowerCase()
+    const username = (String(user.user_metadata?.username || '')).trim().toLowerCase()
+    const appRole = String(user.app_metadata?.role || '')
+    const userRole = String(user.user_metadata?.role || '')
+    const isSysAdminFlag = user.app_metadata?.system_admin === true
+
+    return (
+        email === 'marwan-desouky' ||
+        email === 'admin' ||
+        username === 'marwan-desouky' ||
+        username === 'admin' ||
+        appRole === 'system_admin' ||
+        userRole === 'system_admin' ||
+        isSysAdminFlag
     )
 }
 
@@ -63,12 +71,16 @@ export function getUserRole(sessionOrUser: Session | User | null | undefined): A
     ) as string
 
     if (role === 'admin') return 'admin'
-    if (role === 'editor') return 'editor'
+    if (role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff') return 'editor'
     return 'viewer'
 }
 
 export function canEditInventory(sessionOrUser: Session | User | null | undefined): boolean {
-    const role = getUserRole(sessionOrUser)
-    return role === 'admin' || role === 'editor'
+    if (!sessionOrUser) return false
+    const user = 'user' in sessionOrUser ? sessionOrUser.user : sessionOrUser
+    if (!user) return false
+    if (checkIsSystemAdmin(user)) return true
+    const role = (user.app_metadata?.role || user.user_metadata?.role || '') as string
+    return role === 'admin' || role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff'
 }
 
