@@ -37,7 +37,7 @@ import {
     deleteLocalUser,
     generateActivationPin,
     getLocalSession,
-    isProtectedUser,
+    isLastActiveSystemAdmin,
     loadLocalUsers,
     purgeDeletedAccount,
     updateLocalUser,
@@ -120,9 +120,9 @@ export default function UsersPage({ session }: UsersPageProps) {
     }, [])
 
     function generateRandomPassword() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%'
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*'
         let pwd = ''
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 16; i++) {
             pwd += chars.charAt(Math.floor(Math.random() * chars.length))
         }
         setNewPassword(pwd)
@@ -251,9 +251,9 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     function handleGenerateModalPassword() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%'
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*'
         let pwd = ''
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 16; i++) {
             pwd += chars.charAt(Math.floor(Math.random() * chars.length))
         }
         setModalNewPassword(pwd)
@@ -265,8 +265,8 @@ export default function UsersPage({ session }: UsersPageProps) {
         setPwdModalError('')
         setPwdModalSuccess('')
 
-        if (!modalNewPassword || modalNewPassword.length < 3) {
-            setPwdModalError('كلمة المرور يجب أن لا تقل عن 3 أحرف.')
+        if (!modalNewPassword || modalNewPassword.length < 12) {
+            setPwdModalError('كلمة المرور يجب أن لا تقل عن 12 حرفاً للأمان.')
             return
         }
 
@@ -298,8 +298,8 @@ export default function UsersPage({ session }: UsersPageProps) {
             setSelfPasswordError('يرجى كتابة كلمة المرور الجديدة.')
             return
         }
-        if (selfPassword.length < 3) {
-            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 3 أحرف.')
+        if (selfPassword.length < 12) {
+            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
             return
         }
         if (selfPassword !== selfConfirm) {
@@ -762,18 +762,18 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         <td>
                                             <button
                                                 type="button"
-                                                onClick={() => isSystemAdmin && !isProtectedUser(user.username) && handleToggleStatus(user)}
-                                                disabled={!isSystemAdmin || isProtectedUser(user.username)}
+                                                onClick={() => isSystemAdmin && !isLastActiveSystemAdmin(user.id, localUsers) && handleToggleStatus(user)}
+                                                disabled={!isSystemAdmin || isLastActiveSystemAdmin(user.id, localUsers)}
                                                 style={{
                                                     background: 'none',
                                                     border: 'none',
-                                                    cursor: isSystemAdmin && !isProtectedUser(user.username) ? 'pointer' : 'default',
+                                                    cursor: isSystemAdmin && !isLastActiveSystemAdmin(user.id, localUsers) ? 'pointer' : 'default',
                                                     padding: 0,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
                                                     gap: '5px',
                                                 }}
-                                                title={isProtectedUser(user.username) ? 'حساب مدير النظام الرئيسي نشط دائماً ومحمي' : isSystemAdmin ? 'انقر لتغيير حالة التفعيل' : ''}
+                                                title={isLastActiveSystemAdmin(user.id, localUsers) ? 'آخر مدير نظام نشط محمي ضد التعطيل' : isSystemAdmin ? 'انقر لتغيير حالة التفعيل' : ''}
                                             >
                                                 <span style={{
                                                     fontSize: '0.78rem',
@@ -811,7 +811,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                     >
                                                         <Edit2 size={15} />
                                                     </button>
-                                                    {!isProtectedUser(user.username) ? (
+                                                    {!isLastActiveSystemAdmin(user.id, localUsers) ? (
                                                         <button
                                                             type="button"
                                                             className="action-icon-btn delete-btn"
@@ -832,7 +832,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 background: 'rgba(14, 124, 134, 0.12)',
                                                                 color: 'var(--accent)',
                                                             }}
-                                                            title="حساب مدير النظام الرئيسي محمي بشكل دائم ضد الحذف"
+                                                            title="آخر مدير نظام نشط في المؤسسة محمي ضد الحذف"
                                                         >
                                                             <ShieldCheck size={16} />
                                                         </span>
@@ -949,11 +949,11 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </label>
 
                                 <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    الصلاحية {isProtectedUser(editingUser?.username) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(حساب مدير النظام الرئيسي محمي)</span>}
+                                    الصلاحية {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(آخر مدير نظام نشط محمي ضد خفض الصلاحيات)</span>}
                                     <select
                                         value={editRole}
                                         onChange={(e) => setEditRole(e.target.value as UserRole)}
-                                        disabled={isProtectedUser(editingUser?.username)}
+                                        disabled={editingUser ? isLastActiveSystemAdmin(editingUser.id, localUsers) : false}
                                         style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
                                     >
                                         {ASSIGNABLE_ROLES.map((r) => (
@@ -1016,11 +1016,11 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </label>
 
                                 <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    حالة الحساب {isProtectedUser(editingUser?.username) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(نشط دائماً ومحمي)</span>}
+                                    حالة الحساب {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(نشط دائماً ومحمي ضد التعطيل)</span>}
                                     <select
                                         value={editStatus}
                                         onChange={(e) => setEditStatus(e.target.value as 'active' | 'pending_activation')}
-                                        disabled={isProtectedUser(editingUser?.username)}
+                                        disabled={editingUser ? isLastActiveSystemAdmin(editingUser.id, localUsers) : false}
                                         style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
                                     >
                                         <option value="active">مفعل ونشط فوراً (Active)</option>

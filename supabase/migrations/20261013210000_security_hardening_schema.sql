@@ -73,10 +73,6 @@ BEGIN
     RETURN true;
   END IF;
 
-  IF v_email IN ('marwan-desouky', 'admin', 'marwan-desouky@warehouse.local', 'admin@warehouse.local') THEN
-    RETURN true;
-  END IF;
-
   RETURN false;
 END;
 $$;

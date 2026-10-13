@@ -42,8 +42,7 @@ serve(async (req) => {
     // Strictly verify System Admin permissions (protected in app_metadata only)
     const isCallerAdmin =
       user.app_metadata?.system_admin === true ||
-      user.app_metadata?.role === "system_admin" ||
-      user.email === "marwan-desouky@warehouse.local"
+      user.app_metadata?.role === "system_admin"
 
     if (!isCallerAdmin) {
       return new Response(JSON.stringify({
@@ -83,7 +82,7 @@ serve(async (req) => {
         id: u.id,
         email: u.email ?? "",
         role: u.app_metadata?.role || "viewer",
-        system_admin: u.app_metadata?.system_admin === true || u.email === "marwan-desouky@warehouse.local",
+        system_admin: u.app_metadata?.system_admin === true || u.app_metadata?.role === "system_admin",
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
       }))
@@ -117,8 +116,8 @@ serve(async (req) => {
       }
 
       if (newPassword) {
-        if (typeof newPassword !== "string" || newPassword.length < 6) {
-          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 6 أحرف" }), {
+        if (typeof newPassword !== "string" || newPassword.length < 12) {
+          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 12 حرفاً ورموزاً لضمان أمان الحساب." }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           })

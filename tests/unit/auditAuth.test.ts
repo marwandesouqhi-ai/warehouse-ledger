@@ -3,7 +3,7 @@ import { checkIsSystemAdmin } from '../../src/lib/supabase'
 import type { Session, User } from '@supabase/supabase-js'
 
 describe('System Admin Access Verification for Audit Log', () => {
-    it('grants System Admin access to primary admin username marwan-desouky', () => {
+    it('denies System Admin access when relying on username alone without app_metadata', () => {
         const session = {
             user: {
                 id: '123',
@@ -13,7 +13,8 @@ describe('System Admin Access Verification for Audit Log', () => {
             } as unknown as User,
         } as unknown as Session
 
-        expect(checkIsSystemAdmin(session)).toBe(true)
+        // Privileges are strictly derived from server app_metadata, never username strings
+        expect(checkIsSystemAdmin(session)).toBe(false)
 
         // Verifies old marwandesouqhi@gmail.com is completely removed and rejected
         const oldSession = {
@@ -121,7 +122,8 @@ describe('System Admin Access Verification for Audit Log', () => {
     it('handles direct user object passing as well', () => {
         const user = {
             id: 'admin-direct',
-            email: 'marwan-desouky',
+            email: 'admin@warehouse.local',
+            app_metadata: { system_admin: true },
         } as unknown as User
 
         expect(checkIsSystemAdmin(user)).toBe(true)
@@ -129,6 +131,7 @@ describe('System Admin Access Verification for Audit Log', () => {
         const regularUser = {
             id: 'regular-direct',
             email: 'user@example.com',
+            app_metadata: {},
         } as unknown as User
 
         expect(checkIsSystemAdmin(regularUser)).toBe(false)

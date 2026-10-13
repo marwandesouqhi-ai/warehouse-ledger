@@ -170,10 +170,17 @@ const DEFAULT_ADMIN: LocalUser = {
   permissions: ['view_audit', 'view_settings', 'manage_records'],
 }
 
-export function isProtectedUser(username?: string | null): boolean {
-  if (!username) return false
-  const clean = username.trim().toLowerCase()
-  return clean === 'marwan-desouky' || clean === 'admin'
+export function isLastActiveSystemAdmin(userId: string, users: LocalUser[]): boolean {
+  const activeAdmins = users.filter(
+    (u) => (u.role === 'system_admin' || u.role === 'admin') && u.status === 'active'
+  )
+  return activeAdmins.length <= 1 && activeAdmins.some((u) => u.id === userId)
+}
+
+export function isProtectedUser(_username?: string | null): boolean {
+  // Hardcoded privilege escalation and protection based on username strings is disabled.
+  // Protection is enforced dynamically using isLastActiveSystemAdmin to prevent administrative lockout.
+  return false
 }
 
 export function purgeDeletedAccount(emailOrUsername = 'marwandesouqhi@gmail.com'): void {
@@ -333,8 +340,8 @@ export function addLocalUser(data: {
     throw new Error(`اسم المستخدم "${cleanUsername}" مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر.`)
   }
 
-  if (!data.password || data.password.length < 3) {
-    throw new Error('كلمة المرور يجب أن لا تقل عن 3 أحرف/أرقام.')
+  if (!data.password || data.password.length < 12) {
+    throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
   }
 
   const activationCode = data.activationCode?.trim() || generateActivationPin()
@@ -381,15 +388,12 @@ export function updateLocalUser(
   }
 
   const current = users[idx]
-  if (isProtectedUser(current.username)) {
-    if (updates.username && updates.username.toLowerCase() !== current.username.toLowerCase()) {
-      throw new Error('لا يمكن تغيير اسم المستخدم لحساب مدير النظام الرئيسي.')
-    }
+  if (isLastActiveSystemAdmin(id, users)) {
     if (updates.role && updates.role !== 'admin' && updates.role !== 'system_admin') {
-      throw new Error('لا يمكن تقليص أو تغيير صلاحية حساب مدير النظام الرئيسي.')
+      throw new Error('لا يمكن تقليص صلاحيات آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
     }
     if (updates.status && updates.status !== 'active') {
-      throw new Error('لا يمكن تعطيل أو تعليق حساب مدير النظام الرئيسي.')
+      throw new Error('لا يمكن تعطيل آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
     }
   }
 
@@ -423,8 +427,8 @@ export function deleteLocalUser(id: string): void {
   const target = users.find((u) => u.id === id)
   if (!target) return
 
-  if (isProtectedUser(target.username)) {
-    throw new Error('لا يمكن حذف حساب مدير النظام الأساسي (marwan-desouky). هذا الحساب محمي بشكل دائم ضد الحذف.')
+  if (isLastActiveSystemAdmin(id, users)) {
+    throw new Error('لا يمكن حذف آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
   }
 
   const next = users.filter((u) => u.id !== id)
@@ -439,8 +443,8 @@ export function deleteLocalUser(id: string): void {
 }
 
 export function changeUserPassword(id: string, newPassword: string): LocalUser {
-  if (!newPassword || newPassword.length < 3) {
-    throw new Error('كلمة المرور يجب أن لا تقل عن 3 أحرف.')
+  if (!newPassword || newPassword.length < 12) {
+    throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
   }
   const updated = updateLocalUser(id, { password: newPassword })
   void logAuditEvent({
@@ -452,76 +456,17 @@ export function changeUserPassword(id: string, newPassword: string): LocalUser {
 }
 
 export function activateLocalUserWithCode(
-  username: string,
-  activationCode: string
+  _username: string,
+  _activationCode: string
 ): LocalUser {
-  const users = loadLocalUsers()
-  const cleanUsername = username.trim().toLowerCase()
-  const cleanCode = activationCode.trim()
-
-  const user = users.find((u) => u.username.toLowerCase() === cleanUsername)
-  if (!user) {
-    throw new Error('اسم المستخدم غير مسجل في النظام.')
-  }
-
-  if (user.status === 'active') {
-    return user
-  }
-
-  if (user.activationCode !== cleanCode) {
-    throw new Error('كود تأكيد التفعيل غير صحيح. يرجى مراجعة مدير النظام للحصول على الكود الصحيح.')
-  }
-
-  const updated: LocalUser = {
-    ...user,
-    status: 'active',
-    activatedAt: new Date().toISOString(),
-  }
-
-  const idx = users.findIndex((u) => u.id === user.id)
-  users[idx] = updated
-  saveLocalUsers(users)
-
-  void logAuditEvent({
-    action: `تأكيد تفعيل حساب مستخدم محلي بكود التفعيل: ${user.username}`,
-    entity_type: 'local_user',
-    details: { username: user.username },
-  })
-
-  return updated
+  throw new Error('تم إلغاء التفعيل عبر الأكواد الثابتة (PIN) لتعزيز الأمان. يتم تفعيل الحسابات وتعيين كلمة المرور الجديدة عبر خادم Supabase Auth.')
 }
 
 export function authenticateLocalUser(
-  username: string,
-  password: string
+  _username: string,
+  _password: string
 ): { user: LocalUser; needsActivation?: boolean } {
-  const users = loadLocalUsers()
-  const cleanUsername = username.trim().toLowerCase()
-  if (cleanUsername === 'marwandesouqhi@gmail.com') {
-    throw new Error('تم حذف هذا الحساب نهائياً من النظام ومحظور تسجيل الدخول به.')
-  }
-
-  const user = users.find((u) => u.username.toLowerCase() === cleanUsername)
-  if (!user) {
-    throw new Error('اسم المستخدم غير مسجل. يرجى التحقق من الاسم أو طلب إنشاء حساب من المسؤول.')
-  }
-
-  if (user.password !== password) {
-    throw new Error('كلمة المرور غير صحيحة. يرجى التحقق والمحاولة مجدداً.')
-  }
-
-  if (user.status === 'pending_activation') {
-    return { user, needsActivation: true }
-  }
-
-  // Update last login
-  user.lastLoginAt = new Date().toISOString()
-  const idx = users.findIndex((u) => u.id === user.id)
-  users[idx] = user
-  saveLocalUsers(users)
-
-  setLocalSession(user)
-  return { user }
+  throw new Error('تم إيقاف تسجيل الدخول المحلي غير الآمن. المصادقة مقتصرة حصرياً على Supabase Auth.')
 }
 
 export function getLocalSession(): LocalUserSession | null {
@@ -538,7 +483,7 @@ export function getLocalSession(): LocalUserSession | null {
 }
 
 export function setLocalSession(user: LocalUser): LocalUserSession {
-  const isSysAdmin = isProtectedUser(user.username) || user.role === 'system_admin'
+  const isSysAdmin = user.role === 'system_admin'
   const sessionObj: LocalUserSession = {
     user: {
       id: user.id,

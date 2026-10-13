@@ -39,22 +39,11 @@ export function checkIsSystemAdmin(sessionOrUser: Session | User | null | undefi
     const user = 'user' in sessionOrUser ? sessionOrUser.user : sessionOrUser
     if (!user) return false
 
-    const email = (user.email || '').trim().toLowerCase()
     const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
-    const appUsername = String(appMeta.username || '').trim().toLowerCase()
     const appRole = String(appMeta.role || '')
     const isSysAdminFlag = appMeta.system_admin === true
 
-    return (
-        email === 'marwan-desouky' ||
-        email === 'admin' ||
-        email === 'marwan-desouky@warehouse.local' ||
-        email === 'admin@warehouse.local' ||
-        appUsername === 'marwan-desouky' ||
-        appUsername === 'admin' ||
-        appRole === 'system_admin' ||
-        isSysAdminFlag
-    )
+    return appRole === 'system_admin' || isSysAdminFlag
 }
 
 export type AppRole = 'admin' | 'editor' | 'viewer'

@@ -12,7 +12,6 @@
 
 import type { Session } from '@supabase/supabase-js'
 import type { LocalUserSession } from './localUsers'
-import { isProtectedUser } from './localUsers'
 
 // ─── الأنواع الجديدة ──────────────────────────────────────────────────────────
 
@@ -21,7 +20,7 @@ import { isProtectedUser } from './localUsers'
  * القيم القديمة (admin, editor, viewer) تبقى للتوافق الرجعي
  */
 export type EffectiveRole =
-  | 'system_admin'     // marwan-desouky أو admin المحمي فقط — كل الصلاحيات
+  | 'system_admin'     // مدير النظام — موثق عبر app_metadata فقط
   | 'admin'            // أدمن عادي — يشوف كل شيء ما عدا audit/users/settings
   | 'warehouse_staff'  // موظف مخازن — صفحات المخازن والعهدة والمنصرف
   | 'purchasing_staff' // موظف مشتريات — صفحات المشتريات فقط
@@ -90,22 +89,17 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
 /**
  * normalizeRole — تحويل الدور المخزن إلى الدور الفعلي وقت القراءة.
  *
- * ⚠️ لا تعدّل القيم المخزنة — التحويل وقت القراءة فقط.
+ * ⚠️ لا يعتمد أبداً على اسم المستخدم لتصعيد الصلاحيات.
  *
- * @param storedRole - الدور المخزن في app_users أو localStorage (قد يكون قديماً)
- * @param username - اسم المستخدم (لفحص الحسابات المحمية)
+ * @param storedRole - الدور المخزن في app_users أو app_metadata
+ * @param _username - اختياري (لا يُستخدم لتحديد الصلاحية لمنع تصعيد الصلاحيات بالاسم)
  * @param _extraPermissions - الصلاحيات الإضافية الممنوحة للمستخدم
  */
 export function normalizeRole(
   storedRole: string,
-  username: string,
+  _username?: string,
   _extraPermissions?: string[]
 ): EffectiveRole {
-  const clean = (username || '').trim().toLowerCase()
-
-  // الحسابات المحمية دائماً = system_admin بصرف النظر عن الدور المخزن
-  if (isProtectedUser(clean)) return 'system_admin'
-
   // دور system_admin مخزن صراحةً
   if (storedRole === 'system_admin') return 'system_admin'
 
@@ -126,7 +120,7 @@ export function normalizeRole(
  * getEffectiveRole — استخراج الدور الفعلي من الجلسة الحالية.
  *
  * أمان: يعتمد حصرياً على app_metadata الموقعة من السيرفر، ويتجاهل تماماً user_metadata
- * لمنع أي تصعيد صلاحيات من جانب العميل.
+ * واسم المستخدم لمنع أي تصعيد صلاحيات.
  */
 export function getEffectiveRole(
   session: Session | LocalUserSession | null | undefined
@@ -140,13 +134,10 @@ export function getEffectiveRole(
   const rawEmail = (user as { email?: string }).email || ''
   const cleanUsername = String(appMeta.username || rawEmail.replace(/@warehouse\.local$/i, '')).trim()
 
-  // 1. فحص إذا كان حساباً محمياً (marwan-desouky أو admin)
-  if (isProtectedUser(cleanUsername)) return 'system_admin'
+  // 1. فحص راية system_admin أو role الموقعة في app_metadata
+  if (appMeta.system_admin === true || appMeta.role === 'system_admin') return 'system_admin'
 
-  // 2. فحص راية system_admin الموقعة في app_metadata
-  if (appMeta.system_admin === true) return 'system_admin'
-
-  // 3. استخراج الدور من app_metadata فقط (ممنوع user_metadata)
+  // 2. استخراج الدور من app_metadata فقط (ممنوع user_metadata وممنوع الاعتماد على اسم المستخدم)
   const storedRole: string = (appMeta.role as string) || 'viewer'
 
   // الصلاحيات الإضافية من app_metadata فقط

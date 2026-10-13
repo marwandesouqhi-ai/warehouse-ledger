@@ -8,21 +8,15 @@ import {
     ShieldAlert,
     ShieldCheck,
     Sparkles,
-    UserCheck,
     Warehouse,
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
-import {
-    authenticateLocalUser,
-    activateLocalUserWithCode,
-    syncUsersWithCloud,
-} from '../lib/localUsers'
 import { logAuditEvent } from '../lib/auditLogger'
-import { isAuthSecureMode, toSyntheticEmail } from '../lib/authMode'
+import { isSupabaseConfigured, toSyntheticEmail } from '../lib/authMode'
 
-type AuthMode = 'signIn' | 'activateAccount' | 'forgotPassword' | 'setNewPassword'
+type AuthMode = 'signIn' | 'forgotPassword' | 'setNewPassword'
 
 type AuthPageProps = {
     initialMode?: AuthMode
@@ -35,8 +29,6 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [activationCode, setActivationCode] = useState('')
-    const [isPendingActivation, setIsPendingActivation] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [activeUserEmail, setActiveUserEmail] = useState('')
@@ -44,7 +36,9 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
     const [notice, setNotice] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    // Check for errors returned in the URL hash (legacy invite token error)
+    const isConfigured = Boolean(supabase && isSupabaseConfigured())
+
+    // Check for errors returned in the URL hash
     useEffect(() => {
         if (typeof window === 'undefined') return
         const hash = window.location.hash || ''
@@ -53,7 +47,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             const code = params.get('error_code') || ''
             const desc = params.get('error_description') || params.get('error') || ''
             if (code === 'otp_expired' || desc.toLowerCase().includes('expired') || desc.toLowerCase().includes('invalid')) {
-                setError('⚠️ رابط تفعيل الدعوة هذا غير صالح أو انتهت صلاحيته. يمكنك تسجيل الدخول باسم المستخدم وكلمة المرور مباشرة.')
+                setError('⚠️ رابط تفعيل الدعوة أو الاستعادة غير صالح أو انتهت صلاحيته. يمكنك تسجيل الدخول باسم المستخدم وكلمة المرور مباشرة.')
             } else if (desc) {
                 setError(decodeURIComponent(desc.replace(/\+/g, ' ')))
             }
@@ -77,37 +71,29 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
         setIsSubmitting(true)
 
         try {
-            if (mode === 'activateAccount') {
-                const cleanUser = username.trim().toLowerCase()
-                const cleanCode = activationCode.trim()
-
-                if (!cleanUser) {
-                    throw new Error('يرجى إدخال اسم المستخدم.')
-                }
-                if (!cleanCode) {
-                    throw new Error('يرجى إدخال كود تأكيد التفعيل (PIN).')
-                }
-
-                activateLocalUserWithCode(cleanUser, cleanCode)
-                setNotice(`تم تفعيل حساب "${cleanUser}" بنجاح! يمكنك الآن تسجيل الدخول مباشرة.`)
-                setMode('signIn')
-                setIsPendingActivation(false)
-                setActivationCode('')
-                return
+            if (!isConfigured || !supabase) {
+                throw new Error('خدمة Supabase Auth غير مهيأة أو غير متصلة. يرجى تهيئة متغيرات البيئة VITE_SUPABASE_URL و VITE_SUPABASE_PUBLISHABLE_KEY.')
             }
 
             if (mode === 'setNewPassword') {
-                if (password.length < 8) {
-                    throw new Error('كلمة المرور يجب أن لا تقل عن 8 أحرف وأرقام للأمان.')
+                if (password.length < 12) {
+                    throw new Error('كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً ورموزاً لضمان أمان النظام.')
                 }
                 if (password !== confirmPassword) {
                     throw new Error('كلمتا المرور غير متطابقتين.')
                 }
 
-                if (supabase) {
-                    const { error: updateError } = await supabase.auth.updateUser({ password })
-                    if (updateError) throw updateError
-                }
+                const { error: updateError } = await supabase.auth.updateUser({
+                    password,
+                    data: { must_change_password: false },
+                })
+                if (updateError) throw updateError
+
+                void logAuditEvent({
+                    action: 'تعيين كلمة مرور جديدة للمستخدم بنجاح',
+                    entity_type: 'auth',
+                    user: { id: activeUserEmail || 'user-pwd-reset', email: activeUserEmail },
+                })
 
                 setNotice('تم تعيين كلمة المرور بنجاح! جاري تحويلك إلى لوحة التحكم...')
                 setTimeout(() => {
@@ -117,14 +103,14 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'forgotPassword') {
-                if (supabase && username.includes('@')) {
+                if (username.includes('@')) {
                     const { error: resetError } = await supabase.auth.resetPasswordForEmail(username, {
                         redirectTo: `${window.location.origin}/#type=recovery`,
                     })
                     if (resetError) throw resetError
-                    setNotice('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.')
+                    setNotice('تم إرسال رابط إعادة تعيين كلمة المرور إلى البريد الإلكتروني المسجل.')
                 } else {
-                    throw new Error('في النظام المحلي، يُرجى التواصل مع مدير النظام (System Admin) لإعادة تعيين كلمة المرور أو كود التفعيل لحسابك مباشرة.')
+                    throw new Error('في نظام المخزن الداخلي، يُرجى مراجعة مدير النظام (System Admin) لإنشاء كلمة مرور مؤقتة لحسابك، وسيطلب منك النظام تغييرها فور تسجيل الدخول.')
                 }
                 return
             }
@@ -141,113 +127,41 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 throw new Error('يرجى إدخال كلمة المرور.')
             }
 
-            // If account was flagged as pending activation, verify the activation code first
-            if (isPendingActivation || activationCode.trim()) {
-                if (!activationCode.trim()) {
-                    throw new Error('يرجى إدخال كود تأكيد التفعيل الممنوح لك من مدير النظام لإكمال تفعيل الحساب.')
+            const syntheticEmail = toSyntheticEmail(cleanUser)
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email: syntheticEmail,
+                password,
+            })
+
+            if (signInError) {
+                if (signInError.message.toLowerCase().includes('invalid login credentials')) {
+                    throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم وكلمة المرور.')
                 }
-                activateLocalUserWithCode(cleanUser, activationCode.trim())
-                setIsPendingActivation(false)
+                if (signInError.message.toLowerCase().includes('email not confirmed')) {
+                    throw new Error('الحساب قيد الانتظار أو غير مفعّل. يرجى التواصل مع مدير النظام.')
+                }
+                throw signInError
             }
 
-            // 1. In secure auth mode, authenticate strictly via Supabase Auth
-            if (isAuthSecureMode()) {
-                if (!supabase) {
-                    throw new Error('خدمة Supabase Auth غير مهيأة على هذا الجهاز.')
-                }
-                const syntheticEmail = toSyntheticEmail(cleanUser)
-                const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                    email: syntheticEmail,
-                    password,
-                })
-
-                if (signInError) {
-                    if (signInError.message.toLowerCase().includes('invalid login credentials')) {
-                        throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم وكلمة المرور.')
-                    }
-                    if (signInError.message.toLowerCase().includes('email not confirmed')) {
-                        throw new Error('الحساب قيد الانتظار أو غير مفعّل. يرجى التواصل مع مدير النظام.')
-                    }
-                    throw signInError
-                }
-
-                // If user is required to change password on first login
-                const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
-                if (userAppMeta.must_change_password === true) {
-                    setActiveUserEmail(signInData.user?.email || syntheticEmail)
-                    setMode('setNewPassword')
-                    setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (8 أحرف على الأقل).')
-                    return
-                }
-
-                void logAuditEvent({
-                    action: 'تسجيل دخول موثّق إلى النظام (وضع الحماية)',
-                    entity_type: 'auth',
-                    user: { id: signInData.user?.id, email: signInData.user?.email || cleanUser },
-                })
-
-                setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
-                setTimeout(() => {
-                    onPasswordSet?.()
-                }, 500)
+            // If user is required to change password on first login
+            const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
+            if (userAppMeta.must_change_password === true) {
+                setActiveUserEmail(signInData.user?.email || syntheticEmail)
+                setMode('setNewPassword')
+                setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (12 حرفاً على الأقل).')
                 return
             }
 
-            // 2. Legacy auth mode: Try local authentication with cloud fallback
-            try {
-                let res: { user: import('../lib/localUsers').LocalUser; needsActivation?: boolean }
-                try {
-                    res = authenticateLocalUser(cleanUser, password)
-                } catch (firstErr) {
-                    if (firstErr instanceof Error && firstErr.message.includes('غير مسجل')) {
-                        // User might be created on another device; sync from cloud and retry
-                        await syncUsersWithCloud()
-                        res = authenticateLocalUser(cleanUser, password)
-                    } else {
-                        throw firstErr
-                    }
-                }
+            void logAuditEvent({
+                action: 'تسجيل دخول موثّق إلى النظام عبر Supabase Auth',
+                entity_type: 'auth',
+                user: { id: signInData.user?.id, email: signInData.user?.email || cleanUser },
+            })
 
-                if (res.needsActivation) {
-                    setIsPendingActivation(true)
-                    setNotice('⚠️ هذا الحساب يتطلب إدخال كود تأكيد التفعيل لأول مرة. يرجى كتابة كود التفعيل الممنوح لك من المدير في الحقل أدناه ثم الضغط على تسجيل الدخول.')
-                    return
-                }
-
-                void logAuditEvent({
-                    action: 'تسجيل دخول محلي إلى النظام',
-                    entity_type: 'auth',
-                    user: { id: res.user.id, email: res.user.username },
-                })
-
-                setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
-                setTimeout(() => {
-                    onPasswordSet?.()
-                }, 500)
-                return
-            } catch (localErr) {
-                // If username was found but password was wrong, display error directly
-                if (localErr instanceof Error && localErr.message.includes('كلمة المرور غير صحيحة')) {
-                    throw localErr
-                }
-
-                // If not found in local users and Supabase is configured, try Supabase fallback
-                if (supabase) {
-                    const { error: signInError } = await supabase.auth.signInWithPassword({
-                        email: cleanUser,
-                        password,
-                    })
-                    if (signInError) {
-                        if (signInError.message.toLowerCase().includes('invalid login credentials')) {
-                            throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم وكلمة المرور.')
-                        }
-                        throw signInError
-                    }
-                    return
-                }
-
-                throw localErr
-            }
+            setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
+            setTimeout(() => {
+                onPasswordSet?.()
+            }, 500)
         } catch (caughtError) {
             setError(caughtError instanceof Error ? caughtError.message : 'تعذر إتمام العملية.')
         } finally {
@@ -274,64 +188,26 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     <span>{settings?.organization || 'حركة المخزن'}</span>
                 </div>
 
-                {mode === 'activateAccount' ? (
-                    <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
-                            <UserCheck size={20} />
-                            <strong>تأكيد تفعيل الحساب</strong>
+                {!isConfigured && (
+                    <div className="inline-message error" style={{ marginBottom: '16px' }} role="alert">
+                        <ShieldAlert size={18} />
+                        <div>
+                            <strong>خدمة المصادقة السحابية غير مهيأة:</strong>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>
+                                تم إيقاف تسجيل الدخول المحلي غير الآمن. يُرجى تهيئة متغيرات البيئة للاتصال بقاعدة بيانات Supabase للمتابعة.
+                            </p>
                         </div>
-                        <h1>تفعيل حساب جديد</h1>
-                        <p>أدخل اسم المستخدم وكود تأكيد التفعيل (PIN) الممنوح لك من مدير النظام لتنشيط حسابك.</p>
+                    </div>
+                )}
 
-                        <form className="auth-form" onSubmit={handleSubmit}>
-                            <label>
-                                اسم المستخدم
-                                <input
-                                    type="text"
-                                    autoComplete="username"
-                                    placeholder="اسم المستخدم (مثال: user123)"
-                                    value={username}
-                                    onChange={(event) => setUsername(event.target.value)}
-                                    required
-                                />
-                            </label>
-
-                            <label>
-                                كود تأكيد التفعيل (PIN)
-                                <input
-                                    type="text"
-                                    placeholder="أدخل كود التفعيل (مثال: 649201)"
-                                    value={activationCode}
-                                    onChange={(event) => setActivationCode(event.target.value)}
-                                    required
-                                />
-                            </label>
-
-                            {error && <div className="inline-message error" role="alert">{error}</div>}
-                            {notice && <div className="inline-message success" role="status"><CheckCircle2 size={16} /> {notice}</div>}
-
-                            <button type="submit" className="primary-btn" disabled={isSubmitting}>
-                                <UserCheck size={17} />
-                                {isSubmitting ? 'جارٍ تأكيد التفعيل...' : 'تأكيد التفعيل'}
-                            </button>
-                        </form>
-
-                        <button
-                            type="button"
-                            className="auth-switch"
-                            onClick={() => { setMode('signIn'); setError(''); setNotice(''); setIsPendingActivation(false) }}
-                        >
-                            <LogIn size={15} /> العودة لتسجيل الدخول
-                        </button>
-                    </>
-                ) : mode === 'setNewPassword' ? (
+                {mode === 'setNewPassword' ? (
                     <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
                             <Sparkles size={20} />
                             <strong>تفعيل الحساب وتعيين كلمة المرور</strong>
                         </div>
                         <h1>أهلاً بك في حركة المخزن</h1>
-                        <p>يُرجى تعيين كلمة المرور الجديدة لحسابك لتتمكن من تسجيل الدخول مستقبلاً.</p>
+                        <p>يُرجى تعيين كلمة المرور الجديدة لحسابك (12 حرفاً على الأقل) لتتمكن من تسجيل الدخول مستقبلاً.</p>
 
                         {activeUserEmail && (
                             <div style={{
@@ -360,8 +236,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={8}
-                                        placeholder="8 أحرف على الأقل"
+                                        minLength={12}
+                                        placeholder="12 حرفاً ورموزاً على الأقل"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         required
@@ -384,8 +260,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showConfirmPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={8}
-                                        placeholder="أعد كتابة كلمة المرور (8 أحرف على الأقل)"
+                                        minLength={12}
+                                        placeholder="أعد كتابة كلمة المرور (12 حرفاً على الأقل)"
                                         value={confirmPassword}
                                         onChange={(event) => setConfirmPassword(event.target.value)}
                                         required
@@ -405,7 +281,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             {error && <div className="inline-message error" role="alert">{error}</div>}
                             {notice && <div className="inline-message success" role="status"><CheckCircle2 size={16} /> {notice}</div>}
 
-                            <button type="submit" className="primary-btn" disabled={isSubmitting}>
+                            <button type="submit" className="primary-btn" disabled={isSubmitting || !isConfigured}>
                                 <KeyRound size={17} />
                                 {isSubmitting ? 'جارٍ الحفظ والتفعيل...' : 'حفظ كلمة المرور والدخول'}
                             </button>
@@ -433,10 +309,10 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 <ShieldCheck size={26} color="var(--accent)" style={{ flexShrink: 0, marginTop: '2px' }} />
                                 <div>
                                     <strong style={{ display: 'block', marginBottom: '6px', fontSize: '1rem', color: 'var(--accent)' }}>
-                                        يُرجى مراجعة مدير النظام (System Admin)
+                                        مراجعة مدير النظام (System Admin)
                                     </strong>
                                     <p style={{ margin: 0, color: 'var(--ink)' }}>
-                                        في هذا النظام المحلي، تُدار الحسابات وكلمات المرور مركزياً لحماية البيانات. يُرجى مراجعة <strong>مدير النظام</strong> مباشرةً لتزويدك بكلمة المرور الجديدة أو كود تأكيد التفعيل لحسابك.
+                                        تُدار الحسابات وكلمات المرور مركزياً عبر خادم Supabase Auth. يُرجى مراجعة <strong>مدير النظام</strong> مباشرةً لتزويدك بكلمة مرور مؤقتة لحسابك، وسيطلب منك النظام تعيين كلمة مرور جديدة قوية فور تسجيل الدخول.
                                     </p>
                                 </div>
                             </div>
@@ -454,7 +330,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 ) : (
                     <>
                         <h1>تسجيل الدخول</h1>
-                        <p>سجّل الدخول باسم المستخدم وكلمة المرور للوصول إلى النظام.</p>
+                        <p>سجّل الدخول باسم المستخدم وكلمة المرور للوصول إلى النظام عبر Supabase Auth.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
                             <label>
@@ -492,42 +368,16 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 </div>
                             </label>
 
-                            {/* تظهر خانة كود التفعيل عند الحاجة لتأكيد تفعيل الحساب */}
-                            {isPendingActivation && (
-                                <label style={{ background: 'rgba(14, 124, 134, 0.06)', padding: '10px 12px', borderRadius: '8px', border: '1px dashed var(--accent)' }}>
-                                    <span style={{ color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <KeyRound size={15} /> كود تأكيد التفعيل (PIN)
-                                    </span>
-                                    <input
-                                        type="text"
-                                        placeholder="أدخل كود تأكيد التفعيل الممنوح لك"
-                                        value={activationCode}
-                                        onChange={(event) => setActivationCode(event.target.value)}
-                                        required
-                                        style={{ marginTop: '4px' }}
-                                    />
-                                </label>
-                            )}
-
                             {error && <div className="inline-message error" role="alert">{error}</div>}
                             {notice && <div className="inline-message success" role="status">{notice}</div>}
 
-                            <button type="submit" className="primary-btn" disabled={isSubmitting}>
+                            <button type="submit" className="primary-btn" disabled={isSubmitting || !isConfigured}>
                                 <LogIn size={17} />
-                                {isSubmitting ? 'جارٍ التحقق...' : isPendingActivation ? 'تأكيد التفعيل والدخول' : 'تسجيل الدخول'}
+                                {isSubmitting ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
                             </button>
                         </form>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap', gap: '6px' }}>
-                            <button
-                                type="button"
-                                className="auth-switch"
-                                style={{ color: 'var(--accent)', fontSize: '0.84rem', fontWeight: 600 }}
-                                onClick={() => { setMode('activateAccount'); setError(''); setNotice('') }}
-                            >
-                                <UserCheck size={14} /> تفعيل حساب جديد بكود التفعيل
-                            </button>
-
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '10px' }}>
                             <button
                                 type="button"
                                 className="auth-switch"
@@ -550,8 +400,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             alignItems: 'center',
                             gap: '8px',
                         }}>
-                            <ShieldAlert size={16} color="var(--accent)" />
-                            <span>نظام الحسابات محلي ومؤمّن: يتم إنشاء الحسابات وإدارتها بواسطة مدير النظام.</span>
+                            <ShieldCheck size={16} color="var(--accent)" />
+                            <span>نظام المصادقة موحّد ومؤمّن بالكامل عبر جلسات Supabase Auth الموثقة.</span>
                         </div>
                     </>
                 )}

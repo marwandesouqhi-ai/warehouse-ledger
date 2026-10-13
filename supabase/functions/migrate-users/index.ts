@@ -6,12 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
-function isProtectedAccount(usernameOrEmail?: string | null): boolean {
-  if (!usernameOrEmail) return false
-  const clean = usernameOrEmail.trim().toLowerCase().replace(/@warehouse\.local$/, "")
-  return clean === "marwan-desouky" || clean === "admin"
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -22,6 +16,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 
+    const body = await req.json().catch(() => ({}))
     const authHeader = req.headers.get("Authorization")
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
@@ -46,8 +41,7 @@ serve(async (req) => {
     // 2. Enforce System Admin privilege check strictly on caller's app_metadata
     const isSystemAdmin =
       caller.app_metadata?.system_admin === true ||
-      caller.app_metadata?.role === "system_admin" ||
-      isProtectedAccount(caller.email)
+      caller.app_metadata?.role === "system_admin"
 
     if (!isSystemAdmin) {
       return new Response(JSON.stringify({
@@ -58,6 +52,7 @@ serve(async (req) => {
       })
     }
 
+    const isDryRun = body.dry_run !== false // Defaults to true (safe dry run) unless explicitly set to false
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     // 3. Fetch all existing users from app_users
@@ -82,66 +77,81 @@ serve(async (req) => {
     let migratedCount = 0
     let alreadyExistsCount = 0
     let failedCount = 0
-    const details: Array<{ username: string; status: "migrated" | "already_exists" | "failed"; reason?: string }> = []
+    const details: Array<{ username: string; status: "migrated" | "already_exists" | "failed" | "dry_run_ready"; reason?: string }> = []
 
     for (const row of (appUsers || [])) {
       const cleanUsername = String(row.username || "").trim().toLowerCase()
       if (!cleanUsername) continue
 
       const syntheticEmail = `${cleanUsername}@warehouse.local`
-      const isProtected = isProtectedAccount(cleanUsername)
       const permissions = Array.isArray(row.permissions)
         ? row.permissions
         : typeof row.permissions === "string"
           ? (() => { try { return JSON.parse(row.permissions) } catch { return [] } })()
           : []
 
-      const targetRole = isProtected ? "system_admin" : (row.role || "viewer")
+      const targetRole = row.role || "viewer"
+      const isTargetSysAdmin = targetRole === "system_admin"
 
       const existingAuth = existingAuthMap.get(syntheticEmail)
 
       if (existingAuth) {
-        // Already exists in Auth: idempotent update of app_metadata and mirror link
-        await supabaseAdmin.auth.admin.updateUserById(existingAuth.id, {
-          app_metadata: {
-            ...existingAuth.app_metadata,
-            username: cleanUsername,
-            role: targetRole,
-            system_admin: isProtected,
-            permissions: isProtected ? ["view_audit", "view_settings", "manage_records"] : permissions,
-            must_change_password: isProtected ? false : true,
-          },
-        })
+        if (!isDryRun) {
+          // Idempotent update of app_metadata and mirror link
+          await supabaseAdmin.auth.admin.updateUserById(existingAuth.id, {
+            app_metadata: {
+              ...existingAuth.app_metadata,
+              username: cleanUsername,
+              role: targetRole,
+              system_admin: isTargetSysAdmin,
+              permissions: isTargetSysAdmin ? ["view_audit", "view_settings", "manage_records"] : permissions,
+              must_change_password: existingAuth.app_metadata?.must_change_password ?? true,
+            },
+          })
 
-        // Link mirror row
-        if (row.auth_user_id !== existingAuth.id) {
-          await supabaseAdmin.from("app_users").update({
-            auth_user_id: existingAuth.id,
-            must_change_password: isProtected ? false : true,
-          }).eq("id", row.id)
+          // Link mirror row
+          if (row.auth_user_id !== existingAuth.id) {
+            await supabaseAdmin.from("app_users").update({
+              auth_user_id: existingAuth.id,
+              must_change_password: existingAuth.app_metadata?.must_change_password ?? true,
+            }).eq("id", row.id)
+          }
         }
 
         alreadyExistsCount++
         details.push({
           username: cleanUsername,
           status: "already_exists",
-          reason: "الحساب موجود بالفعل في Supabase Auth وتم تحديث بيانات app_metadata وربطه بنجاح.",
+          reason: isDryRun
+            ? "الحساب موجود بالفعل في Supabase Auth؛ سيتم ربطه وتحديث بياناته دون تكرار."
+            : "الحساب موجود بالفعل في Supabase Auth وتم تحديث بيانات app_metadata وربطه بنجاح.",
         })
         continue
       }
 
-      // User does NOT exist in Auth: Create user
+      // User does NOT exist in Auth: Check password validity
       const rawPassword = row.password ? String(row.password) : ""
       if (!rawPassword || rawPassword.length < 6) {
         failedCount++
         details.push({
           username: cleanUsername,
           status: "failed",
-          reason: "كلمة المرور فارغة أو أقصر من 6 أحرف (الحد الأدنى لـ Supabase Auth). يجب تحديث كلمة مرور هذا المستخدم يدوياً.",
+          reason: "كلمة المرور غير متوفرة أو أقصر من 6 أحرف. سيتطلب هذا الحساب تعيين كلمة مرور مؤقتة عبر مدير النظام.",
         })
         continue
       }
 
+      if (isDryRun) {
+        migratedCount++
+        details.push({
+          username: cleanUsername,
+          status: "dry_run_ready",
+          reason: "جاهز للترحيل بنجاح إلى Supabase Auth مع فرض تغيير كلمة المرور في أول تسجيل دخول.",
+        })
+        continue
+      }
+
+      // Execute actual migration
       const { data: createdAuth, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: syntheticEmail,
         password: rawPassword,
@@ -154,9 +164,9 @@ serve(async (req) => {
         app_metadata: {
           username: cleanUsername,
           role: targetRole,
-          system_admin: isProtected,
-          permissions: isProtected ? ["view_audit", "view_settings", "manage_records"] : permissions,
-          must_change_password: isProtected ? false : true,
+          system_admin: isTargetSysAdmin,
+          permissions: isTargetSysAdmin ? ["view_audit", "view_settings", "manage_records"] : permissions,
+          must_change_password: true, // Enforce password change upon migration
         },
       })
 
@@ -173,35 +183,40 @@ serve(async (req) => {
       // Link mirror row
       await supabaseAdmin.from("app_users").update({
         auth_user_id: createdAuth.user.id,
-        must_change_password: isProtected ? false : true,
+        must_change_password: true,
       }).eq("id", row.id)
 
       migratedCount++
       details.push({
         username: cleanUsername,
         status: "migrated",
+        reason: "تم الترحيل بنجاح وإنشاء الهوية في Supabase Auth وربطها.",
       })
     }
 
-    // Audit log for the migration run
+    // Audit log for the migration run (never log passwords!)
     await supabaseAdmin.from("audit_logs").insert({
       user_id: caller.id,
       user_email: caller.email,
-      action: "تشغيل أداة ترحيل المستخدمين إلى Supabase Auth (migrate-users)",
+      action: isDryRun
+        ? "تشغيل تجربة جافة لترحيل المستخدمين (migrate-users: dry-run)"
+        : "تنفيذ ترحيل المستخدمين الفعلي إلى Supabase Auth (migrate-users: execute)",
       entity_type: "migration",
       details: {
+        dry_run: isDryRun,
         total: (appUsers || []).length,
-        migrated: migratedCount,
-        alreadyExists: alreadyExistsCount,
+        migrated_or_ready: migratedCount,
+        already_exists: alreadyExistsCount,
         failed: failedCount,
       },
     })
 
     return new Response(JSON.stringify({
       success: true,
+      dryRun: isDryRun,
       summary: {
         total: (appUsers || []).length,
-        migrated: migratedCount,
+        readyOrMigrated: migratedCount,
         alreadyExists: alreadyExistsCount,
         failed: failedCount,
       },

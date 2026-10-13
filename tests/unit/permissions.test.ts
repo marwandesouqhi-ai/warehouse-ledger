@@ -1,13 +1,14 @@
 /**
  * tests/unit/permissions.test.ts
  *
- * اختبارات شاملة لنظام الأدوار والصلاحيات الجديد:
- * - normalizeRole: كل دور × كل حالة
- * - getEffectiveRole: LocalUserSession + Supabase Session
- * - isSystemAdmin: الحسابات المحمية + غيرها
+ * اختبارات شاملة لنظام الأدوار والصلاحيات المحصّن:
+ * - normalizeRole: التحويل الدقيق للأدوار بدون أي تصعيد بالاسم
+ * - getEffectiveRole: الاعتماد الحصري على app_metadata
+ * - isSystemAdmin: التحقق الصارم من راية النظام الموثقة
  * - can(): الصلاحيات الإضافية
  * - canAccessRoute(): مصفوفة الوصول كاملة
  * - التوافق الرجعي: editor, viewer, admin القديم
+ * - اختبارات الأمان ومكافحة تزوير الهوية والصلاحيات
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -28,12 +29,13 @@ import type { LocalUserSession } from '../../src/lib/localUsers'
 function makeSession(
   username: string,
   role: string,
-  permissions: string[] = []
+  permissions: string[] = [],
+  systemAdminFlag?: boolean
 ): LocalUserSession {
   return {
     user: {
       id: `usr-${username}`,
-      email: username,
+      email: `${username}@warehouse.local`,
       user_metadata: {
         username,
         name: username,
@@ -44,7 +46,7 @@ function makeSession(
       app_metadata: {
         username,
         role: role as 'admin' | 'editor' | 'viewer',
-        system_admin: username === 'marwan-desouky' || username === 'admin' || role === 'system_admin',
+        system_admin: systemAdminFlag !== undefined ? systemAdminFlag : (role === 'system_admin'),
         permissions,
       },
     },
@@ -55,29 +57,25 @@ function makeSession(
 // ─── normalizeRole ────────────────────────────────────────────────────────────
 
 describe('normalizeRole', () => {
-  it('marwan-desouky بأي دور = system_admin', () => {
-    expect(normalizeRole('viewer', 'marwan-desouky')).toBe('system_admin')
-    expect(normalizeRole('editor', 'marwan-desouky')).toBe('system_admin')
-    expect(normalizeRole('admin', 'marwan-desouky')).toBe('system_admin')
+  it('لا يتم رفع صلاحيات marwan-desouky تلقائياً إلى system_admin بالاسم فقط', () => {
+    expect(normalizeRole('viewer', 'marwan-desouky')).toBe('viewer')
+    expect(normalizeRole('editor', 'marwan-desouky')).toBe('editor')
+    expect(normalizeRole('admin', 'marwan-desouky')).toBe('admin')
   })
 
-  it('admin (اسم المستخدم) بأي دور = system_admin', () => {
-    expect(normalizeRole('viewer', 'admin')).toBe('system_admin')
-    expect(normalizeRole('editor', 'admin')).toBe('system_admin')
+  it('لا يتم رفع صلاحيات admin (اسم المستخدم) تلقائياً بالاسم فقط', () => {
+    expect(normalizeRole('viewer', 'admin')).toBe('viewer')
+    expect(normalizeRole('editor', 'admin')).toBe('editor')
   })
 
-  it('اسم محمي بحروف كبيرة = system_admin (case insensitive)', () => {
-    expect(normalizeRole('viewer', 'Marwan-Desouky')).toBe('system_admin')
-    expect(normalizeRole('viewer', 'ADMIN')).toBe('system_admin')
-  })
-
-  it('admin عادي (مش محمي) = admin', () => {
+  it('admin عادي = admin', () => {
     expect(normalizeRole('admin', 'ahmed')).toBe('admin')
     expect(normalizeRole('admin', 'mohamed')).toBe('admin')
   })
 
   it('دور system_admin مخزن صراحةً = system_admin', () => {
     expect(normalizeRole('system_admin', 'ahmed')).toBe('system_admin')
+    expect(normalizeRole('system_admin', 'marwan-desouky')).toBe('system_admin')
   })
 
   it('warehouse_staff = warehouse_staff', () => {
@@ -111,16 +109,21 @@ describe('getEffectiveRole', () => {
     expect(getEffectiveRole(undefined)).toBe('viewer')
   })
 
-  it('marwan-desouky session = system_admin', () => {
-    expect(getEffectiveRole(makeSession('marwan-desouky', 'admin'))).toBe('system_admin')
-    expect(getEffectiveRole(makeSession('marwan-desouky', 'editor'))).toBe('system_admin')
+  it('marwan-desouky بدون system_admin في app_metadata لا يمنح صلاحيات إدارية عليا', () => {
+    expect(getEffectiveRole(makeSession('marwan-desouky', 'admin'))).toBe('admin')
+    expect(getEffectiveRole(makeSession('marwan-desouky', 'viewer'))).toBe('viewer')
   })
 
-  it('admin username session = system_admin', () => {
-    expect(getEffectiveRole(makeSession('admin', 'viewer'))).toBe('system_admin')
+  it('admin username مع viewer = viewer', () => {
+    expect(getEffectiveRole(makeSession('admin', 'viewer'))).toBe('viewer')
   })
 
-  it('user بدور admin (غير محمي) = admin', () => {
+  it('حساب مع راية system_admin صريحة في app_metadata = system_admin', () => {
+    expect(getEffectiveRole(makeSession('marwan-desouky', 'system_admin'))).toBe('system_admin')
+    expect(getEffectiveRole(makeSession('anyuser', 'system_admin'))).toBe('system_admin')
+  })
+
+  it('user بدور admin = admin', () => {
     expect(getEffectiveRole(makeSession('ali', 'admin'))).toBe('admin')
   })
 
@@ -139,21 +142,36 @@ describe('getEffectiveRole', () => {
   it('viewer = viewer', () => {
     expect(getEffectiveRole(makeSession('ali', 'viewer'))).toBe('viewer')
   })
+
+  it('يرفض تماماً أي تزوير في user_metadata ويفوض فقط app_metadata', () => {
+    const forgedSession = {
+      user: {
+        id: 'usr-attacker',
+        email: 'attacker@warehouse.local',
+        user_metadata: { role: 'system_admin', system_admin: true },
+        app_metadata: { role: 'viewer', system_admin: false },
+      },
+    } as unknown as LocalUserSession
+    expect(getEffectiveRole(forgedSession)).toBe('viewer')
+  })
 })
 
 // ─── isSystemAdmin ────────────────────────────────────────────────────────────
 
 describe('isSystemAdmin', () => {
-  it('marwan-desouky = true', () => {
-    expect(isSystemAdmin(makeSession('marwan-desouky', 'admin'))).toBe(true)
+  it('system_admin session = true', () => {
+    expect(isSystemAdmin(makeSession('admin_lead', 'system_admin'))).toBe(true)
   })
 
-  it('admin username = true', () => {
-    expect(isSystemAdmin(makeSession('admin', 'viewer'))).toBe(true)
+  it('اسم marwan-desouky بدور admin عادي = false (بدون app_metadata system_admin)', () => {
+    expect(isSystemAdmin(makeSession('marwan-desouky', 'admin'))).toBe(false)
   })
 
-  it('user بدور admin (غير محمي) = false (إصلاح الـ bug)', () => {
-    // هذا هو الـ bug المصلوح: أي admin عادي لم يكن يُعدّ system_admin
+  it('admin username مع viewer = false', () => {
+    expect(isSystemAdmin(makeSession('admin', 'viewer'))).toBe(false)
+  })
+
+  it('user بدور admin عادي = false', () => {
     expect(isSystemAdmin(makeSession('ali', 'admin'))).toBe(false)
     expect(isSystemAdmin(makeSession('manager', 'admin'))).toBe(false)
   })
@@ -167,7 +185,7 @@ describe('isSystemAdmin', () => {
 
 describe('can()', () => {
   it('system_admin يملك كل الصلاحيات', () => {
-    const s = makeSession('marwan-desouky', 'admin')
+    const s = makeSession('admin_lead', 'system_admin')
     expect(can(s, 'view_audit')).toBe(true)
     expect(can(s, 'view_settings')).toBe(true)
     expect(can(s, 'manage_records')).toBe(true)
@@ -201,7 +219,7 @@ describe('can()', () => {
 // ─── canCreatePurchase / canCreateDisbursement ────────────────────────────────
 
 describe('canCreatePurchase', () => {
-  it('system_admin = true', () => expect(canCreatePurchase(makeSession('marwan-desouky', 'admin'))).toBe(true))
+  it('system_admin = true', () => expect(canCreatePurchase(makeSession('admin_lead', 'system_admin'))).toBe(true))
   it('admin = true', () => expect(canCreatePurchase(makeSession('ali', 'admin'))).toBe(true))
   it('purchasing_staff = true', () => expect(canCreatePurchase(makeSession('ali', 'purchasing_staff'))).toBe(true))
   it('warehouse_staff = false', () => expect(canCreatePurchase(makeSession('ali', 'warehouse_staff'))).toBe(false))
@@ -210,7 +228,7 @@ describe('canCreatePurchase', () => {
 })
 
 describe('canCreateDisbursement', () => {
-  it('system_admin = true', () => expect(canCreateDisbursement(makeSession('marwan-desouky', 'admin'))).toBe(true))
+  it('system_admin = true', () => expect(canCreateDisbursement(makeSession('admin_lead', 'system_admin'))).toBe(true))
   it('admin = true', () => expect(canCreateDisbursement(makeSession('ali', 'admin'))).toBe(true))
   it('warehouse_staff = true', () => expect(canCreateDisbursement(makeSession('ali', 'warehouse_staff'))).toBe(true))
   it('purchasing_staff = false', () => expect(canCreateDisbursement(makeSession('ali', 'purchasing_staff'))).toBe(false))
@@ -224,7 +242,7 @@ describe('canAccessRoute', () => {
   const makeRole = (role: string, username = 'ali') => makeSession(username, role)
 
   const allRoles: Array<[string, string]> = [
-    ['system_admin', 'marwan-desouky'],
+    ['system_admin', 'admin_lead'],
     ['admin', 'ali'],
     ['warehouse_staff', 'ali'],
     ['purchasing_staff', 'ali'],
@@ -252,7 +270,7 @@ describe('canAccessRoute', () => {
 
   // العهدة/المخازن
   describe('/custody', () => {
-    it('system_admin يدخل', () => expect(canAccessRoute(makeRole('system_admin', 'marwan-desouky'), '/custody')).toBe(true))
+    it('system_admin يدخل', () => expect(canAccessRoute(makeRole('system_admin', 'admin_lead'), '/custody')).toBe(true))
     it('admin يدخل', () => expect(canAccessRoute(makeRole('admin'), '/custody')).toBe(true))
     it('warehouse_staff يدخل', () => expect(canAccessRoute(makeRole('warehouse_staff'), '/custody')).toBe(true))
     it('editor يدخل', () => expect(canAccessRoute(makeRole('editor'), '/custody')).toBe(true))
@@ -262,7 +280,7 @@ describe('canAccessRoute', () => {
 
   // الاستيراد
   describe('/imports', () => {
-    it('system_admin يدخل', () => expect(canAccessRoute(makeRole('system_admin', 'marwan-desouky'), '/imports')).toBe(true))
+    it('system_admin يدخل', () => expect(canAccessRoute(makeRole('system_admin', 'admin_lead'), '/imports')).toBe(true))
     it('admin يدخل', () => expect(canAccessRoute(makeRole('admin'), '/imports')).toBe(true))
     it('purchasing_staff يدخل', () => expect(canAccessRoute(makeRole('purchasing_staff'), '/imports')).toBe(true))
     it('warehouse_staff لا يدخل', () => expect(canAccessRoute(makeRole('warehouse_staff'), '/imports')).toBe(false))
@@ -272,7 +290,7 @@ describe('canAccessRoute', () => {
 
   // سجل العمليات
   describe('/audit', () => {
-    it('system_admin يدخل', () => expect(canAccessRoute(makeSession('marwan-desouky', 'admin'), '/audit')).toBe(true))
+    it('system_admin يدخل', () => expect(canAccessRoute(makeSession('admin_lead', 'system_admin'), '/audit')).toBe(true))
     it('admin لا يدخل', () => expect(canAccessRoute(makeRole('admin'), '/audit')).toBe(false))
     it('warehouse_staff لا يدخل', () => expect(canAccessRoute(makeRole('warehouse_staff'), '/audit')).toBe(false))
     it('viewer مع view_audit يدخل', () => {
@@ -286,7 +304,7 @@ describe('canAccessRoute', () => {
   // المستخدمون
   describe('/users', () => {
     it('system_admin فقط يدخل', () => {
-      expect(canAccessRoute(makeSession('marwan-desouky', 'admin'), '/users')).toBe(true)
+      expect(canAccessRoute(makeSession('admin_lead', 'system_admin'), '/users')).toBe(true)
       expect(canAccessRoute(makeRole('admin'), '/users')).toBe(false)
       expect(canAccessRoute(makeRole('editor'), '/users')).toBe(false)
     })
@@ -294,17 +312,11 @@ describe('canAccessRoute', () => {
 
   // الإعدادات
   describe('/settings', () => {
-    it('system_admin يدخل', () => expect(canAccessRoute(makeSession('marwan-desouky', 'admin'), '/settings')).toBe(true))
+    it('system_admin يدخل', () => expect(canAccessRoute(makeSession('admin_lead', 'system_admin'), '/settings')).toBe(true))
     it('admin لا يدخل', () => expect(canAccessRoute(makeRole('admin'), '/settings')).toBe(false))
     it('مستخدم مع view_settings يدخل', () => {
       expect(canAccessRoute(makeSession('ali', 'admin', ['view_settings']), '/settings')).toBe(true)
     })
-  })
-
-  // الراوتس الفرعية
-  it('/purchases/new يعمل كـ /purchases', () => {
-    expect(canAccessRoute(makeRole('viewer'), '/purchases/new')).toBe(false)
-    expect(canAccessRoute(makeRole('purchasing_staff'), '/purchases/new')).toBe(true)
   })
 
   it('/purchases/edit/123 يعمل كـ /purchases', () => {
@@ -317,7 +329,7 @@ describe('canAccessRoute', () => {
 
 describe('canViewPage', () => {
   it('audit: system_admin يرى', () => {
-    expect(canViewPage(makeSession('marwan-desouky', 'admin'), 'audit')).toBe(true)
+    expect(canViewPage(makeSession('admin_lead', 'system_admin'), 'audit')).toBe(true)
   })
   it('audit: admin لا يرى', () => {
     expect(canViewPage(makeSession('ali', 'admin'), 'audit')).toBe(false)
@@ -330,7 +342,7 @@ describe('canViewPage', () => {
   })
   it('users: system_admin فقط يرى', () => {
     expect(canViewPage(makeSession('ali', 'admin'), 'users')).toBe(false)
-    expect(canViewPage(makeSession('marwan-desouky', 'admin'), 'users')).toBe(true)
+    expect(canViewPage(makeSession('admin_lead', 'system_admin'), 'users')).toBe(true)
   })
 })
 
@@ -372,15 +384,14 @@ describe('التوافق الرجعي مع الأدوار القديمة', () =>
 
 // ─── اختبارات الأمان ومكافحة التزوير ──────────────────────────────────────────
 
-describe('حماية الصلاحيات ضد تزوير user_metadata', () => {
+describe('حماية الصلاحيات ضد تزوير user_metadata وتصعيد الأسماء', () => {
   it('يرفض تماماً أي قيم مزورة في user_metadata ويعتمد حصرياً على app_metadata', () => {
-    // محاكاة مستخدم خبيث قام بتعديل user_metadata عبر supabase.auth.updateUser()
     const forgedSession = {
       user: {
         id: 'usr-attacker-999',
         email: 'attacker@warehouse.local',
         user_metadata: {
-          username: 'marwan-desouky', // محاولة انتحال شخصية مدير النظام
+          username: 'admin',
           role: 'system_admin',
           permissions: ['view_audit', 'view_settings', 'manage_records'],
         },
@@ -394,13 +405,35 @@ describe('حماية الصلاحيات ضد تزوير user_metadata', () => {
       access_token: 'fake-jwt',
     } as any
 
-    // يجب أن يحصل على دور viewer فقط ولا يملك أي صلاحية
     expect(getEffectiveRole(forgedSession)).toBe('viewer')
     expect(isSystemAdmin(forgedSession)).toBe(false)
     expect(can(forgedSession, 'view_audit')).toBe(false)
     expect(can(forgedSession, 'view_settings')).toBe(false)
     expect(can(forgedSession, 'manage_records')).toBe(false)
     expect(canAccessRoute(forgedSession, '/audit')).toBe(false)
+    expect(canAccessRoute(forgedSession, '/users')).toBe(false)
+  })
+
+  it('محاولة انتحال اسم marwan-desouky في user_metadata تفشل تماماً', () => {
+    const forgedSession = {
+      user: {
+        id: 'usr-attacker-888',
+        email: 'marwan-desouky@warehouse.local',
+        user_metadata: {
+          username: 'marwan-desouky',
+          role: 'system_admin',
+        },
+        app_metadata: {
+          username: 'marwan-desouky',
+          role: 'viewer',
+          system_admin: false,
+        },
+      },
+      access_token: 'fake-jwt',
+    } as any
+
+    expect(getEffectiveRole(forgedSession)).toBe('viewer')
+    expect(isSystemAdmin(forgedSession)).toBe(false)
     expect(canAccessRoute(forgedSession, '/users')).toBe(false)
   })
 

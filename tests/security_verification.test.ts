@@ -81,4 +81,29 @@ describe('Security & Authorization Hardening Audit', { timeout: 30000 }, () => {
 
     expect(error).toBeDefined()
   })
+
+  it('9. Blocks anonymous/unauthorized caller from invoking admin-users Edge Function', async () => {
+    const { error } = await client.functions.invoke('admin-users', {
+      body: { action: 'list_users' },
+    })
+
+    expect(error).toBeDefined()
+  })
+
+  it('10. Blocks anonymous/unauthorized caller from invoking migrate-users Edge Function', async () => {
+    const { error } = await client.functions.invoke('migrate-users', {
+      body: { dry_run: true },
+    })
+
+    expect(error).toBeDefined()
+  })
+
+  it('11. Blocks unauthorized client from direct insert into app_users', async () => {
+    const { error } = await client
+      .from('app_users')
+      .insert({ username: 'hacker', role: 'system_admin', display_name: 'Hacker' })
+      .select()
+
+    expect(error).toBeDefined()
+  })
 })
