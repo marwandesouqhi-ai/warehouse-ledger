@@ -555,6 +555,23 @@ export default function CustodyPage({
     } else {
       syncOutwardMovementToCustody(mv)
     }
+    void logAuditEvent({
+      action: `إذن صرف وتحويل عهدة: ${mv.item} (${mv.qout} وحدة) من ${mv.from} إلى ${mv.to}`,
+      entity_type: 'custody',
+      details: {
+        item: mv.item,
+        quantity: mv.qout,
+        from: mv.from,
+        to: mv.to,
+        permit: mv.permit,
+        date: mv.date,
+        sourceWarehouseId: mv.sourceWarehouseId,
+        destWarehouseId: mv.destWarehouseId,
+        destType: mv.destType,
+        custodianName: mv.custodianName,
+      },
+      user: session?.user,
+    })
     setItems(loadCustodyItems())
     setIsNewDisbursementOpen(false)
     setImportNotice(`تم تسجيل إذن الصرف وحفظ الحركة بنجاح (${mv.item} - ${mv.qout} وحدة)!`)

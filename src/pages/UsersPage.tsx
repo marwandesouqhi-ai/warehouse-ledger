@@ -23,6 +23,7 @@ import {
 
 import { matchesSearch } from '../lib/searchUtils'
 import { checkIsSystemAdmin } from '../lib/supabase'
+import { logAuditEvent } from '../lib/auditLogger'
 import {
     ASSIGNABLE_ROLES,
     ROLE_LABELS,
@@ -147,6 +148,12 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             reloadUsers()
             setAddSuccess(`تمت إضافة المستخدم "${added.username}" بنجاح! كود تأكيد التفعيل: ${added.activationCode}`)
+            void logAuditEvent({
+                action: `إضافة مستخدم جديد: ${added.username} (الدور: ${ROLE_LABELS[added.role as EffectiveRole] || added.role})`,
+                entity_type: 'user',
+                details: { username: added.username, role: added.role, permissions: added.permissions },
+                user: currentSession?.user,
+            })
             setNewUsername('')
             setNewDisplayName('')
             setNewPassword('')
@@ -187,6 +194,19 @@ export default function UsersPage({ session }: UsersPageProps) {
             })
 
             reloadUsers()
+            void logAuditEvent({
+                action: `تعديل بيانات وصلاحيات المستخدم: ${editingUser.username}`,
+                entity_type: 'user',
+                details: {
+                    username: editingUser.username,
+                    oldRole: editingUser.role,
+                    newRole: editRole,
+                    oldPermissions: editingUser.permissions,
+                    newPermissions: editPermissions,
+                    passwordUpdated: Boolean(editPassword),
+                },
+                user: currentSession?.user,
+            })
             setEditingUser(null)
         } catch (err) {
             setEditError(err instanceof Error ? err.message : 'تعذر حفظ التعديلات.')
@@ -210,6 +230,12 @@ export default function UsersPage({ session }: UsersPageProps) {
         try {
             deleteLocalUser(user.id)
             reloadUsers()
+            void logAuditEvent({
+                action: `حذف المستخدم: ${user.username}`,
+                entity_type: 'user',
+                details: { username: user.username, role: user.role },
+                user: currentSession?.user,
+            })
             setDeletingUser(null)
         } catch (err) {
             alert(err instanceof Error ? err.message : 'تعذر حذف المستخدم.')
@@ -249,6 +275,12 @@ export default function UsersPage({ session }: UsersPageProps) {
             changeUserPassword(pwdModalUser.id, modalNewPassword)
             reloadUsers()
             setPwdModalSuccess(`تم تحديث كلمة المرور للمستخدم "${pwdModalUser.username}" بنجاح!`)
+            void logAuditEvent({
+                action: `تغيير كلمة مرور المستخدم: ${pwdModalUser.username}`,
+                entity_type: 'user',
+                details: { username: pwdModalUser.username },
+                user: currentSession?.user,
+            })
             setTimeout(() => {
                 setPwdModalUser(null)
             }, 1200)
@@ -290,6 +322,12 @@ export default function UsersPage({ session }: UsersPageProps) {
             if (found) {
                 updateLocalUser(found.id, { password: selfPassword })
                 setSelfPasswordSuccess('تم حفظ وتحديث كلمة المرور الجديدة لحسابك بنجاح!')
+                void logAuditEvent({
+                    action: `تغيير كلمة المرور الشخصية للمستخدم الحالي`,
+                    entity_type: 'user',
+                    details: { username: activeUserEmail },
+                    user: currentSession?.user,
+                })
                 setSelfPassword('')
                 setSelfConfirm('')
                 reloadUsers()
