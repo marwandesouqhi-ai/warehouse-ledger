@@ -2,23 +2,33 @@
  * src/lib/authMode.ts
  *
  * Feature flag and utilities for dual-mode auth:
- * - 'legacy': Local storage authentication with cloud fallback (default)
- * - 'secure': Supabase Auth with synthetic emails, app_metadata permissions, and secure sessions
+ * - 'transitional': Supabase Auth with backend login-bridge for migrating directory users (default)
+ * - 'secure': Supabase Auth direct sign-in only; login-bridge disabled
+ *
+ * NOTE: The old client-side local 'legacy' mode was intentionally decommissioned.
+ * Real operational rollback = redeploying the version tagged 'pre-security-backup' on Vercel.
  */
 
-export type AuthMode = 'legacy' | 'secure'
+export type AuthMode = 'transitional' | 'secure'
 
 /**
- * Returns current auth mode.
- * Supabase Auth is the unified, authoritative authentication mechanism for the application.
- * Insecure local authentication and local mock fallback have been strictly eliminated.
+ * Returns current auth mode configured in VITE_AUTH_MODE.
+ * Defaults to 'transitional' to ensure zero lockout during transition.
  */
-export function getAuthMode(): 'secure' {
-  return 'secure'
+export function getAuthMode(): AuthMode {
+  const mode = import.meta.env.VITE_AUTH_MODE
+  if (mode === 'secure') {
+    return 'secure'
+  }
+  return 'transitional'
 }
 
 export function isAuthSecureMode(): boolean {
-  return true
+  return getAuthMode() === 'secure'
+}
+
+export function isAuthTransitionalMode(): boolean {
+  return getAuthMode() === 'transitional'
 }
 
 /**

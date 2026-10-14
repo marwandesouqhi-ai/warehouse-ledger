@@ -1,6 +1,5 @@
 import { logAuditEvent } from './auditLogger'
 import { supabase } from './supabase'
-import { isAuthSecureMode } from './authMode'
 import {
   isProtectedUsername,
   canDeleteUser,
@@ -320,10 +319,8 @@ export function loadLocalUsers(): LocalUser[] {
 export function saveLocalUsers(users: LocalUser[]): void {
   try {
     if (typeof window !== 'undefined') {
-      // In secure mode, strip passwords from localStorage records
-      const storageUsers = isAuthSecureMode()
-        ? users.map((u) => ({ ...u, password: '' }))
-        : users
+      // Strip plaintext passwords from localStorage records permanently
+      const storageUsers = users.map((u) => ({ ...u, password: '' }))
       localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(storageUsers))
       window.dispatchEvent(new CustomEvent('local-users-changed'))
     }

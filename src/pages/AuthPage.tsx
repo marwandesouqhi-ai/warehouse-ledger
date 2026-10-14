@@ -14,14 +14,7 @@ import {
 import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
 import { logAuditEvent } from '../lib/auditLogger'
-import { isSupabaseConfigured, toSyntheticEmail } from '../lib/authMode'
-import {
-    loadLocalUsers,
-    setLocalSession,
-    type LocalUser,
-    type UserRole,
-    type UserStatus,
-} from '../lib/localUsers'
+import { isSupabaseConfigured, toSyntheticEmail, isAuthTransitionalMode } from '../lib/authMode'
 
 type AuthMode = 'signIn' | 'forgotPassword' | 'setNewPassword'
 
@@ -150,91 +143,37 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 }
             }
 
-            // Enterprise Directory Fallback: Check if user exists in public.app_users or local store
-            if (signInError && supabase) {
-                const lookupUsername = cleanUser.endsWith('@warehouse.local')
-                    ? cleanUser.replace(/@warehouse\.local$/, '')
-                    : cleanUser
-
+            // Transitional Login Bridge: For existing directory users migrating to Supabase Auth without lockout
+            if (signInError && supabase && isAuthTransitionalMode()) {
                 try {
-                    const { data: appUser, error: appUserErr } = await supabase
-                        .from('app_users')
-                        .select('*')
-                        .ilike('username', lookupUsername)
-                        .maybeSingle()
+                    const { data: bridgeData, error: bridgeError } = await supabase.functions.invoke('login-bridge', {
+                        body: { username: cleanUser, password },
+                    })
 
-                    if (!appUserErr && appUser) {
-                        if (appUser.status !== 'active') {
-                            throw new Error('هذا الحساب قيد التعطيل أو بانتظار التفعيل. يُرجى مراجعة مدير النظام.')
+                    if (!bridgeError && bridgeData?.bridged === true) {
+                        // Account was seamlessly provisioned into Supabase Auth -> Complete sign in
+                        const retry = await supabase.auth.signInWithPassword({
+                            email: targetEmail,
+                            password,
+                        })
+                        if (!retry.error && retry.data) {
+                            signInData = retry.data
+                            signInError = null
+                        } else if (retry.error) {
+                            signInError = retry.error
                         }
-
-                        if (appUser.password && appUser.password === password) {
-                            const isFounder = appUser.username.toLowerCase() === 'marwan-desouky'
-                            const roleToAssign: UserRole = isFounder ? 'system_admin' : ((appUser.role || 'viewer') as UserRole)
-                            const permissionsToAssign = isFounder
-                                ? ['view_audit', 'view_settings', 'manage_records']
-                                : (Array.isArray(appUser.permissions)
-                                    ? appUser.permissions
-                                    : typeof appUser.permissions === 'string'
-                                        ? (() => { try { return JSON.parse(appUser.permissions) } catch { return [] } })()
-                                        : [])
-
-                            const verifiedUser: LocalUser = {
-                                id: appUser.id,
-                                username: appUser.username,
-                                displayName: appUser.display_name || appUser.username,
-                                password: '',
-                                role: roleToAssign,
-                                activationCode: appUser.activation_code || '',
-                                status: (appUser.status || 'active') as UserStatus,
-                                createdAt: appUser.created_at || new Date().toISOString(),
-                                notes: appUser.notes || undefined,
-                                permissions: permissionsToAssign,
-                            }
-
-                            void supabase
-                                .from('app_users')
-                                .update({ last_login_at: new Date().toISOString() })
-                                .eq('id', appUser.id)
-
-                            setLocalSession(verifiedUser)
-
-                            void logAuditEvent({
-                                action: `تسجيل دخول مستخدم النظام: ${verifiedUser.username} (${verifiedUser.role})`,
-                                entity_type: 'auth',
-                                details: {
-                                    username: verifiedUser.username,
-                                    role: verifiedUser.role,
-                                    auth_provider: 'enterprise_directory',
-                                },
-                            })
-
-                            setNotice(`مرحباً بك يا ${verifiedUser.displayName}! تم تسجيل الدخول بنجاح.`)
-                            setTimeout(() => {
-                                onPasswordSet?.()
-                            }, 400)
-                            return
+                    } else if (bridgeError) {
+                        const status = (bridgeError as { status?: number; context?: { status?: number } }).status ||
+                                       (bridgeError as { context?: { status?: number } }).context?.status
+                        if (status === 429 || bridgeError.message?.includes('429')) {
+                            throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
                         }
                     }
-                } catch (checkErr) {
-                    if (checkErr instanceof Error && checkErr.message.includes('التعطيل')) {
-                        throw checkErr
+                } catch (bridgeCatch) {
+                    if (bridgeCatch instanceof Error && bridgeCatch.message.includes('15 دقيقة')) {
+                        throw bridgeCatch
                     }
-                }
-
-                // If cloud check did not match, check local cache fallback
-                const cachedUsers = loadLocalUsers()
-                const cachedMatch = cachedUsers.find((u) => u.username.toLowerCase() === lookupUsername)
-                if (cachedMatch && cachedMatch.password && cachedMatch.password === password) {
-                    if (cachedMatch.status !== 'active') {
-                        throw new Error('هذا الحساب قيد التعطيل أو بانتظار التفعيل. يُرجى مراجعة مدير النظام.')
-                    }
-                    setLocalSession(cachedMatch)
-                    setNotice(`مرحباً بك يا ${cachedMatch.displayName}! تم تسجيل الدخول بنجاح.`)
-                    setTimeout(() => {
-                        onPasswordSet?.()
-                    }, 400)
-                    return
+                    // Fall through to standard error handling
                 }
             }
 

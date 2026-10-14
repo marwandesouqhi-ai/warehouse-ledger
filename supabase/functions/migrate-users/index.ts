@@ -79,9 +79,25 @@ serve(async (req) => {
     let failedCount = 0
     const details: Array<{ username: string; status: "migrated" | "already_exists" | "failed" | "dry_run_ready"; reason?: string }> = []
 
+    function isProtectedUsername(u: string): boolean {
+      const clean = u.trim().toLowerCase()
+      return clean === "marwan-desouky" || clean === "marwan-desouky@warehouse.local" || clean === "marwandesouqhi@gmail.com"
+    }
+
     for (const row of (appUsers || [])) {
       const cleanUsername = String(row.username || "").trim().toLowerCase()
       if (!cleanUsername) continue
+
+      // Skip fixed protected System Admin marwan-desouky (managed and bootstrapped independently)
+      if (isProtectedUsername(cleanUsername)) {
+        alreadyExistsCount++
+        details.push({
+          username: cleanUsername,
+          status: "already_exists",
+          reason: "تم تخطي حساب مدير النظام الرئيسي المحمي (يتم تجهيزه يدوياً وإدارته بشكل مستقل).",
+        })
+        continue
+      }
 
       const syntheticEmail = `${cleanUsername}@warehouse.local`
       const permissions = Array.isArray(row.permissions)
