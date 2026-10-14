@@ -139,14 +139,14 @@ serve(async (req) => {
       })
     }
 
-    // Never bridge disabled or pending accounts
-    if (appUser.status !== "active") {
+    // 4b. Explicitly reject disabled or suspended accounts
+    if (appUser.status === "disabled" || appUser.status === "suspended") {
       await supabaseAdmin.from("login_attempts").insert({
         username: cleanUsername,
         success: false,
       })
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
-        status: 401,
+      return new Response(JSON.stringify({ error: "تم تعطيل هذا الحساب. يرجى مراجعة إدارة النظام." }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
@@ -193,11 +193,12 @@ serve(async (req) => {
       throw new Error(createAuthErr?.message || "Failed to provision Supabase Auth user")
     }
 
-    // 7. Link auth_user_id in app_users without altering password or other columns
+    // 7. Link auth_user_id and ensure status is active in app_users
     await supabaseAdmin
       .from("app_users")
       .update({
         auth_user_id: newAuthUser.user.id,
+        status: "active",
         must_change_password: true,
       })
       .eq("id", appUser.id)

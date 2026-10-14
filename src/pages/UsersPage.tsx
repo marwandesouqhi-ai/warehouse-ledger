@@ -9,7 +9,6 @@ import {
     EyeOff,
     KeyRound,
     Lock,
-    RefreshCw,
     Search,
     ShieldAlert,
     ShieldCheck,
@@ -92,7 +91,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [newRole, setNewRole] = useState<UserRole>('editor')
     const [newPermissions, setNewPermissions] = useState<string[]>([])
     const [newActivationCode, setNewActivationCode] = useState(() => generateActivationPin())
-    const [newRequireActivation, setNewRequireActivation] = useState(false)
+    const [newRequirePasswordChange, setNewRequirePasswordChange] = useState(true)
     const [newNotes, setNewNotes] = useState('')
     const [addSuccess, setAddSuccess] = useState('')
     const [addError, setAddError] = useState('')
@@ -146,7 +145,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setNewPassword(pwd)
     }
 
-    function handleAddUser(e: React.FormEvent) {
+    async function handleAddUser(e: React.FormEvent) {
         e.preventDefault()
         setAddError('')
         setAddSuccess('')
@@ -163,19 +162,42 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
 
         try {
+            // 1. Provision user directly in Supabase Auth via admin-users Edge Function if session available
+            if (supabase && (isSystemAdmin || session)) {
+                try {
+                    const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-users', {
+                        body: {
+                            action: 'create_user',
+                            username: newUsername,
+                            displayName: newDisplayName,
+                            password: newPassword,
+                            role: newRole,
+                            permissions: newPermissions,
+                            requirePasswordChange: newRequirePasswordChange,
+                        },
+                    })
+                    if (edgeErr || !edgeData?.success) {
+                        console.warn('admin-users invoke fallback:', edgeErr || edgeData)
+                    }
+                } catch (edgeCatch) {
+                    console.warn('admin-users invoke error:', edgeCatch)
+                }
+            }
+
+            // 2. Add to local registry and sync to app_users table
             const added = addLocalUser({
                 username: newUsername,
                 displayName: newDisplayName,
                 password: newPassword,
                 role: newRole,
                 activationCode: newActivationCode,
-                requireActivation: newRequireActivation,
+                requireActivation: false,
                 notes: newNotes,
                 permissions: newPermissions,
             })
 
             reloadUsers()
-            setAddSuccess(`تمت إضافة المستخدم "${added.username}" بنجاح! كود تأكيد التفعيل: ${added.activationCode}`)
+            setAddSuccess(`تمت إضافة وتفعيل المستخدم "${added.username}" بنجاح! يمكنه تسجيل الدخول فوراً باستخدام اسم المستخدم وكلمة المرور.`)
             void logAuditEvent({
                 action: `إضافة مستخدم جديد: ${added.username} (الدور: ${ROLE_LABELS[added.role as EffectiveRole] || added.role})`,
                 entity_type: 'user',
@@ -188,7 +210,7 @@ export default function UsersPage({ session }: UsersPageProps) {
             setNewNotes('')
             setNewPermissions([])
             setNewActivationCode(generateActivationPin())
-            setNewRequireActivation(false)
+            setNewRequirePasswordChange(true)
         } catch (err) {
             setAddError(err instanceof Error ? err.message : 'تعذر إضافة المستخدم.')
         }
@@ -619,51 +641,20 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </div>
                         </label>
 
-                        <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>كود تأكيد التفعيل (PIN) <span style={{ color: 'var(--accent)' }}>*</span></span>
-                                <button
-                                    type="button"
-                                    onClick={() => setNewActivationCode(generateActivationPin())}
-                                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}
-                                >
-                                    <RefreshCw size={13} /> رمز جديد
-                                </button>
-                            </div>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                <input
-                                    type="text"
-                                    value={newActivationCode}
-                                    onChange={(e) => setNewActivationCode(e.target.value)}
-                                    placeholder="كود التفعيل"
-                                    required
-                                    style={{ width: '100%', padding: '10px 38px 10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)', fontFamily: 'monospace', fontWeight: 700 }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => copyToClipboard(newActivationCode)}
-                                    style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
-                                    title="نسخ الكود"
-                                >
-                                    <Copy size={16} />
-                                </button>
-                            </div>
-                        </label>
-
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', height: '100%', paddingTop: '18px' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
                                 <input
                                     type="checkbox"
-                                    checked={newRequireActivation}
-                                    onChange={(e) => setNewRequireActivation(e.target.checked)}
+                                    checked={newRequirePasswordChange}
+                                    onChange={(e) => setNewRequirePasswordChange(e.target.checked)}
                                     style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
                                 />
-                                <span>طلب إدخال كود التفعيل عند تسجيل الدخول لأول مرة</span>
+                                <span>إلزام المستخدم بتعيين كلمة مرور سرية جديدة عند أول تسجيل دخول (موصى به)</span>
                             </label>
                             <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-                                {newRequireActivation
-                                    ? 'سيبقى الحساب معلقاً حتى يدخل المستخدم كود التفعيل أعلاه.'
-                                    : 'سيتم تفعيل الحساب فوراً ويمكن للمستخدم الدخول بكلمة المرور مباشرة.'}
+                                {newRequirePasswordChange
+                                    ? 'سيطلب النظام تلقائياً من المستخدم إنشاء كلمة مرور سرية خاصة به فور تسجيل الدخول بكلمة المرور أعلاه.'
+                                    : 'سيتمكن المستخدم من الدخول بكلمة المرور المحددة أعلاه مباشرة دون إلزامه بتغييرها.'}
                             </span>
                         </div>
 
@@ -846,7 +837,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                     color: user.status === 'active' ? '#059669' : '#d97706',
                                                     border: `1px solid ${user.status === 'active' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`,
                                                 }}>
-                                                    {user.status === 'active' ? 'مفعل نشط' : 'بانتظار التفعيل'}
+                                                    {user.status === 'active' ? 'مفعل نشط' : 'معلق (اضغط للتفعيل فوراً)'}
                                                 </span>
                                             </button>
                                         </td>
