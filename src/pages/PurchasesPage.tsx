@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Eye,
-  Filter,
   Package,
   PackagePlus,
   Pencil,
@@ -66,9 +65,14 @@ export default function PurchasesPage({
   globalSearchTerm = '',
   initialTab = 'list',
 }: PurchasesPageProps) {
-  const [activeTab, setActiveTab] = useState<'list' | 'add'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'list' | 'add'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('tab')
+      if (p === 'add') return 'add'
+    }
+    return initialTab
+  })
   const [searchTerm, setSearchTerm] = useState(globalSearchTerm)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'full' | 'part' | 'pending'>('all')
   const [sortOption, setSortOption] = useState<'date-desc' | 'date-asc' | 'item-asc' | 'val-desc' | 'qty-desc' | 'supplier-asc'>('date-desc')
   const [pageSize, setPageSize] = useState<number>(15)
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -124,15 +128,9 @@ export default function PurchasesPage({
   const userCanAdd = canCreatePurchase(session) || canEdit
   const canManageRecords = isSystemAdmin || can(session, 'manage_records')
 
-  // Search and status filtering
+  // Search and staff filtering
   const filteredPurchases = useMemo(() => {
-    return purchases.filter((m, idx) => {
-      // Status filter
-      if (statusFilter !== 'all') {
-        const derived = deriveMovement(m, idx)
-        if (derived.status !== statusFilter) return false
-      }
-
+    return purchases.filter((m) => {
       // Search term
       if (searchTerm.trim()) {
         const match = matchesSearch(
@@ -155,7 +153,7 @@ export default function PurchasesPage({
 
       return true
     })
-  }, [purchases, statusFilter, searchTerm, staffFilter])
+  }, [purchases, searchTerm, staffFilter])
 
   // Unique staff members for attribution filter
   const uniqueStaffMembers = useMemo(() => {
@@ -206,28 +204,13 @@ export default function PurchasesPage({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, sortOption, searchTerm, staffFilter])
-
-  // Status counts for filters
-  const statusCounts = useMemo(() => {
-    let full = 0
-    let part = 0
-    let pending = 0
-    for (let i = 0; i < purchases.length; i++) {
-      const st = deriveMovement(purchases[i], i).status
-      if (st === 'full') full++
-      else if (st === 'part') part++
-      else if (st === 'pending') pending++
-    }
-    return { full, part, pending }
-  }, [purchases])
+  }, [sortOption, searchTerm, staffFilter])
 
   async function handleExportExcel() {
     const XLSX = await import('xlsx')
     const rows = sortedPurchases.map((m, index) => {
       const derived = deriveMovement(m, index)
       const qtyIn = Number(m.qin) || 0
-      const qtyOut = Number(m.qout) || 0
       const unitPrice = Number(m.price) || 0
       const total = derived.total ?? (qtyIn * unitPrice)
 
@@ -239,9 +222,6 @@ export default function PurchasesPage({
         'الكمية الموردة': qtyIn,
         'سعر الوحدة': unitPrice,
         'إجمالي الفاتورة': total,
-        'الكمية المصروفة': qtyOut,
-        'الرصيد المتبقي': Math.max(0, qtyIn - qtyOut),
-        'حالة الصرف': derived.status === 'full' ? 'مكتمل الصرف' : derived.status === 'part' ? 'منصرف جزئياً' : 'متبقٍ بالرصيد',
         'سُجِّلت بواسطة': sanitizeExcelCell(m.createdBy || '—'),
         'ملاحظات': sanitizeExcelCell(m.notes || ''),
       }
@@ -361,36 +341,7 @@ export default function PurchasesPage({
         </div>
       </div>
 
-      {/* Main Tabs */}
-      <div className="movements-main-tabs-wrap" role="tablist" aria-label="أقسام المشتريات">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'list'}
-          className={`movements-main-tab-btn ${activeTab === 'list' ? 'active' : ''}`}
-          onClick={() => setActiveTab('list')}
-          id="tab-purchases-list"
-        >
-          <ShoppingCart size={18} />
-          <span>سجل فواتير الشراء والتوريد</span>
-          <span className="tab-pill">{purchases.length}</span>
-        </button>
 
-        {userCanAdd && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'add'}
-            className={`movements-main-tab-btn ${activeTab === 'add' ? 'active' : ''}`}
-            onClick={() => setActiveTab('add')}
-            id="tab-purchases-add"
-          >
-            <Plus size={18} />
-            <span>تسجيل فاتورة شراء جديدة</span>
-            <span className="tab-pill highlight">توريد مباشر</span>
-          </button>
-        )}
-      </div>
 
       {activeTab === 'add' ? (
         <div className="movements-add-section" style={{ marginTop: '16px' }}>
@@ -553,8 +504,8 @@ export default function PurchasesPage({
                 <ArrowDownToLine size={17} /> تصدير Excel
               </button>
               {userCanAdd && (
-                <button type="button" className="primary-btn" onClick={() => setActiveTab('add')}>
-                  <Plus size={18} /> إضافة فاتورة شراء
+                <button type="button" className="primary-btn" onClick={() => setActiveTab('add')} id="btn-add-purchase-main">
+                  <Plus size={18} /> إضافة فاتورة شراء جديدة
                 </button>
               )}
             </div>
@@ -623,37 +574,7 @@ export default function PurchasesPage({
               )}
             </div>
 
-            <div className="filter-group">
-              <Filter size={15} style={{ opacity: 0.6 }} />
-              <button
-                type="button"
-                className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('all')}
-              >
-                الكل ({purchases.length})
-              </button>
-              <button
-                type="button"
-                className={`filter-tab ${statusFilter === 'full' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('full')}
-              >
-                مكتمل الصرف ({statusCounts.full})
-              </button>
-              <button
-                type="button"
-                className={`filter-tab ${statusFilter === 'part' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('part')}
-              >
-                منصرف جزئياً ({statusCounts.part})
-              </button>
-              <button
-                type="button"
-                className={`filter-tab ${statusFilter === 'pending' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('pending')}
-              >
-                متبقٍ بالرصيد ({statusCounts.pending})
-              </button>
-            </div>
+
 
             {/* Staff filter dropdown */}
             <div className="staff-filter-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -713,7 +634,6 @@ export default function PurchasesPage({
                   <th>الكمية الموردة</th>
                   <th>سعر الوحدة</th>
                   <th>إجمالي الفاتورة</th>
-                  <th>حالة الصرف</th>
                   <th>سُجِّلت بواسطة</th>
                   <th className="actions-header">الإجراءات</th>
                 </tr>
@@ -721,7 +641,7 @@ export default function PurchasesPage({
               <tbody>
                 {paginatedPurchases.length === 0 ? (
                   <tr>
-                    <td className="table-empty" colSpan={11}>
+                    <td className="table-empty" colSpan={10}>
                       <div className="ledger-empty-box">
                         <div className="ledger-empty-icon">
                           <Package size={28} />
@@ -772,30 +692,7 @@ export default function PurchasesPage({
                         <td>
                           <strong style={{ color: 'var(--ink)' }}>{formatCurrency(totalInvoice, currency)}</strong>
                         </td>
-                        <td>
-                          <span
-                            style={{
-                              fontSize: '0.78rem',
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              fontWeight: 600,
-                              background:
-                                derived.status === 'full'
-                                  ? 'rgba(16, 185, 129, 0.12)'
-                                  : derived.status === 'part'
-                                    ? 'rgba(245, 158, 11, 0.12)'
-                                    : 'rgba(107, 114, 128, 0.12)',
-                              color:
-                                derived.status === 'full'
-                                  ? '#059669'
-                                  : derived.status === 'part'
-                                    ? '#d97706'
-                                    : 'var(--muted)',
-                            }}
-                          >
-                            {derived.status === 'full' ? 'مكتمل الصرف' : derived.status === 'part' ? 'منصرف جزئياً' : 'متبقٍ بالرصيد'}
-                          </span>
-                        </td>
+
                         <td>
                           <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                             {movement.createdBy || '—'}

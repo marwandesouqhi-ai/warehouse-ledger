@@ -93,10 +93,11 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(stats.healthyRatio).toBe(50) // 1 out of 2 is excellent/good
   })
 
-  it('starts with clean empty custody when no user records are present', () => {
-    expect(fixtureCustodyItems).toEqual([])
+  it('seeds main warehouse custody with purchases items when no user records are present', () => {
+    expect(fixtureCustodyItems.length).toBe(32)
     const items = loadCustodyItems()
-    expect(items).toHaveLength(0)
+    expect(items).toHaveLength(32)
+    expect(items.every((i) => i.warehouseId === 'main')).toBe(true)
   })
 
   it('persists and retrieves custody items to and from localStorage', () => {
@@ -165,8 +166,10 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(res2.item.quantity).toBe(15)
 
     const allMain = loadCustodyItems().filter((i) => i.warehouseId === 'main')
-    expect(allMain).toHaveLength(1)
-    expect(allMain[0].quantity).toBe(15)
+    expect(allMain).toHaveLength(fixtureCustodyItems.length + 1)
+    const microscope = allMain.find((i) => i.name === 'ميكروسكوب ضوئي رقمي')
+    expect(microscope).toBeDefined()
+    expect(microscope?.quantity).toBe(15)
   })
 
   it('syncs outward movements: deducts from main warehouse and feeds destination branch warehouse', () => {

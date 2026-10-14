@@ -113,7 +113,28 @@ function loadMovements(): FixtureMovement[] {
     const savedMovements = localStorage.getItem(storageKey)
     if (savedMovements) {
       const parsed = JSON.parse(savedMovements) as unknown
-      if (Array.isArray(parsed)) return parsed as FixtureMovement[]
+      if (Array.isArray(parsed)) {
+        // Migration: Strip disbursement data from purchases if present in existing localStorage
+        const hasLegacyDisbursements = parsed.some(
+          (m: FixtureMovement) => Number(m.qin) > 0 && (Number(m.qout) > 0 || m.to || m.permit || m.issue)
+        )
+        if (hasLegacyDisbursements) {
+          const cleaned = parsed.map((m: FixtureMovement) => ({
+            ...m,
+            to: '',
+            permit: '',
+            issue: '',
+            qout: '',
+          }))
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(cleaned))
+          } catch {
+            // ignore
+          }
+          return cleaned
+        }
+        return parsed as FixtureMovement[]
+      }
     }
   } catch {
     // Fall back to the original data if the saved browser data is unreadable.
