@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   createSupplier,
-  updateSupplier,
   deleteSupplierSafe,
   syncSuppliersFromMovements,
-  type Supplier,
 } from '../../src/lib/suppliersRepository'
 import { supabase } from '../../src/lib/supabase'
 

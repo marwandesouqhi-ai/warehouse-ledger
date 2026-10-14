@@ -2,21 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
   AlertTriangle,
-  Award,
-  Calendar,
   Check,
   CheckCircle2,
-  Clock,
-  DollarSign,
   Download,
-  Eye,
   FileSpreadsheet,
   PackageCheck,
   Plus,
   RefreshCw,
-  Search,
-  Shield,
-  ShieldCheck,
   Star,
   Truck,
   X,
@@ -197,8 +189,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
 
       await logAuditEvent({
         action: 'CREATE_SUPPLIER_QUOTE',
-        entityType: 'supplier_quote',
-        entityId: created.id,
+        entity_type: 'supplier_quote',
+        entity_id: created.id,
         details: {
           request_id: selectedRequestId,
           supplier_id: quoteSupplierId,
@@ -229,8 +221,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       await selectQuoteRpc(selectedRequestId, quote.id)
       await logAuditEvent({
         action: 'SELECT_SUPPLIER_QUOTE',
-        entityType: 'supplier_quote',
-        entityId: quote.id,
+        entity_type: 'supplier_quote',
+        entity_id: quote.id,
         details: { request_id: selectedRequestId, supplier_id: quote.supplier_id },
       })
       setSuccessMessage(`تم اعتماد واختيار عرض المورد «${quote.supplier_name}» كعرض فائز.`)
@@ -250,8 +242,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       const res = await createPurchaseOrderRpc(selectedQuote.id)
       await logAuditEvent({
         action: 'CREATE_PURCHASE_ORDER',
-        entityType: 'purchase_order',
-        entityId: res.po_id,
+        entity_type: 'purchase_order',
+        entity_id: res.po_id,
         details: {
           po_no: res.po_no,
           request_id: selectedRequestId,
@@ -275,8 +267,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       await markPoReceivedRpc(po.id)
       await logAuditEvent({
         action: 'MARK_PO_RECEIVED',
-        entityType: 'purchase_order',
-        entityId: po.id,
+        entity_type: 'purchase_order',
+        entity_id: po.id,
         details: { po_no: po.po_no },
       })
       setSuccessMessage(`تم تحديث حالة أمر الشراء «${po.po_no}» إلى «تم الاستلام».`)
@@ -292,8 +284,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       await markPoInvoicedRpc(po.id)
       await logAuditEvent({
         action: 'MARK_PO_INVOICED',
-        entityType: 'purchase_order',
-        entityId: po.id,
+        entity_type: 'purchase_order',
+        entity_id: po.id,
         details: { po_no: po.po_no },
       })
       setSuccessMessage(`تم تحديث حالة أمر الشراء «${po.po_no}» إلى «مفوتر».`)
@@ -330,8 +322,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       {/* Sub navigation connecting the 5 procurement sub-pages */}
       <ProcurementSubNav activeTab="quotes" />
 
-      {/* Page Header */}
-      <div className="section-head movement-heading" style={{ marginTop: '14px', marginBottom: '16px' }}>
+      <div className="section-head movement-heading" style={{ marginTop: '14px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2>
             <FileSpreadsheet size={20} />
@@ -340,6 +331,15 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           </h2>
           <span>مقارنة عروض الموردين للمفاضلة الفنية والمالية، اختيار العرض الأفضل، وإصدار أوامر الشراء</span>
         </div>
+        <button
+          type="button"
+          onClick={() => void loadInitialData()}
+          disabled={loading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+        >
+          <RefreshCw size={14} className={loading ? 'spin' : ''} />
+          <span>{loading ? 'جاري التحميل...' : 'تحديث البيانات'}</span>
+        </button>
       </div>
 
       {successMessage && (

@@ -5,11 +5,11 @@ import type { PurchaseRequest, PurchaseOrder } from '../../src/lib/procurementRe
 
 describe('Procurement KPIs and Analytics Calculations Suite', () => {
   const mockRequests: PurchaseRequest[] = [
-    { id: '1', request_no: 'PR-0001', department: 'مخزن 1', purchase_type: 'direct', priority: 'normal', requested_by: 'أ', justification: 'ج', status: 'draft', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'أ' },
-    { id: '2', request_no: 'PR-0002', department: 'مخزن 2', purchase_type: 'practice', priority: 'urgent', requested_by: 'ب', justification: 'ج', status: 'pending', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ب' },
-    { id: '3', request_no: 'PR-0003', department: 'مخزن 3', purchase_type: 'direct', priority: 'normal', requested_by: 'ج', justification: 'ج', status: 'pending', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ج' },
-    { id: '4', request_no: 'PR-0004', department: 'مخزن 1', purchase_type: 'tender', priority: 'normal', requested_by: 'د', justification: 'ج', status: 'approved', quote_deadline: null, selected_quote_id: 'q-1', submitted_at: null, created_at: '', updated_at: '', created_by: 'د' },
-    { id: '5', request_no: 'PR-0005', department: 'مخزن 2', purchase_type: 'direct', priority: 'normal', requested_by: 'ه', justification: 'ج', status: 'rejected', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ه' },
+    { id: '1', request_no: 'PR-0001', department: 'مخزن 1', purchase_type: 'direct', priority: 'normal', budget_line: '', needed_by: null, requested_by: 'أ', justification: 'ج', status: 'draft', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'أ' },
+    { id: '2', request_no: 'PR-0002', department: 'مخزن 2', purchase_type: 'practice', priority: 'urgent', budget_line: '', needed_by: null, requested_by: 'ب', justification: 'ج', status: 'pending', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ب' },
+    { id: '3', request_no: 'PR-0003', department: 'مخزن 3', purchase_type: 'direct', priority: 'normal', budget_line: '', needed_by: null, requested_by: 'ج', justification: 'ج', status: 'pending', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ج' },
+    { id: '4', request_no: 'PR-0004', department: 'مخزن 1', purchase_type: 'tender', priority: 'normal', budget_line: '', needed_by: null, requested_by: 'د', justification: 'ج', status: 'approved', quote_deadline: null, selected_quote_id: 'q-1', submitted_at: null, created_at: '', updated_at: '', created_by: 'د' },
+    { id: '5', request_no: 'PR-0005', department: 'مخزن 2', purchase_type: 'direct', priority: 'normal', budget_line: '', needed_by: null, requested_by: 'ه', justification: 'ج', status: 'rejected', quote_deadline: null, selected_quote_id: null, submitted_at: null, created_at: '', updated_at: '', created_by: 'ه' },
   ]
 
   const todayStr = '2026-10-14'
@@ -40,12 +40,12 @@ describe('Procurement KPIs and Analytics Calculations Suite', () => {
 
   it('calculates current month spend consistently with movements formula', () => {
     const currentMonth = '2026-10'
-    const testMovements: FixtureMovement[] = [
+    const testMovements = [
       { id: 'm1', date: '2026-10-02', qin: '10', price: '150', item: 'ورق تصوير' },
       { id: 'm2', date: '2026-10-05', qin: '5', price: '200', item: 'حبر ليزر' },
       { id: 'm3', date: '2026-09-28', qin: '8', price: '100', item: 'ملفات' }, // prior month
       { id: 'm4', date: '2026-10-08', qout: '3', price: '150', item: 'ورق تصوير' }, // disbursement, not purchase
-    ]
+    ] as unknown as FixtureMovement[]
 
     let spend = 0
     for (let i = 0; i < testMovements.length; i++) {

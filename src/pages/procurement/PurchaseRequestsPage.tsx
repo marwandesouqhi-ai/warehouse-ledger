@@ -4,13 +4,9 @@ import type { Session } from '@supabase/supabase-js'
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Clock,
   Eye,
-  FileSpreadsheet,
-  Filter,
-  Package,
   Plus,
   RefreshCw,
   Search,
@@ -59,7 +55,6 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
 
   // Details Modal
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null)
-  const [detailsLoading, setDetailsLoading] = useState(false)
   const [actionError, setActionError] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
   const [isSubmittingAction, setIsSubmittingAction] = useState(false)
@@ -139,14 +134,11 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
     setApprovalDecision('approved')
 
     // Fetch full details with items & approvals
-    setDetailsLoading(true)
     try {
       const full = await fetchPurchaseRequestById(req.id)
       if (full) setSelectedRequest(full)
     } catch {
       // fallback to current
-    } finally {
-      setDetailsLoading(false)
     }
   }
 
@@ -159,8 +151,8 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
       await submitPurchaseRequestRpc(selectedRequest.id)
       await logAuditEvent({
         action: 'SUBMIT_PURCHASE_REQUEST',
-        entityType: 'purchase_request',
-        entityId: selectedRequest.id,
+        entity_type: 'purchase_request',
+        entity_id: selectedRequest.id,
         details: { request_no: selectedRequest.request_no },
       })
       setActionSuccess('تم إرسال طلب الشراء إلى مسار الاعتماد بنجاح.')
@@ -199,8 +191,8 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
 
       await logAuditEvent({
         action: 'RECORD_APPROVAL',
-        entityType: 'purchase_request',
-        entityId: selectedRequest.id,
+        entity_type: 'purchase_request',
+        entity_id: selectedRequest.id,
         details: {
           request_no: selectedRequest.request_no,
           step_no: nextStep.step_no,
@@ -228,8 +220,8 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
       await deletePurchaseRequest(req.id)
       await logAuditEvent({
         action: 'DELETE_PURCHASE_REQUEST_DRAFT',
-        entityType: 'purchase_request',
-        entityId: req.id,
+        entity_type: 'purchase_request',
+        entity_id: req.id,
         details: { request_no: req.request_no },
       })
       await loadRequests()
@@ -601,7 +593,6 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
                 {(selectedRequest.approvals || []).map((step) => {
                   const isApproved = step.decision === 'approved'
                   const isRejected = step.decision === 'rejected'
-                  const isPending = step.decision === 'pending'
 
                   return (
                     <div

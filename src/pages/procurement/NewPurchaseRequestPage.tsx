@@ -4,10 +4,7 @@ import type { Session } from '@supabase/supabase-js'
 import {
   AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   ClipboardList,
-  Clock,
-  Info,
   PackagePlus,
   Plus,
   Send,
@@ -199,8 +196,8 @@ export default function NewPurchaseRequestPage({
 
       await logAuditEvent({
         action: submitImmediately ? 'SUBMIT_PURCHASE_REQUEST' : 'CREATE_PURCHASE_REQUEST_DRAFT',
-        entityType: 'purchase_request',
-        entityId: created.id,
+        entity_type: 'purchase_request',
+        entity_id: created.id,
         details: {
           request_no: created.request_no,
           department: effectiveDept,

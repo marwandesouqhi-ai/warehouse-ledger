@@ -42,6 +42,8 @@ supabase functions deploy migrate-users
    - `20261014120000_protected_system_admin.sql` (حماية حساب marwan-desouky وتثبيت دوال الأمان).
    - `20261014120001_login_attempts.sql` (جدول مكافحة التخمين).
    - `20261014130000_fix_record_purchase_rpc.sql` (دالة تسجيل الشراء الذرية المتوافقة مع المخطط).
+   - `20261014140000_procurement_module.sql` (جداول موديول المشتريات، الموردين، طلبات الشراء، عروض الأسعار، أوامر الشراء، دوال RPC وسياسات RLS).
+   - `20261014143000_procurement_storage.sql` (مستودع المرفقات السحابية procurement-attachments - يطبق كملف تجهيزي).
 2. **بعد تأكد دخول كافة المستخدمين النشطين بنجاح بـ Supabase Auth:**
    - نقل ملف RLS المعلّق بموافقة صاحب المشروع:
      ```bash
@@ -87,3 +89,11 @@ supabase functions deploy migrate-users
    - نفذ محتوى ملف التراجع المخصص:
      [`supabase/rollbacks/20261013213000_harden_rls_rollback.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261013213000_harden_rls_rollback.sql)
    - سيعيد فوراً سياسات المزامنة السلسة السابقة دون توقف.
+
+3. **التراجع عن موديول المشتريات (إذا دعت الحاجة):**
+   - للتراجع عن جداول ودوال المشتريات دون مس أي حركة أو صنف في المخزن:
+   - نفذ محتوى ملف التراجع المخصص:
+     [`supabase/rollbacks/20261014140000_procurement_module_rollback.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261014140000_procurement_module_rollback.sql)
+   - وللتراجع عن مستودع المرفقات:
+     [`supabase/rollbacks/20261014143000_procurement_storage_rollback.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261014143000_procurement_storage_rollback.sql)
+

@@ -5,16 +5,12 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  Eye,
-  Filter,
   Pencil,
   Plus,
   RefreshCw,
   Search,
-  ShieldAlert,
   Star,
   Trash2,
-  UserCheck,
   X,
 } from 'lucide-react'
 import ProcurementSubNav from '../../components/ProcurementSubNav'
@@ -189,8 +185,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
       await logAuditEvent({
         action: 'CREATE_SUPPLIER',
-        entityType: 'supplier',
-        entityId: created.id,
+        entity_type: 'supplier',
+        entity_id: created.id,
         details: { name: created.name, status: created.status },
       })
 
@@ -227,8 +223,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
       await logAuditEvent({
         action: 'UPDATE_SUPPLIER',
-        entityType: 'supplier',
-        entityId: updated.id,
+        entity_type: 'supplier',
+        entity_id: updated.id,
         details: { name: updated.name, status: updated.status },
       })
 
@@ -252,8 +248,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
       await logAuditEvent({
         action: 'DELETE_SUPPLIER',
-        entityType: 'supplier',
-        entityId: supplier.id,
+        entity_type: 'supplier',
+        entity_id: supplier.id,
         details: { name: supplier.name },
       })
 
@@ -269,8 +265,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       await updateSupplier(supplier.id, { status: newStatus })
       await logAuditEvent({
         action: 'CHANGE_SUPPLIER_STATUS',
-        entityType: 'supplier',
-        entityId: supplier.id,
+        entity_type: 'supplier',
+        entity_id: supplier.id,
         details: { name: supplier.name, old_status: supplier.status, new_status: newStatus },
       })
       await loadData()

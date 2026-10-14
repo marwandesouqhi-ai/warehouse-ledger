@@ -6,19 +6,13 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
-  Calendar,
   CheckCircle2,
   CircleDollarSign,
   Clock,
   Download,
-  Eye,
-  FileSpreadsheet,
   PackageCheck,
   RefreshCw,
   Search,
-  ShoppingCart,
-  TrendingUp,
-  X,
 } from 'lucide-react'
 import ProcurementSubNav from '../../components/ProcurementSubNav'
 import {
@@ -27,7 +21,6 @@ import {
   fetchSupplierQuotes,
   type PurchaseRequest,
   type PurchaseOrder,
-  type SupplierQuote,
 } from '../../lib/procurementRepository'
 import type { FixtureMovement } from '../../lib/fixture'
 import type { AppSettings } from '../../lib/settings'
@@ -45,15 +38,8 @@ function formatCurrency(value: number, currency: AppSettings['currency']): strin
   return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 }
 
-function sanitizeExcelCell<T>(value: T): T {
-  if (typeof value === 'string' && /^[=+\-@]/.test(value)) {
-    return `'${value}` as unknown as T
-  }
-  return value
-}
-
 export default function ProcurementAnalyticsPage({
-  session,
+  session: _session,
   movements,
   currency,
 }: ProcurementAnalyticsPageProps) {
