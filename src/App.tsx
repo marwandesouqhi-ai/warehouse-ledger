@@ -85,6 +85,11 @@ import AuthPage from './pages/AuthPage'
 import CustodyPage from './pages/CustodyPage'
 import ImportPage from './pages/ImportPage'
 import PurchasesPage from './pages/PurchasesPage'
+import SuppliersPage from './pages/procurement/SuppliersPage'
+import PurchaseRequestsPage from './pages/procurement/PurchaseRequestsPage'
+import NewPurchaseRequestPage from './pages/procurement/NewPurchaseRequestPage'
+import QuotesPage from './pages/procurement/QuotesPage'
+import ProcurementAnalyticsPage from './pages/procurement/ProcurementAnalyticsPage'
 import QualityPage from './pages/QualityPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
@@ -1985,6 +1990,85 @@ function App() {
           />
           <Route path="/movements" element={<Navigate to="/purchases" replace />} />
           <Route path="/movements/new" element={<Navigate to="/purchases?tab=add" replace />} />
+          <Route
+            path="/purchases/requests"
+            element={
+              canAccessRoute(session, '/purchases/requests') ? (
+                <PurchaseRequestsPage session={session} currency={settings.currency} />
+              ) : (
+                <RestrictedScreen
+                  title="طلبات الشراء والاعتمادات"
+                  subtitle="صلاحية مقيدة"
+                  message="صفحة طلبات الشراء والاعتمادات مقتصرة حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/purchases/requests/new"
+            element={
+              canAccessRoute(session, '/purchases/requests/new') ? (
+                <NewPurchaseRequestPage
+                  session={session}
+                  custodyItems={custodyItems}
+                  movements={movements}
+                  currency={settings.currency}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="طلب شراء جديد"
+                  subtitle="صلاحية مقيدة"
+                  message="إنشاء طلبات الشراء مقتصر حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/purchases/suppliers"
+            element={
+              canAccessRoute(session, '/purchases/suppliers') ? (
+                <SuppliersPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="إدارة الموردين"
+                  subtitle="صلاحية مقيدة"
+                  message="سجل إدارة الموردين والشركات مقتصر حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/purchases/quotes"
+            element={
+              canAccessRoute(session, '/purchases/quotes') ? (
+                <QuotesPage session={session} currency={settings.currency} />
+              ) : (
+                <RestrictedScreen
+                  title="عروض الأسعار وأوامر الشراء"
+                  subtitle="صلاحية مقيدة"
+                  message="عروض الأسعار وإصدار أوامر الشراء مقتصرة حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/purchases/analytics"
+            element={
+              canAccessRoute(session, '/purchases/analytics') ? (
+                <ProcurementAnalyticsPage
+                  session={session}
+                  movements={movements}
+                  currency={settings.currency}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="تحليلات ومسار المشتريات"
+                  subtitle="صلاحية مقيدة"
+                  message="لوحة تحليلات وتقارير المشتريات مقتصرة حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
           <Route
             path="/custody"
             element={

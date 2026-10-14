@@ -71,17 +71,22 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 // ─── مصفوفة الوصول للراوتس ────────────────────────────────────────────────────
 
 const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
-  '/':          ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
-  '/purchases': ['system_admin', 'admin', 'purchasing_staff', 'editor'],
-  '/custody':   ['system_admin', 'admin', 'warehouse_staff', 'editor'],
-  '/reports':   ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
-  '/imports':   ['system_admin', 'admin', 'purchasing_staff'],
-  '/quality':   ['system_admin', 'admin', 'warehouse_staff', 'editor'],
-  '/audit':     ['system_admin'],   // يُفتح أيضاً بصلاحية view_audit
-  '/users':     ['system_admin'],
-  '/settings':  ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
+  '/':                     ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/purchases':            ['system_admin', 'admin', 'purchasing_staff', 'editor'],
+  '/purchases/requests':     ['system_admin', 'admin', 'purchasing_staff'],
+  '/purchases/requests/new': ['system_admin', 'admin', 'purchasing_staff'],
+  '/purchases/suppliers':    ['system_admin', 'admin', 'purchasing_staff'],
+  '/purchases/quotes':       ['system_admin', 'admin', 'purchasing_staff'],
+  '/purchases/analytics':    ['system_admin', 'admin', 'purchasing_staff'],
+  '/custody':              ['system_admin', 'admin', 'warehouse_staff', 'editor'],
+  '/reports':              ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
+  '/imports':              ['system_admin', 'admin', 'purchasing_staff'],
+  '/quality':              ['system_admin', 'admin', 'warehouse_staff', 'editor'],
+  '/audit':                ['system_admin'],   // يُفتح أيضاً بصلاحية view_audit
+  '/users':                ['system_admin'],
+  '/settings':             ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
   // إعادة توجيه من الراوتس القديمة — يُعامل نفس /purchases
-  '/movements': ['system_admin', 'admin', 'purchasing_staff', 'editor'],
+  '/movements':            ['system_admin', 'admin', 'purchasing_staff', 'editor'],
 }
 
 // ─── الدوال الأساسية ──────────────────────────────────────────────────────────
@@ -220,6 +225,17 @@ export function canCreateDisbursement(
 ): boolean {
   const role = getEffectiveRole(session)
   return ['system_admin', 'admin', 'warehouse_staff'].includes(role)
+}
+
+/**
+ * canAccessProcurementModule — هل المستخدم مصرح له بالدخول لصفحات موديول المشتريات الجديد؟
+ * مقتصر حصرياً على موظفي المشتريات والأدمن ومدير النظام.
+ */
+export function canAccessProcurementModule(
+  session: Session | LocalUserSession | null | undefined
+): boolean {
+  const role = getEffectiveRole(session)
+  return ['system_admin', 'admin', 'purchasing_staff'].includes(role)
 }
 
 /**
