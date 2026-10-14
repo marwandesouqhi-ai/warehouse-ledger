@@ -1,5 +1,7 @@
 # Execution Log
 
+> 📜 **أرشيف تاريخي (14 أكتوبر 2026):** يوثق هذا الملف سجل التنفيذ المبدئي لمرحلة التأسيس. سجل القرارات المعمارية المحدث متاح في [docs/DECISIONS.md](./DECISIONS.md).
+
 ## Status
 - [x] Scaffolded the Vite + React + TypeScript workspace and verified the base app compile path.
 - [x] Added the Appendix A fixture and the shared parsing/derivation/quality library used by the warehouse logic.
