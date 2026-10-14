@@ -22,8 +22,13 @@ import {
 } from 'lucide-react'
 
 import { matchesSearch } from '../lib/searchUtils'
-import { checkIsSystemAdmin } from '../lib/supabase'
+import { supabase, checkIsSystemAdmin } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
+import {
+    isProtectedUsername,
+    canDeleteUser,
+    canModifyUser,
+} from '../lib/protectedAccounts'
 import {
     ASSIGNABLE_ROLES,
     ROLE_LABELS,
@@ -62,9 +67,22 @@ export default function UsersPage({ session }: UsersPageProps) {
     )
     const currentSession = localSess || session
 
+    // Check if current caller is marwan-desouky (protected System Admin)
+    const isCallerProtected = isProtectedUsername(activeUserEmail) || isProtectedUsername(session?.user?.email)
+
     // Local Users State
     const [localUsers, setLocalUsers] = useState<LocalUser[]>(loadLocalUsers)
     const [userSearchTerm, setUserSearchTerm] = useState('')
+
+    // Layer 1: Hide protected System Admin marwan-desouky from all other callers
+    const visibleLocalUsers = useMemo(() => {
+        return localUsers.filter((u) => {
+            if (isProtectedUsername(u.username)) {
+                return isCallerProtected
+            }
+            return true
+        })
+    }, [localUsers, isCallerProtected])
 
     // Add User Form State
     const [newUsername, setNewUsername] = useState('')
@@ -134,6 +152,16 @@ export default function UsersPage({ session }: UsersPageProps) {
         setAddSuccess('')
         setCopiedPin(false)
 
+        if (isProtectedUsername(newUsername)) {
+            setAddError('اسم المستخدم محجوز لحساب مدير النظام الرئيسي المحمي ولا يمكن استخدامه.')
+            return
+        }
+
+        if (newRole === 'system_admin') {
+            setAddError('غير مصرح: مدير النظام الرئيسي (System Admin) حساب ثابت وموحد، ولا يمكن تعيين مدير نظام آخر.')
+            return
+        }
+
         try {
             const added = addLocalUser({
                 username: newUsername,
@@ -167,6 +195,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     function handleOpenEdit(user: LocalUser) {
+        if (isProtectedUsername(user.username) && !isCallerProtected) {
+            alert('غير مصرح: بيانات وهوية حساب مدير النظام الرئيسي محمية بالكامل ولا يمكن تعديلها إلا من قِبل صاحبه.')
+            return
+        }
         setEditingUser(user)
         setEditDisplayName(user.displayName)
         setEditRole(user.role)
@@ -182,6 +214,15 @@ export default function UsersPage({ session }: UsersPageProps) {
         e.preventDefault()
         if (!editingUser) return
         setEditError('')
+
+        const check = canModifyUser(editingUser.username, activeUserEmail, isSystemAdmin, {
+            role: editRole,
+            permissions: editPermissions,
+        })
+        if (!check.allowed) {
+            setEditError(check.reason || 'تعديل غير مسموح به.')
+            return
+        }
 
         try {
             updateLocalUser(editingUser.id, {
@@ -214,6 +255,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     function handleToggleStatus(user: LocalUser) {
+        if (isProtectedUsername(user.username)) {
+            alert('غير مصرح: لا يمكن تعطيل حساب مدير النظام الرئيسي المحمي.')
+            return
+        }
         try {
             const nextStatus = user.status === 'active' ? 'pending_activation' : 'active'
             updateLocalUser(user.id, {
@@ -227,6 +272,11 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     function handleDelete(user: LocalUser) {
+        const check = canDeleteUser(user.username)
+        if (!check.allowed) {
+            alert(check.reason || 'غير مصرح بحذف هذا المستخدم.')
+            return
+        }
         try {
             deleteLocalUser(user.id)
             reloadUsers()
@@ -243,6 +293,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     function handleOpenChangePassword(user: LocalUser) {
+        if (isProtectedUsername(user.username)) {
+            alert('غير مصرح: لا يمكن إعادة تعيين كلمة مرور مدير النظام الرئيسي من هنا. يتم تغييرها حصرياً من قِبل صاحب الحساب من داخل جلسته الشخصية.')
+            return
+        }
         setPwdModalUser(user)
         setModalNewPassword('')
         setPwdModalError('')
@@ -264,6 +318,11 @@ export default function UsersPage({ session }: UsersPageProps) {
         if (!pwdModalUser) return
         setPwdModalError('')
         setPwdModalSuccess('')
+
+        if (isProtectedUsername(pwdModalUser.username)) {
+            setPwdModalError('غير مصرح: حساب مدير النظام الرئيسي محمي ضد تغيير كلمة المرور عبر لوحة الإدارة.')
+            return
+        }
 
         if (!modalNewPassword || modalNewPassword.length < 12) {
             setPwdModalError('كلمة المرور يجب أن لا تقل عن 12 حرفاً للأمان.')
@@ -291,7 +350,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    function handleSaveSelfPassword() {
+    async function handleSaveSelfPassword() {
         setSelfPasswordError('')
         setSelfPasswordSuccess('')
         if (!selfPassword) {
@@ -309,6 +368,11 @@ export default function UsersPage({ session }: UsersPageProps) {
 
         setSelfPasswordSaving(true)
         try {
+            if (supabase && session) {
+                const { error: authErr } = await supabase.auth.updateUser({ password: selfPassword })
+                if (authErr) throw authErr
+            }
+
             const currentId = currentSession?.user?.id
             const currentEmail = currentSession?.user?.email || 'admin'
 
@@ -321,19 +385,17 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             if (found) {
                 updateLocalUser(found.id, { password: selfPassword })
-                setSelfPasswordSuccess('تم حفظ وتحديث كلمة المرور الجديدة لحسابك بنجاح!')
-                void logAuditEvent({
-                    action: `تغيير كلمة المرور الشخصية للمستخدم الحالي`,
-                    entity_type: 'user',
-                    details: { username: activeUserEmail },
-                    user: currentSession?.user,
-                })
-                setSelfPassword('')
-                setSelfConfirm('')
-                reloadUsers()
-            } else {
-                setSelfPasswordError('لم يتم العثور على سجل حسابك المحلي.')
             }
+            setSelfPasswordSuccess('تم حفظ وتحديث كلمة المرور الجديدة لحسابك بنجاح!')
+            void logAuditEvent({
+                action: `تغيير كلمة المرور الشخصية للمستخدم الحالي`,
+                entity_type: 'user',
+                details: { username: activeUserEmail },
+                user: currentSession?.user,
+            })
+            setSelfPassword('')
+            setSelfConfirm('')
+            reloadUsers()
         } catch (err) {
             setSelfPasswordError(err instanceof Error ? err.message : 'تعذر تحديث كلمة المرور.')
         } finally {
@@ -349,17 +411,17 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     const filteredUsers = useMemo(() => {
-        if (!userSearchTerm.trim()) return localUsers
-        return localUsers.filter((u) => {
+        if (!userSearchTerm.trim()) return visibleLocalUsers
+        return visibleLocalUsers.filter((u) => {
             const roleArabic =
                 u.role === 'admin' ? 'مدير نظام مشرف ادمن' : u.role === 'editor' ? 'محرر كاتب' : 'مشاهد عرض'
             const statusArabic = u.status === 'active' ? 'نشط مفعل' : 'بانتظار التفعيل'
             return matchesSearch([u.username, u.displayName, u.role, roleArabic, u.activationCode, statusArabic], userSearchTerm)
         })
-    }, [localUsers, userSearchTerm])
+    }, [visibleLocalUsers, userSearchTerm])
 
-    const activeUsersCount = localUsers.filter((u) => u.status === 'active').length
-    const pendingUsersCount = localUsers.filter((u) => u.status === 'pending_activation').length
+    const activeUsersCount = visibleLocalUsers.filter((u) => u.status === 'active').length
+    const pendingUsersCount = visibleLocalUsers.filter((u) => u.status === 'pending_activation').length
 
     if (!isSystemAdmin) {
         return (
@@ -419,8 +481,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <span className="kpi-icon"><UsersRound size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">إجمالي المستخدمين</span>
-                        <strong className="kpi-val">{localUsers.length}</strong>
-                        <span className="kpi-sub">حسابات محلية مسجلة</span>
+                        <strong className="kpi-val">{visibleLocalUsers.length}</strong>
+                        <span className="kpi-sub">حسابات مسجلة</span>
                     </div>
                 </div>
 
@@ -811,7 +873,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                     >
                                                         <Edit2 size={15} />
                                                     </button>
-                                                    {!isLastActiveSystemAdmin(user.id, localUsers) ? (
+                                                    {!isLastActiveSystemAdmin(user.id, localUsers) && !isProtectedUsername(user.username) && user.username.toLowerCase() !== 'admin' ? (
                                                         <button
                                                             type="button"
                                                             className="action-icon-btn delete-btn"
@@ -832,7 +894,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 background: 'rgba(14, 124, 134, 0.12)',
                                                                 color: 'var(--accent)',
                                                             }}
-                                                            title="آخر مدير نظام نشط في المؤسسة محمي ضد الحذف"
+                                                            title="حساب محمي بشكل دائم ضد الحذف"
                                                         >
                                                             <ShieldCheck size={16} />
                                                         </span>

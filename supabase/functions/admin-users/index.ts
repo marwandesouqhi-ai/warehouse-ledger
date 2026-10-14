@@ -6,6 +6,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
+function normalizeUsername(input: string | null | undefined): string {
+  if (!input) return ""
+  let normalized = String(input).trim().toLowerCase().normalize("NFKC")
+  normalized = normalized.replace(/[\u200B-\u200D\uFEFF\u00A0\u200E\u200F\u202A-\u202E]/g, "")
+  normalized = normalized.replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-")
+  const homoglyphs: Record<string, string> = {
+    "а": "a", "с": "c", "е": "e", "о": "o", "р": "p", "х": "x", "у": "y",
+    "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "ԛ": "q", "ԝ": "w",
+    "α": "a", "ο": "o", "υ": "u",
+  }
+  return normalized.replace(/[асеорхуіјѕԁԛԝαου]/g, (char) => homoglyphs[char] || char)
+}
+
+function isProtectedUsername(usernameOrEmail: string | null | undefined): boolean {
+  if (!usernameOrEmail) return false
+  const clean = normalizeUsername(usernameOrEmail)
+  const reserved = [
+    "marwan-desouky",
+    "marwan-desouky@warehouse.local",
+    "marwandesouqhi@gmail.com",
+  ]
+  for (const r of reserved) {
+    if (clean === normalizeUsername(r)) return true
+  }
+  if (clean.endsWith("@warehouse.local")) {
+    const prefix = clean.replace(/@warehouse\.local$/, "")
+    if (prefix === "marwan-desouky") return true
+  }
+  return false
+}
+
 function generateSecureTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*"
   const array = new Uint8Array(16)
@@ -60,20 +91,11 @@ serve(async (req) => {
       })
     }
 
+    const callerUsername = (caller.app_metadata?.username as string) || (caller.email?.replace(/@warehouse\.local$/, "") ?? "")
+    const isCallerProtected = isProtectedUsername(callerUsername) || isProtectedUsername(caller.email)
+
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
     const action = body.action || "list_users"
-
-    // Helper: count total active system admins to prevent lockout
-    async function countActiveSystemAdmins(): Promise<number> {
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers()
-      let count = 0
-      for (const u of (listData?.users || [])) {
-        if (u.app_metadata?.system_admin === true || u.app_metadata?.role === "system_admin") {
-          count++
-        }
-      }
-      return count
-    }
 
     // ─── ACTION: list_users ──────────────────────────────────────────────────
     if (action === "list_users") {
@@ -85,11 +107,11 @@ serve(async (req) => {
         .from("app_users")
         .select("id, username, display_name, role, status, created_at, activated_at, last_login_at, notes, permissions, auth_user_id, must_change_password")
 
-      const appUserMap = new Map((appUsersData || []).map((u) => [u.username.toLowerCase(), u]))
+      const appUserMap = new Map((appUsersData || []).map((u) => [normalizeUsername(u.username), u]))
 
-      const users = (listData?.users || []).map((u) => {
+      const allUsers = (listData?.users || []).map((u) => {
         const username = (u.app_metadata?.username as string) || (u.email?.replace(/@warehouse\.local$/, "") ?? "")
-        const mirror = appUserMap.get(username.toLowerCase())
+        const mirror = appUserMap.get(normalizeUsername(username))
 
         return {
           id: u.id,
@@ -106,7 +128,15 @@ serve(async (req) => {
         }
       })
 
-      return new Response(JSON.stringify({ success: true, users }), {
+      // Layer 2: Hide protected System Admin marwan-desouky from all other callers
+      const visibleUsers = allUsers.filter((u) => {
+        if (isProtectedUsername(u.username) || isProtectedUsername(u.email)) {
+          return isCallerProtected
+        }
+        return true
+      })
+
+      return new Response(JSON.stringify({ success: true, users: visibleUsers }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
@@ -116,7 +146,7 @@ serve(async (req) => {
     if (action === "create_user") {
       const { username, displayName, password, role = "viewer", permissions = [], requirePasswordChange = true } = body
 
-      const cleanUsername = String(username || "").trim().toLowerCase()
+      const cleanUsername = normalizeUsername(username)
       if (!cleanUsername) {
         return new Response(JSON.stringify({ error: "اسم المستخدم مطلوب." }), {
           status: 400,
@@ -131,7 +161,27 @@ serve(async (req) => {
         })
       }
 
-      const allowedRoles = ["system_admin", "admin", "warehouse_staff", "purchasing_staff", "editor", "viewer"]
+      // 1. Reserved username check
+      if (isProtectedUsername(cleanUsername)) {
+        return new Response(JSON.stringify({
+          error: "اسم المستخدم محجوز لحساب مدير النظام الرئيسي ولا يمكن استخدامه.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // 2. Sole System Admin rule: Forbid creating another user with system_admin role
+      if (role === "system_admin" || body.system_admin === true) {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: مدير النظام الرئيسي (System Admin) حساب ثابت وموحد، ولا يمكن تعيين مدير نظام آخر. يمكنك منح صلاحيات إضافية محددة بدلاً من ذلك.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const allowedRoles = ["admin", "warehouse_staff", "purchasing_staff", "editor", "viewer"]
       if (!allowedRoles.includes(role)) {
         return new Response(JSON.stringify({ error: "الدور المحدد غير صالح." }), {
           status: 400,
@@ -153,7 +203,6 @@ serve(async (req) => {
       }
 
       const syntheticEmail = `${cleanUsername}@warehouse.local`
-      const isTargetSysAdmin = role === "system_admin"
 
       const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: syntheticEmail,
@@ -167,8 +216,8 @@ serve(async (req) => {
         app_metadata: {
           username: cleanUsername,
           role,
-          system_admin: isTargetSysAdmin,
-          permissions: isTargetSysAdmin ? ["view_audit", "view_settings", "manage_records"] : permissions,
+          system_admin: false,
+          permissions: permissions || [],
           must_change_password: Boolean(requirePasswordChange),
         },
       })
@@ -186,7 +235,7 @@ serve(async (req) => {
         display_name: displayName?.trim() || cleanUsername,
         role,
         status: "active",
-        permissions: isTargetSysAdmin ? ["view_audit", "view_settings", "manage_records"] : permissions,
+        permissions: permissions || [],
         auth_user_id: createData.user?.id,
         must_change_password: Boolean(requirePasswordChange),
       }, { onConflict: "username" })
@@ -227,6 +276,27 @@ serve(async (req) => {
         })
       }
 
+      const { data: targetUser, error: getError } = await supabaseAdmin.auth.admin.getUserById(userId)
+      if (getError || !targetUser?.user) {
+        return new Response(JSON.stringify({ error: "المستخدم غير موجود." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const targetUsername = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
+      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser.user.email)
+
+      // Strictly forbid changing marwan-desouky's password via admin-users Edge Function
+      if (isTargetProtected) {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن إعادة تعيين كلمة مرور مدير النظام الرئيسي من لوحة الإدارة. يتم تغيير كلمة المرور حصرياً من قِبل صاحب الحساب من داخل جلسته الشخصية.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
       let effectivePassword = newPassword
       let isGeneratedPassword = false
       if (!effectivePassword || typeof effectivePassword !== "string" || effectivePassword.trim().length === 0) {
@@ -235,14 +305,6 @@ serve(async (req) => {
       } else if (effectivePassword.length < 12) {
         return new Response(JSON.stringify({ error: "كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً للأمان." }), {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
-      }
-
-      const { data: targetUser, error: getError } = await supabaseAdmin.auth.admin.getUserById(userId)
-      if (getError || !targetUser?.user) {
-        return new Response(JSON.stringify({ error: "المستخدم غير موجود." }), {
-          status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
@@ -257,21 +319,19 @@ serve(async (req) => {
 
       if (updateError) throw updateError
 
-      const username = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
-
       // Update must_change_password in app_users mirror row
       await supabaseAdmin.from("app_users").update({
         must_change_password: Boolean(mustChangePassword),
-      }).eq("username", username.toLowerCase())
+      }).eq("username", targetUsername.toLowerCase())
 
       // Audit log (never includes password)
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
         user_email: caller.email,
-        action: `إعادة تعيين كلمة مرور المستخدم: ${username}`,
+        action: `إعادة تعيين كلمة مرور المستخدم: ${targetUsername}`,
         entity_type: "user_management",
         entity_id: userId,
-        details: { target_username: username, must_change_password: Boolean(mustChangePassword) },
+        details: { target_username: targetUsername, must_change_password: Boolean(mustChangePassword) },
       })
 
       return new Response(JSON.stringify({
@@ -302,17 +362,24 @@ serve(async (req) => {
         })
       }
 
-      const username = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
-      const isTargetCurrentlySysAdmin =
-        targetUser.user.app_metadata?.system_admin === true ||
-        targetUser.user.app_metadata?.role === "system_admin"
+      const targetUsername = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
+      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser.user.email)
 
-      // Protect against demoting the last active System Admin
-      if (isTargetCurrentlySysAdmin && role && role !== "system_admin") {
-        const sysAdminCount = await countActiveSystemAdmins()
-        if (sysAdminCount <= 1) {
+      // 1. Protected System Admin constraints
+      if (isTargetProtected) {
+        if (!isCallerProtected) {
           return new Response(JSON.stringify({
-            error: "لا يمكن خفض صلاحيات آخر مدير نظام نشط (System Admin) في المؤسسة. يجب تعيين مدير نظام بديل أولاً.",
+            error: "غير مصرح: بيانات وهوية حساب مدير النظام الرئيسي محمية بالكامل ولا يمكن تعديلها إلا من قِبل صاحب الحساب نفسه.",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+
+        // Even caller himself cannot demote his own role away from system_admin
+        if (role && role !== "system_admin") {
+          return new Response(JSON.stringify({
+            error: "غير مصرح: لا يمكن تعديل أو تخفيض دور مدير النظام الرئيسي.",
           }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -320,9 +387,28 @@ serve(async (req) => {
         }
       }
 
-      const targetIsBecomingSysAdmin = role === "system_admin"
-      const newRole = role || targetUser.user.app_metadata?.role || "viewer"
-      const newPermissions = targetIsBecomingSysAdmin
+      // 2. Sole System Admin rule: Forbid promoting anyone else to system_admin
+      if (!isTargetProtected && (role === "system_admin" || body.system_admin === true)) {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن ترقية أي مستخدم لدور مدير النظام (System Admin). يمكنك منح صلاحيات إضافية محددة بدلاً من ذلك.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // 3. Root admin demotion protection
+      if (targetUsername.toLowerCase() === "admin" && role && role !== "admin") {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن تخفيض صلاحيات المشرف الرئيسي (admin).",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const newRole = isTargetProtected ? "system_admin" : (role || targetUser.user.app_metadata?.role || "viewer")
+      const newPermissions = isTargetProtected
         ? ["view_audit", "view_settings", "manage_records"]
         : (permissions ?? targetUser.user.app_metadata?.permissions ?? [])
 
@@ -334,7 +420,7 @@ serve(async (req) => {
         app_metadata: {
           ...targetUser.user.app_metadata,
           role: newRole,
-          system_admin: targetIsBecomingSysAdmin,
+          system_admin: isTargetProtected,
           permissions: newPermissions,
         },
       })
@@ -346,15 +432,15 @@ serve(async (req) => {
         display_name: displayName || targetUser.user.user_metadata?.displayName,
         role: newRole,
         permissions: newPermissions,
-      }).eq("username", username.toLowerCase())
+      }).eq("username", targetUsername.toLowerCase())
 
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
         user_email: caller.email,
-        action: `تحديث بيانات المستخدم: ${username}`,
+        action: `تحديث بيانات المستخدم: ${targetUsername}`,
         entity_type: "user_management",
         entity_id: userId,
-        details: { target_username: username, newRole, newPermissions },
+        details: { target_username: targetUsername, newRole, newPermissions },
       })
 
       return new Response(JSON.stringify({ success: true, message: "تم تحديث المستخدم بنجاح." }), {
@@ -381,37 +467,42 @@ serve(async (req) => {
         })
       }
 
-      const username = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
-      const isTargetSysAdmin =
-        targetUser.user.app_metadata?.system_admin === true ||
-        targetUser.user.app_metadata?.role === "system_admin"
+      const targetUsername = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
+      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser.user.email)
 
-      // Protect against deleting the last active System Admin
-      if (isTargetSysAdmin) {
-        const sysAdminCount = await countActiveSystemAdmins()
-        if (sysAdminCount <= 1) {
-          return new Response(JSON.stringify({
-            error: "لا يمكن حذف آخر مدير نظام نشط (System Admin) في المؤسسة. يجب تعيين مدير نظام بديل أولاً.",
-          }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          })
-        }
+      // Strictly forbid deleting marwan-desouky
+      if (isTargetProtected) {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: حساب مدير النظام الرئيسي (marwan-desouky) محمي بشكل دائم ولا يمكن حذفه نهائياً من النظام.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // Strictly forbid deleting root admin
+      if (targetUsername.toLowerCase() === "admin") {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: حساب المشرف الرئيسي (admin) محمي من الحذف.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
       }
 
       const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
       if (deleteError) throw deleteError
 
       // Remove from app_users mirror
-      await supabaseAdmin.from("app_users").delete().eq("username", username.toLowerCase())
+      await supabaseAdmin.from("app_users").delete().eq("username", targetUsername.toLowerCase())
 
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
         user_email: caller.email,
-        action: `حذف حساب المستخدم: ${username}`,
+        action: `حذف حساب المستخدم: ${targetUsername}`,
         entity_type: "user_management",
         entity_id: userId,
-        details: { target_username: username },
+        details: { target_username: targetUsername },
       })
 
       return new Response(JSON.stringify({ success: true, message: "تم حذف المستخدم بنجاح." }), {

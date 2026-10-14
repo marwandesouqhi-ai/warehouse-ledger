@@ -95,9 +95,24 @@ describe('Local Users Security & Password Storage Hardening Suite', () => {
       })
     }).toThrow(/اسم المستخدم يجب ألا يحتوي على مسافات/)
 
+    // Attempting to register reserved protected username must throw
     expect(() => {
       addLocalUser({
         username: 'marwan-desouky',
+        password: 'SecurePassword123!',
+        role: 'viewer',
+      })
+    }).toThrow(/محجوز لحساب مدير النظام الرئيسي/)
+
+    // Register a normal user, then duplicate must throw
+    addLocalUser({
+      username: 'duplicate_test_user',
+      password: 'SecurePassword123!',
+      role: 'viewer',
+    })
+    expect(() => {
+      addLocalUser({
+        username: 'duplicate_test_user',
         password: 'SecurePassword123!',
         role: 'viewer',
       })
@@ -130,20 +145,20 @@ describe('Local Users Security & Password Storage Hardening Suite', () => {
     expect(admin).toBeDefined()
     if (!admin) return
 
-    // Deleting the only active admin must throw
+    // Deleting the protected system admin must throw
     expect(() => {
       deleteLocalUser(admin.id)
-    }).toThrow(/لا يمكن حذف آخر مدير نظام نشط/)
+    }).toThrow(/محمي بشكل كامل ودائم|لا يمكن حذف آخر مدير نظام نشط/)
 
-    // Downgrading role of only active admin must throw
+    // Downgrading role of protected system admin must throw
     expect(() => {
       updateLocalUser(admin.id, { role: 'viewer' })
-    }).toThrow(/لا يمكن تقليص صلاحيات آخر مدير نظام نشط/)
+    }).toThrow(/لا يمكن تخفيض دور مدير النظام الرئيسي|لا يمكن تقليص صلاحيات آخر مدير نظام نشط/)
 
-    // Deactivating only active admin must throw
+    // Deactivating protected system admin must throw
     expect(() => {
       updateLocalUser(admin.id, { status: 'pending_activation' })
-    }).toThrow(/لا يمكن تعطيل آخر مدير نظام نشط/)
+    }).toThrow(/لا يمكن تعطيل حساب مدير النظام الرئيسي|لا يمكن تعطيل آخر مدير نظام نشط/)
   })
 
   it('9. automatically purges deleted account marwandesouqhi@gmail.com from storage', () => {

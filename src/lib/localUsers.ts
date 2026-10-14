@@ -1,6 +1,11 @@
 import { logAuditEvent } from './auditLogger'
 import { supabase } from './supabase'
 import { isAuthSecureMode } from './authMode'
+import {
+  isProtectedUsername,
+  canDeleteUser,
+  normalizeUsername,
+} from './protectedAccounts'
 
 export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
   if (!supabase) return []
@@ -343,21 +348,25 @@ export function addLocalUser(data: {
   permissions?: string[]
 }): LocalUser {
   const users = loadLocalUsers()
-  const cleanUsername = data.username.trim().toLowerCase()
+  const cleanUsername = normalizeUsername(data.username)
 
   if (!cleanUsername) {
     throw new Error('يرجى إدخال اسم المستخدم.')
   }
 
-  if (cleanUsername === 'marwandesouqhi@gmail.com') {
-    throw new Error('تم حذف هذا الحساب نهائياً من النظام ومحظور إعادة إنشائه.')
+  if (isProtectedUsername(cleanUsername)) {
+    throw new Error('اسم المستخدم محجوز لحساب مدير النظام الرئيسي المحمي ولا يمكن استخدامه.')
+  }
+
+  if (data.role === 'system_admin') {
+    throw new Error('غير مصرح: مدير النظام الرئيسي (System Admin) حساب ثابت وموحد، ولا يمكن إنشاء مستخدم آخر بهذا الدور.')
   }
 
   if (cleanUsername.includes(' ')) {
     throw new Error('اسم المستخدم يجب ألا يحتوي على مسافات (استخدم حروفاً أو أرقاماً).')
   }
 
-  if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+  if (users.some((u) => normalizeUsername(u.username) === cleanUsername)) {
     throw new Error(`اسم المستخدم "${cleanUsername}" مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر.`)
   }
 
@@ -409,6 +418,24 @@ export function updateLocalUser(
   }
 
   const current = users[idx]
+  const isTargetProtected = isProtectedUsername(current.username)
+
+  if (isTargetProtected) {
+    if (updates.username && normalizeUsername(updates.username) !== normalizeUsername(current.username)) {
+      throw new Error('غير مصرح: لا يمكن تعديل اسم مستخدم مدير النظام الرئيسي المحمي.')
+    }
+    if (updates.role && updates.role !== 'system_admin') {
+      throw new Error('غير مصرح: لا يمكن تخفيض دور مدير النظام الرئيسي المحمي.')
+    }
+    if (updates.status && updates.status !== 'active') {
+      throw new Error('غير مصرح: لا يمكن تعطيل حساب مدير النظام الرئيسي المحمي.')
+    }
+  }
+
+  if (!isTargetProtected && updates.role === 'system_admin') {
+    throw new Error('غير مصرح: لا يمكن ترقية أي مستخدم لدور مدير النظام (System Admin).')
+  }
+
   if (isLastActiveSystemAdmin(id, users)) {
     if (updates.role && updates.role !== 'admin' && updates.role !== 'system_admin') {
       throw new Error('لا يمكن تقليص صلاحيات آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
@@ -418,9 +445,9 @@ export function updateLocalUser(
     }
   }
 
-  if (updates.username && updates.username.toLowerCase() !== current.username.toLowerCase()) {
-    const cleanUsername = updates.username.trim().toLowerCase()
-    if (users.some((u) => u.id !== id && u.username.toLowerCase() === cleanUsername)) {
+  if (updates.username && normalizeUsername(updates.username) !== normalizeUsername(current.username)) {
+    const cleanUsername = normalizeUsername(updates.username)
+    if (users.some((u) => u.id !== id && normalizeUsername(u.username) === cleanUsername)) {
       throw new Error(`اسم المستخدم "${cleanUsername}" مسجل لمستخدم آخر.`)
     }
   }
@@ -428,7 +455,7 @@ export function updateLocalUser(
   const updated: LocalUser = {
     ...current,
     ...updates,
-    username: updates.username ? updates.username.trim().toLowerCase() : current.username,
+    username: updates.username ? normalizeUsername(updates.username) : current.username,
   }
 
   users[idx] = updated
@@ -447,6 +474,11 @@ export function deleteLocalUser(id: string): void {
   const users = loadLocalUsers()
   const target = users.find((u) => u.id === id)
   if (!target) return
+
+  const delCheck = canDeleteUser(target.username)
+  if (!delCheck.allowed) {
+    throw new Error(delCheck.reason || 'لا يمكن حذف هذا المستخدم المحمي.')
+  }
 
   if (isLastActiveSystemAdmin(id, users)) {
     throw new Error('لا يمكن حذف آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
