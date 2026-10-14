@@ -263,7 +263,7 @@ describe('canAccessRoute', () => {
   describe('/purchases', () => {
     it('viewer لا يدخل', () => expect(canAccessRoute(makeRole('viewer'), '/purchases')).toBe(false))
     it('admin يدخل', () => expect(canAccessRoute(makeRole('admin'), '/purchases')).toBe(true))
-    it('warehouse_staff يدخل', () => expect(canAccessRoute(makeRole('warehouse_staff'), '/purchases')).toBe(true))
+    it('warehouse_staff لا يدخل (مقتصر على المشتريات والإدارة)', () => expect(canAccessRoute(makeRole('warehouse_staff'), '/purchases')).toBe(false))
     it('purchasing_staff يدخل', () => expect(canAccessRoute(makeRole('purchasing_staff'), '/purchases')).toBe(true))
     it('editor يدخل', () => expect(canAccessRoute(makeRole('editor'), '/purchases')).toBe(true))
   })
@@ -340,9 +340,14 @@ describe('canViewPage', () => {
   it('settings: مع view_settings يرى', () => {
     expect(canViewPage(makeSession('ali', 'admin', ['view_settings']), 'settings')).toBe(true)
   })
-  it('users: system_admin فقط يرى', () => {
-    expect(canViewPage(makeSession('ali', 'admin'), 'users')).toBe(false)
-    expect(canViewPage(makeSession('admin_lead', 'system_admin'), 'users')).toBe(true)
+  it('purchases: warehouse_staff لا يرى في القائمة', () => {
+    expect(canViewPage(makeSession('ali', 'warehouse_staff'), 'purchases')).toBe(false)
+  })
+  it('purchases: purchasing_staff يرى في القائمة', () => {
+    expect(canViewPage(makeSession('ali', 'purchasing_staff'), 'purchases')).toBe(true)
+  })
+  it('custody: warehouse_staff يرى في القائمة', () => {
+    expect(canViewPage(makeSession('ali', 'warehouse_staff'), 'custody')).toBe(true)
   })
 })
 

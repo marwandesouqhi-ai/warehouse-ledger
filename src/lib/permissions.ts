@@ -72,7 +72,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/':          ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
-  '/purchases': ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
+  '/purchases': ['system_admin', 'admin', 'purchasing_staff', 'editor'],
   '/custody':   ['system_admin', 'admin', 'warehouse_staff', 'editor'],
   '/reports':   ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
   '/imports':   ['system_admin', 'admin', 'purchasing_staff'],
@@ -81,7 +81,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/users':     ['system_admin'],
   '/settings':  ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
   // إعادة توجيه من الراوتس القديمة — يُعامل نفس /purchases
-  '/movements': ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
+  '/movements': ['system_admin', 'admin', 'purchasing_staff', 'editor'],
 }
 
 // ─── الدوال الأساسية ──────────────────────────────────────────────────────────
@@ -234,7 +234,7 @@ export function canViewPage(
 
   switch (page) {
     case 'purchases':
-      return ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'purchasing_staff', 'editor'].includes(role)
     case 'custody':
       return ['system_admin', 'admin', 'warehouse_staff', 'editor'].includes(role)
     case 'reports':

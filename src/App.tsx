@@ -59,6 +59,7 @@ import {
   can,
   getEffectiveRole,
   canViewPage,
+  canAccessRoute,
   ROLE_LABELS,
 } from './lib/permissions'
 import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
@@ -1826,18 +1827,26 @@ function App() {
           <Route
             path="/purchases"
             element={
-              <PurchasesPage
-                movements={movements}
-                currency={settings.currency}
-                onSaveMovement={addMovement}
-                onEdit={canManageRecords ? (m) => setEditingMovement(m) : () => {}}
-                onDelete={canManageRecords ? (m) => setDeletingMovement(m) : () => {}}
-                onLoadDemoData={handleLoadDemoData}
-                canEdit={canEdit}
-                isSystemAdmin={isSystemAdmin}
-                session={session}
-                globalSearchTerm={searchTerm}
-              />
+              canAccessRoute(session, '/purchases') ? (
+                <PurchasesPage
+                  movements={movements}
+                  currency={settings.currency}
+                  onSaveMovement={addMovement}
+                  onEdit={canManageRecords ? (m) => setEditingMovement(m) : () => {}}
+                  onDelete={canManageRecords ? (m) => setDeletingMovement(m) : () => {}}
+                  onLoadDemoData={handleLoadDemoData}
+                  canEdit={canEdit}
+                  isSystemAdmin={isSystemAdmin}
+                  session={session}
+                  globalSearchTerm={searchTerm}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="المشتريات والتوريدات"
+                  subtitle="صلاحية مقيدة"
+                  message="صفحة المشتريات والتوريدات وفواتير الشراء مقتصرة حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
             }
           />
           <Route path="/movements" element={<Navigate to="/purchases" replace />} />
