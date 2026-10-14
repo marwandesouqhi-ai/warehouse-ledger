@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   Receipt,
 } from 'lucide-react'
+import { ProcurementDemoNotice } from './ProcurementDemoNotice'
 
 export interface ProcurementSubNavProps {
   activeTab?: 'invoices' | 'requests' | 'suppliers' | 'quotes' | 'analytics'
@@ -51,28 +52,31 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
   ]
 
   return (
-    <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات">
-      <div className="procurement-subnav-container">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isExplicitActive = activeTab ? activeTab === tab.id : undefined
+    <>
+      <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات">
+        <div className="procurement-subnav-container">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isExplicitActive = activeTab ? activeTab === tab.id : undefined
 
-          return (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
-              className={({ isActive }) => {
-                const active = isExplicitActive !== undefined ? isExplicitActive : isActive
-                return `procurement-tab-pill ${active ? 'active' : ''}`
-              }}
-            >
-              <Icon size={17} />
-              <span>{tab.label}</span>
-            </NavLink>
-          )
-        })}
-      </div>
-    </nav>
+            return (
+              <NavLink
+                key={tab.to}
+                to={tab.to}
+                end={tab.end}
+                className={({ isActive }) => {
+                  const active = isExplicitActive !== undefined ? isExplicitActive : isActive
+                  return `procurement-tab-pill ${active ? 'active' : ''}`
+                }}
+              >
+                <Icon size={17} />
+                <span>{tab.label}</span>
+              </NavLink>
+            )
+          })}
+        </div>
+      </nav>
+      <ProcurementDemoNotice />
+    </>
   )
 }

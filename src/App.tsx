@@ -30,6 +30,7 @@ import {
   Pencil,
   Percent,
   Plus,
+  Receipt,
   Search,
   Send,
   Settings2,
@@ -60,6 +61,7 @@ import {
   getEffectiveRole,
   canViewPage,
   canAccessRoute,
+  getDashboardScope,
   ROLE_LABELS,
 } from './lib/permissions'
 import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
@@ -95,6 +97,7 @@ import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
+import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
 import type { CustodyItem } from './lib/custody'
 import { matchesSearch } from './lib/searchUtils'
 import './App.css'
@@ -317,7 +320,18 @@ function App() {
 
   // Custody and Dashboard Analytics State
   const [custodyItems, setCustodyItems] = useState<CustodyItem[]>(loadCustodyItems)
-  const [dashboardAnalyticsTab, setDashboardAnalyticsTab] = useState<'all' | 'movements' | 'custody'>('all')
+  const dashboardScope = getDashboardScope(session)
+  const [dashboardAnalyticsTab, setDashboardAnalyticsTab] = useState<'all' | 'procurement' | 'movements' | 'custody'>(
+    dashboardScope === 'purchases_only' ? 'procurement' : 'all'
+  )
+
+  useEffect(() => {
+    if (dashboardScope === 'purchases_only') {
+      setDashboardAnalyticsTab('procurement')
+    } else if (dashboardScope === 'warehouse_only' && dashboardAnalyticsTab === 'procurement') {
+      setDashboardAnalyticsTab('movements')
+    }
+  }, [dashboardScope])
 
   useEffect(() => {
     function handleCustodySync() {
@@ -1415,48 +1429,76 @@ function App() {
             element={
               <section className="dashboard-grid">
                 {/* 1. Hero Overview Executive Banner */}
-                <div className="hero-overview-card card-surface">
-                  <div className="hero-main-content">
-                    <div className={`hero-status-tag tone-${stockStatusConfig.tone}`}>
-                      <span className="live-pulse-dot" />
-                      <span>{stockStatusConfig.text}</span>
-                      <span className="hero-divider">•</span>
-                      <span>{settings.organization} ({settings.department})</span>
-                    </div>
-                    <h2 className="hero-title">لوحة التحكم والمؤشرات التشغيلية للمستودع</h2>
-                    <p className="hero-desc">
-                      تم صرف <strong>{issuedPercentage}</strong> من إجمالي قيمة الوارد (<strong>{summary.qty_out.toLocaleString('ar-EG')}</strong> من <strong>{summary.qty_in.toLocaleString('ar-EG')}</strong> وحدة)، مع رصيد متبقٍ بقيمة <strong>{formatCurrency(summary.remaining_value, settings.currency)}</strong> موزع على <strong>{summary.pending_rows.toLocaleString('ar-EG')}</strong> بنداً بانتظار استكمال الصرف.
-                    </p>
-                    <div className="hero-actions">
-                      <button type="button" className="outline-btn" onClick={() => navigate('/quality')}>
-                        <ShieldAlert size={17} /> فحص الجودة ({totalQualityIssues} ملاحظة)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="hero-meter-wrap">
-                    <div className="circular-meter">
-                      <svg viewBox="0 0 100 100" className="meter-svg">
-                        <circle className="meter-bg" cx="50" cy="50" r="40" />
-                        <circle
-                          className="meter-bar"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          strokeDasharray="251.2"
-                          strokeDashoffset={251.2 - (251.2 * Math.min(100, Math.max(0, turnoverRateNum))) / 100}
-                        />
-                      </svg>
-                      <div className="meter-content">
-                        <span className="meter-val">{issuedPercentage}</span>
-                        <span className="meter-lbl">نسبة الصرف</span>
+                {dashboardScope === 'purchases_only' ? (
+                  <div className="hero-overview-card card-surface">
+                    <div className="hero-main-content">
+                      <div className="hero-status-tag tone-emerald">
+                        <span className="live-pulse-dot" />
+                        <span>إدارة المشتريات والتوريدات</span>
+                        <span className="hero-divider">•</span>
+                        <span>{settings.organization} ({settings.department})</span>
+                      </div>
+                      <h2 className="hero-title">لوحة التحكم والمؤشرات التشغيلية لإدارة المشتريات</h2>
+                      <p className="hero-desc">
+                        متابعة فورية لدورة المشتريات والاحتياجات، تدفق مسار الاعتمادات، عروض الأسعار التنافسية، وأوامر الشراء المعتمدة لجامعة الزقازيق الأهلية.
+                      </p>
+                      <div className="hero-actions">
+                        <button type="button" className="primary-btn" onClick={() => navigate('/purchases/requests/new')}>
+                          <Plus size={16} /> طلب شراء جديد
+                        </button>
+                        <button type="button" className="outline-btn" onClick={() => navigate('/purchases/quotes')}>
+                          <FileSpreadsheet size={16} /> عروض الأسعار
+                        </button>
+                        <button type="button" className="outline-btn" onClick={() => navigate('/purchases/suppliers')}>
+                          <Building2 size={16} /> إدارة الموردين
+                        </button>
                       </div>
                     </div>
-                    <div className="meter-sub">
-                      <span>معدل الدوران: <strong>{turnoverRate}%</strong></span>
+                  </div>
+                ) : (
+                  <div className="hero-overview-card card-surface">
+                    <div className="hero-main-content">
+                      <div className={`hero-status-tag tone-${stockStatusConfig.tone}`}>
+                        <span className="live-pulse-dot" />
+                        <span>{stockStatusConfig.text}</span>
+                        <span className="hero-divider">•</span>
+                        <span>{settings.organization} ({settings.department})</span>
+                      </div>
+                      <h2 className="hero-title">لوحة التحكم والمؤشرات التشغيلية للمستودع</h2>
+                      <p className="hero-desc">
+                        تم صرف <strong>{issuedPercentage}</strong> من إجمالي قيمة الوارد (<strong>{summary.qty_out.toLocaleString('ar-EG')}</strong> من <strong>{summary.qty_in.toLocaleString('ar-EG')}</strong> وحدة)، مع رصيد متبقٍ بقيمة <strong>{formatCurrency(summary.remaining_value, settings.currency)}</strong> موزع على <strong>{summary.pending_rows.toLocaleString('ar-EG')}</strong> بنداً بانتظار استكمال الصرف.
+                      </p>
+                      <div className="hero-actions">
+                        <button type="button" className="outline-btn" onClick={() => navigate('/quality')}>
+                          <ShieldAlert size={17} /> فحص الجودة ({totalQualityIssues} ملاحظة)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="hero-meter-wrap">
+                      <div className="circular-meter">
+                        <svg viewBox="0 0 100 100" className="meter-svg">
+                          <circle className="meter-bg" cx="50" cy="50" r="40" />
+                          <circle
+                            className="meter-bar"
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            strokeDasharray="251.2"
+                            strokeDashoffset={251.2 - (251.2 * Math.min(100, Math.max(0, turnoverRateNum))) / 100}
+                          />
+                        </svg>
+                        <div className="meter-content">
+                          <span className="meter-val">{issuedPercentage}</span>
+                          <span className="meter-lbl">نسبة الصرف</span>
+                        </div>
+                      </div>
+                      <div className="meter-sub">
+                        <span>معدل الدوران: <strong>{turnoverRate}%</strong></span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* 2. Unified Analytics Switcher */}
                 <div className="card-surface" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '14px', flexWrap: 'wrap', gap: '10px' }}>
@@ -1466,58 +1508,97 @@ function App() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className={`secondary-btn ${dashboardAnalyticsTab === 'all' ? 'active' : ''}`}
-                      onClick={() => setDashboardAnalyticsTab('all')}
-                      style={{
-                        background: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--surface)',
-                        color: dashboardAnalyticsTab === 'all' ? '#fff' : 'var(--ink)',
-                        borderColor: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--line)',
-                        fontWeight: 600,
-                        fontSize: '0.84rem',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <Sparkles size={14} /> التحليل الشامل الموحد
-                    </button>
+                    {dashboardScope !== 'purchases_only' && (
+                      <button
+                        type="button"
+                        className={`secondary-btn ${dashboardAnalyticsTab === 'all' ? 'active' : ''}`}
+                        onClick={() => setDashboardAnalyticsTab('all')}
+                        style={{
+                          background: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--surface)',
+                          color: dashboardAnalyticsTab === 'all' ? '#fff' : 'var(--ink)',
+                          borderColor: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--line)',
+                          fontWeight: 600,
+                          fontSize: '0.84rem',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <Sparkles size={14} /> التحليل الشامل الموحد
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      className={`secondary-btn ${dashboardAnalyticsTab === 'movements' ? 'active' : ''}`}
-                      onClick={() => setDashboardAnalyticsTab('movements')}
-                      style={{
-                        background: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--surface)',
-                        color: dashboardAnalyticsTab === 'movements' ? '#fff' : 'var(--ink)',
-                        borderColor: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--line)',
-                        fontWeight: 600,
-                        fontSize: '0.84rem',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <TrendingUp size={14} /> تحليلات حركة الوارد والمنصرف
-                    </button>
+                    {/* تبويب تحليلات المشتريات — يظهر لموظفي المشتريات والإدارة */}
+                    {dashboardScope !== 'warehouse_only' && (
+                      <button
+                        type="button"
+                        className={`secondary-btn ${dashboardAnalyticsTab === 'procurement' ? 'active' : ''}`}
+                        onClick={() => setDashboardAnalyticsTab('procurement')}
+                        style={{
+                          background: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--surface)',
+                          color: dashboardAnalyticsTab === 'procurement' ? '#fff' : 'var(--ink)',
+                          borderColor: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--line)',
+                          fontWeight: 600,
+                          fontSize: '0.84rem',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <Receipt size={14} /> تحليلات إدارة المشتريات
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      className={`secondary-btn ${dashboardAnalyticsTab === 'custody' ? 'active' : ''}`}
-                      onClick={() => setDashboardAnalyticsTab('custody')}
-                      style={{
-                        background: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--surface)',
-                        color: dashboardAnalyticsTab === 'custody' ? '#fff' : 'var(--ink)',
-                        borderColor: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--line)',
-                        fontWeight: 600,
-                        fontSize: '0.84rem',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <Building2 size={14} /> تحليلات عهدة وأصول الكليات (8 مخازن)
-                    </button>
+                    {/* تبويب تحليلات حركة الوارد والمنصرف — يظهر لموظفي المخازن والإدارة */}
+                    {dashboardScope !== 'purchases_only' && (
+                      <button
+                        type="button"
+                        className={`secondary-btn ${dashboardAnalyticsTab === 'movements' ? 'active' : ''}`}
+                        onClick={() => setDashboardAnalyticsTab('movements')}
+                        style={{
+                          background: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--surface)',
+                          color: dashboardAnalyticsTab === 'movements' ? '#fff' : 'var(--ink)',
+                          borderColor: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--line)',
+                          fontWeight: 600,
+                          fontSize: '0.84rem',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <TrendingUp size={14} /> تحليلات حركة الوارد والمنصرف
+                      </button>
+                    )}
+
+                    {/* تبويب عهدة وأصول الكليات — يظهر لموظفي المخازن والإدارة */}
+                    {dashboardScope !== 'purchases_only' && (
+                      <button
+                        type="button"
+                        className={`secondary-btn ${dashboardAnalyticsTab === 'custody' ? 'active' : ''}`}
+                        onClick={() => setDashboardAnalyticsTab('custody')}
+                        style={{
+                          background: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--surface)',
+                          color: dashboardAnalyticsTab === 'custody' ? '#fff' : 'var(--ink)',
+                          borderColor: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--line)',
+                          fontWeight: 600,
+                          fontSize: '0.84rem',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <Building2 size={14} /> تحليلات عهدة وأصول الكليات (8 مخازن)
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* 3. Procurement Analytics Section */}
+                {dashboardScope !== 'warehouse_only' && (dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'procurement') && (
+                  <div style={{ marginTop: '8px' }}>
+                    <ProcurementAnalyticsDashboard
+                      movements={movements}
+                      currency={settings.currency}
+                      isDashboardEmbed={true}
+                    />
+                  </div>
+                )}
 
                 {/* Movements Analytics: Gauges, KPIs, Chart */}
                 {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'movements') && (
@@ -1714,7 +1795,8 @@ function App() {
             )}
 
                 {/* 5. Recent Movements & Quality / Activity Stack */}
-                <div className="lower-grid">
+                {dashboardScope !== 'purchases_only' && (
+                  <div className="lower-grid">
                   <div className="card-surface table-card">
                     <div className="section-head table-section-head">
                       <div>
@@ -1913,7 +1995,8 @@ function App() {
                     )}
                   </div>
                 </div>
-              </section>
+              )}
+            </section>
             }
           />
 

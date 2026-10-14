@@ -576,9 +576,9 @@ export default function PurchaseRequestsPage({ session, currency }: PurchaseRequ
                       <td><strong>{item.item_name}</strong></td>
                       <td style={{ textAlign: 'center' }}>{item.quantity}</td>
                       <td style={{ textAlign: 'center' }}>{item.unit}</td>
-                      <td style={{ textAlign: 'center' }}>{formatCurrency(item.estimated_price, currency)}</td>
+                      <td style={{ textAlign: 'center' }}>{formatCurrency(item.estimated_price || item.estimated_unit_price || 0, currency)}</td>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>
-                        {formatCurrency(item.quantity * item.estimated_price, currency)}
+                        {formatCurrency(item.quantity * (item.estimated_price || item.estimated_unit_price || 0), currency)}
                       </td>
                     </tr>
                   ))}
