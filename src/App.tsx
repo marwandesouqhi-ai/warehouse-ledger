@@ -766,35 +766,88 @@ function App() {
   }, [darkMode])
 
   async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
+    const isPurchase = Number(movement.qin) > 0
+    let savedMovement = movement
+
     if (supabase && session) {
-      try {
-        const [savedMovement] = await saveMovements([movement], session.user.id)
-        if (!savedMovement) throw new Error('الحركة موجودة بالفعل في السجل.')
-        setMovements((current) => [...current, savedMovement])
-        setSyncStatus('synced')
-      } catch (error) {
-        setSyncStatus('error')
-        setSyncError(error instanceof Error ? error.message : 'تعذر حفظ الحركة على الخادم.')
-        throw error
+      if (isPurchase) {
+        // 1. فواتير الشراء: استدعاء دالة RPC الذرية record_purchase
+        try {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('record_purchase', {
+            p_fingerprint: movementFingerprint(movement),
+            p_item: movement.item,
+            p_qty: Number(movement.qin),
+            p_unit_price: Number(movement.price) || 0,
+            p_supplier: movement.from || '',
+            p_notes: movement.notes || '',
+            p_created_by: session.user.email || '',
+            p_received_on: movement.date || null,
+            p_invoice_number: movement.inv || '',
+          })
+          if (rpcError) throw rpcError
+
+          savedMovement = {
+            ...movement,
+            id: rpcData?.movement_id || movement.id,
+            custodyApplied: true,
+          }
+          setMovements((current) => [...current, savedMovement])
+          setSyncStatus('synced')
+
+          // إعادة تحميل عهدة المخازن من السحابة لضمان مطابقة رصيد المخزن الرئيسي المتزايد ذرياً
+          try {
+            const cloudCustody = await fetchCustodyItemsFromCloud()
+            if (cloudCustody.length > 0) {
+              setCustodyItems(cloudCustody)
+              saveCustodyItems(cloudCustody)
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('custody-changed'))
+              }
+            }
+          } catch (custodyReloadErr) {
+            console.warn('Could not reload custody after record_purchase:', custodyReloadErr)
+          }
+        } catch (error) {
+          setSyncStatus('error')
+          setSyncError(error instanceof Error ? error.message : 'تعذر تسجيل فاتورة الشراء على الخادم.')
+          throw error
+        }
+      } else {
+        // 2. حركات المنصرف والتحويل: الحفظ والخصم المحلي
+        try {
+          const [saved] = await saveMovements([movement], session.user.id)
+          if (!saved) throw new Error('الحركة موجودة بالفعل في السجل.')
+          savedMovement = saved
+          setMovements((current) => [...current, saved])
+          setSyncStatus('synced')
+
+          try {
+            syncOutwardMovementToCustody(savedMovement)
+          } catch (custodyErr) {
+            console.warn('Custody synchronization warning:', custodyErr)
+          }
+        } catch (error) {
+          setSyncStatus('error')
+          setSyncError(error instanceof Error ? error.message : 'تعذر حفظ الحركة على الخادم.')
+          throw error
+        }
       }
     } else {
+      // 3. وضع عدم الاتصال (Offline Fallback): حفظ محلي فقط دون كسر
       setMovements((current) => [...current, movement])
-    }
-
-    // مزامنة فورية وتلقائية مع عهدة المخازن:
-    // بيانات الوارد تُضاف لعهدة المخزن الرئيسي، وبيانات الصرف تُخصم من الرئيسي وتُدرج بعهدة المخزن المستلم
-    try {
-      if (Number(movement.qin) > 0) {
-        syncInwardMovementToCustody(movement)
-      } else if (Number(movement.qout) > 0) {
-        syncOutwardMovementToCustody(movement)
+      try {
+        if (isPurchase) {
+          syncInwardMovementToCustody(movement)
+        } else if (Number(movement.qout) > 0) {
+          syncOutwardMovementToCustody(movement)
+        }
+      } catch (custodyErr) {
+        console.warn('Custody synchronization warning:', custodyErr)
       }
-    } catch (custodyErr) {
-      console.warn('Custody synchronization warning:', custodyErr)
     }
 
     void logAuditEvent({
-      action: Number(movement.qin) > 0 ? `إضافة حركة وارد: ${movement.item}` : `إضافة حركة صرف: ${movement.item}`,
+      action: isPurchase ? `إضافة حركة وارد: ${movement.item}` : `إضافة حركة صرف: ${movement.item}`,
       entity_type: 'movement',
       details: {
         item: movement.item,
@@ -911,14 +964,67 @@ function App() {
       uniqueMovements.push(movement)
     }
 
-    let added = uniqueMovements.length
+    let added = 0
     if (supabase && session) {
       try {
-        const savedMovements = await saveMovements(uniqueMovements, session.user.id)
-        added = savedMovements.length
-        skipped += uniqueMovements.length - savedMovements.length
-        setMovements((current) => [...current, ...savedMovements])
+        const purchases = uniqueMovements.filter((m) => Number(m.qin) > 0)
+        const others = uniqueMovements.filter((m) => !(Number(m.qin) > 0))
+
+        // 1. تسجيل فواتير الشراء المستوردة عبر دالة RPC الذرية لزيادة عهدة المخزن الرئيسي بأمان
+        for (const p of purchases) {
+          try {
+            const { data: rpcData, error: rpcErr } = await supabase.rpc('record_purchase', {
+              p_fingerprint: movementFingerprint(p),
+              p_item: p.item,
+              p_qty: Number(p.qin),
+              p_unit_price: Number(p.price) || 0,
+              p_supplier: p.from || '',
+              p_notes: p.notes || '',
+              p_created_by: session.user.email || '',
+              p_received_on: p.date || null,
+              p_invoice_number: p.inv || '',
+            })
+            if (!rpcErr) {
+              p.id = rpcData?.movement_id || p.id
+              p.custodyApplied = true
+              added += 1
+            }
+          } catch (pErr) {
+            console.warn('Import purchase RPC error:', pErr)
+          }
+        }
+
+        // 2. تسجيل حركات الصرف والتحويل الأخرى
+        if (others.length > 0) {
+          const savedOthers = await saveMovements(others, session.user.id)
+          added += savedOthers.length
+          for (const m of others) {
+            try {
+              syncOutwardMovementToCustody(m)
+            } catch (custodyErr) {
+              console.warn('Custody synchronization on import warning:', custodyErr)
+            }
+          }
+        }
+
+        setMovements((current) => [...current, ...uniqueMovements])
         setSyncStatus('synced')
+
+        // 3. تحديث عهدة المخازن من السحابة لضمان مطابقة التعديلات الذرية
+        if (purchases.length > 0) {
+          try {
+            const cloudCustody = await fetchCustodyItemsFromCloud()
+            if (cloudCustody.length > 0) {
+              setCustodyItems(cloudCustody)
+              saveCustodyItems(cloudCustody)
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('custody-changed'))
+              }
+            }
+          } catch (custodyReloadErr) {
+            console.warn('Could not reload custody after import purchases:', custodyReloadErr)
+          }
+        }
       } catch (error) {
         setSyncStatus('error')
         setSyncError(error instanceof Error ? error.message : 'تعذر استيراد الحركات إلى Supabase.')
@@ -926,19 +1032,19 @@ function App() {
       }
     } else {
       setMovements((current) => [...current, ...uniqueMovements])
-    }
-
-    // مزامنة الحركات المستوردة تلقائياً مع عهدة المخازن
-    try {
-      for (const m of uniqueMovements) {
-        if (Number(m.qin) > 0) {
-          syncInwardMovementToCustody(m)
-        } else if (Number(m.qout) > 0) {
-          syncOutwardMovementToCustody(m)
+      added = uniqueMovements.length
+      // مزامنة الحركات المستوردة تلقائياً مع عهدة المخازن محلياً (وضع عدم الاتصال)
+      try {
+        for (const m of uniqueMovements) {
+          if (Number(m.qin) > 0) {
+            syncInwardMovementToCustody(m)
+          } else if (Number(m.qout) > 0) {
+            syncOutwardMovementToCustody(m)
+          }
         }
+      } catch (custodyErr) {
+        console.warn('Custody synchronization on import warning:', custodyErr)
       }
-    } catch (custodyErr) {
-      console.warn('Custody synchronization on import warning:', custodyErr)
     }
 
     void logAuditEvent({

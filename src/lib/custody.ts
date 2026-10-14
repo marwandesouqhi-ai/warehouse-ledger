@@ -814,23 +814,66 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
 export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<void> {
   if (!supabase || items.length === 0) return
   try {
-    const rows = items.map((item) => ({
-      id: item.id,
-      warehouse_id: item.warehouseId,
-      code: item.code || '',
-      name: item.name,
-      category: item.category || '',
-      quantity: item.quantity,
-      unit: item.unit || 'قطعة',
-      unit_price: item.unitPrice ?? null,
-      value: item.value,
-      condition: item.condition || 'good',
-      custodian: item.custodian || '',
-      room_location: item.roomLocation || '',
-      serial_number: item.serialNumber || '',
-      notes: item.notes || '',
-      custody_type: item.custodyType || 'مستديمة',
-    }))
+    // 1. Fetch current cloud state to detect external increments (e.g. from RPC record_purchase)
+    const { data: cloudRows, error: fetchErr } = await supabase
+      .from('custody_items')
+      .select('id, warehouse_id, name, quantity, value, updated_at')
+
+    const cloudMap = new Map<string, { quantity: number; value: number }>()
+    const cloudNameMap = new Map<string, { quantity: number; value: number }>()
+    if (!fetchErr && cloudRows) {
+      for (const r of cloudRows) {
+        const q = Number(r.quantity) || 0
+        const v = Number(r.value) || 0
+        cloudMap.set(r.id, { quantity: q, value: v })
+        if (r.warehouse_id === 'main' && r.name) {
+          cloudNameMap.set(r.name.trim().toLowerCase(), { quantity: q, value: v })
+        }
+      }
+    }
+
+    // 2. Prepare rows, preserving any cloud-side increments if local is stale
+    const rows = items.map((item) => {
+      let quantityToSave = item.quantity
+      let valueToSave = item.value
+
+      const cloudById = cloudMap.get(item.id)
+      const cloudByName = item.warehouseId === 'main' ? cloudNameMap.get(item.name.trim().toLowerCase()) : undefined
+      const cloudItem = cloudById || cloudByName
+
+      // If cloud has higher quantity in main warehouse (e.g. from record_purchase RPC),
+      // preserve the higher quantity to prevent accidental overwrite
+      if (cloudItem && item.warehouseId === 'main') {
+        if (cloudItem.quantity > item.quantity) {
+          quantityToSave = cloudItem.quantity
+          item.quantity = cloudItem.quantity
+          if (cloudItem.value > item.value) {
+            valueToSave = cloudItem.value
+            item.value = cloudItem.value
+          }
+        }
+      }
+
+      return {
+        id: item.id,
+        warehouse_id: item.warehouseId,
+        code: item.code || '',
+        name: item.name,
+        category: item.category || '',
+        quantity: quantityToSave,
+        unit: item.unit || 'قطعة',
+        unit_price: item.unitPrice ?? null,
+        value: valueToSave,
+        condition: item.condition || 'good',
+        custodian: item.custodian || '',
+        room_location: item.roomLocation || '',
+        serial_number: item.serialNumber || '',
+        notes: item.notes || '',
+        custody_type: item.custodyType || 'مستديمة',
+        updated_at: new Date().toISOString(),
+      }
+    })
+
     await supabase.from('custody_items').upsert(rows, { onConflict: 'id' })
   } catch (err) {
     console.warn('Could not sync custody items to cloud:', err)
