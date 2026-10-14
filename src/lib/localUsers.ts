@@ -50,11 +50,24 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       activated_at: user.activatedAt || null,
       last_login_at: user.lastLoginAt || null,
     }
-    // Only persist password in legacy mode if present; never write in secure mode
-    if (!isAuthSecureMode() && user.password) {
+    if (user.password && user.password.trim().length > 0) {
       payload.password = user.password
     }
-    await supabase.from('app_users').upsert(payload, { onConflict: 'username' })
+
+    const { data: existing } = await supabase
+      .from('app_users')
+      .select('id, password')
+      .eq('username', user.username.toLowerCase())
+      .maybeSingle()
+
+    if (existing) {
+      if (!payload.password && existing.password) {
+        payload.password = existing.password
+      }
+      await supabase.from('app_users').update(payload).eq('id', existing.id)
+    } else {
+      await supabase.from('app_users').insert(payload)
+    }
   } catch (err) {
     console.warn('Could not save user to cloud:', err)
   }

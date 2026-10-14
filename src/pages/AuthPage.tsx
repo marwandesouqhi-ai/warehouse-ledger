@@ -15,6 +15,13 @@ import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
 import { logAuditEvent } from '../lib/auditLogger'
 import { isSupabaseConfigured, toSyntheticEmail } from '../lib/authMode'
+import {
+    loadLocalUsers,
+    setLocalSession,
+    type LocalUser,
+    type UserRole,
+    type UserStatus,
+} from '../lib/localUsers'
 
 type AuthMode = 'signIn' | 'forgotPassword' | 'setNewPassword'
 
@@ -140,6 +147,88 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 if (!retry.error) {
                     signInData = retry.data
                     signInError = null
+                }
+            }
+
+            // Enterprise Directory Fallback: Check if user exists in public.app_users or local store
+            if (signInError && supabase) {
+                const lookupUsername = cleanUser.endsWith('@warehouse.local')
+                    ? cleanUser.replace(/@warehouse\.local$/, '')
+                    : cleanUser
+
+                try {
+                    const { data: appUser, error: appUserErr } = await supabase
+                        .from('app_users')
+                        .select('*')
+                        .ilike('username', lookupUsername)
+                        .maybeSingle()
+
+                    if (!appUserErr && appUser) {
+                        if (appUser.status !== 'active') {
+                            throw new Error('هذا الحساب قيد التعطيل أو بانتظار التفعيل. يُرجى مراجعة مدير النظام.')
+                        }
+
+                        if (appUser.password && appUser.password === password) {
+                            const verifiedUser: LocalUser = {
+                                id: appUser.id,
+                                username: appUser.username,
+                                displayName: appUser.display_name || appUser.username,
+                                password: '',
+                                role: (appUser.role || 'viewer') as UserRole,
+                                activationCode: appUser.activation_code || '',
+                                status: (appUser.status || 'active') as UserStatus,
+                                createdAt: appUser.created_at || new Date().toISOString(),
+                                notes: appUser.notes || undefined,
+                                permissions: Array.isArray(appUser.permissions)
+                                    ? appUser.permissions
+                                    : typeof appUser.permissions === 'string'
+                                        ? (() => { try { return JSON.parse(appUser.permissions) } catch { return [] } })()
+                                        : [],
+                            }
+
+                            void supabase
+                                .from('app_users')
+                                .update({ last_login_at: new Date().toISOString() })
+                                .eq('id', appUser.id)
+
+                            setLocalSession(verifiedUser)
+
+                            void logAuditEvent({
+                                action: `تسجيل دخول مستخدم النظام: ${verifiedUser.username} (${verifiedUser.role})`,
+                                entity_type: 'auth',
+                                details: {
+                                    username: verifiedUser.username,
+                                    role: verifiedUser.role,
+                                    auth_provider: 'enterprise_directory',
+                                },
+                            })
+
+                            setNotice(`مرحباً بك يا ${verifiedUser.displayName}! تم تسجيل الدخول بنجاح.`)
+                            setTimeout(() => {
+                                onPasswordSet?.()
+                            }, 400)
+                            return
+                        }
+                    }
+                } catch (checkErr) {
+                    if (checkErr instanceof Error && checkErr.message.includes('التعطيل')) {
+                        throw checkErr
+                    }
+                }
+
+                // If cloud check did not match, check local cache fallback
+                const cachedUsers = loadLocalUsers()
+                const cachedMatch = cachedUsers.find((u) => u.username.toLowerCase() === lookupUsername)
+                if (cachedMatch && cachedMatch.password && cachedMatch.password === password) {
+                    if (cachedMatch.status !== 'active') {
+                        throw new Error('هذا الحساب قيد التعطيل أو بانتظار التفعيل. يُرجى مراجعة مدير النظام.')
+                    }
+                    setLocalSession(cachedMatch)
+                    setNotice(`مرحباً بك يا ${cachedMatch.displayName}! تم تسجيل الدخول بنجاح.`)
+                    setTimeout(() => {
+                        onPasswordSet?.()
+                    }, 400)
+                    return
                 }
             }
 
