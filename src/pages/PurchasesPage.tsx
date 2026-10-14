@@ -25,6 +25,8 @@ import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
 import { can, canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
+import ProcurementSubNav from '../components/ProcurementSubNav'
+import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
 
 type PurchasesPageProps = {
   movements: FixtureMovement[]
@@ -89,6 +91,20 @@ export default function PurchasesPage({
   const [formNotes, setFormNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>([])
+
+  useEffect(() => {
+    void fetchActiveSuppliers().then((list) => {
+      if (list && list.length > 0) setSuppliersList(list)
+    }).catch(() => {
+      // offline fallback
+    })
+  }, [])
+
+  const selectedSupplierObj = useMemo(() => {
+    if (!formFrom.trim()) return null
+    return suppliersList.find((s) => s.name.trim() === formFrom.trim())
+  }, [formFrom, suppliersList])
 
   useEffect(() => {
     if (globalSearchTerm) {
@@ -294,8 +310,11 @@ export default function PurchasesPage({
 
   return (
     <section className="movement-page card-surface purchases-page">
+      {/* Sub navigation connecting the 5 procurement sub-pages */}
+      <ProcurementSubNav activeTab="invoices" />
+
       {/* KPI Cards */}
-      <div className="purchases-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+      <div className="purchases-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginTop: '14px', marginBottom: '20px' }}>
         <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(14, 124, 134, 0.07)', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent)' }}>
             <Receipt size={20} />
@@ -407,13 +426,28 @@ export default function PurchasesPage({
 
               <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
                 المورد / الشركة الموردة
-                <input
-                  type="text"
-                  value={formFrom}
-                  onChange={(e) => setFormFrom(e.target.value)}
-                  placeholder="اسم الشركة أو المورد"
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    list="registered-suppliers-list"
+                    value={formFrom}
+                    onChange={(e) => setFormFrom(e.target.value)}
+                    placeholder="اختر مورداً مسجلاً أو اكتب اسماً جديداً..."
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  />
+                  <datalist id="registered-suppliers-list">
+                    {suppliersList.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.category ? `(${s.category})` : ''} {s.status === 'suspended' ? '⚠️ موقوف' : ''}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                {selectedSupplierObj?.status === 'suspended' && (
+                  <span style={{ fontSize: '0.78rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    ⚠️ تنبيه: هذا المورد موقوف حالياً في سجل الموردين. يمكنك المتابعة إذا كانت الفاتورة تاريخية.
+                  </span>
+                )}
               </label>
 
               <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
