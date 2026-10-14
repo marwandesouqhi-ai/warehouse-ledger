@@ -1,4 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src/lib/settings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/settings')>()
+  return {
+    ...actual,
+    saveAppSettingsToCloud: vi.fn().mockImplementation(async (settings) => {
+      localStorage.setItem('warehouse-ledger-settings', JSON.stringify(settings))
+    }),
+  }
+})
+
 import {
   exportLocalBackup,
   backupToSupabaseCloud,
@@ -138,9 +149,9 @@ describe('System Backup Suite', () => {
       version: '1.0.0' as const,
       backupDate: '2026-10-12T09:00:00.000Z',
       generator: { role: 'admin' },
-      metadata: { organization: 'معهد التكنولوجيا', department: 'المخزن الهندسي', currency: 'EGP', counts: { movements: 1, custody: 1, users: 1, auditLogs: 0 } },
+      metadata: { organization: 'جامعة الزقازيق الأهلية', department: 'المخازن', currency: 'EGP', counts: { movements: 1, custody: 1, users: 1, auditLogs: 0 } },
       data: {
-        settings: { organization: 'معهد التكنولوجيا', department: 'المخزن الهندسي', currency: 'EGP' as const },
+        settings: { organization: 'جامعة الزقازيق الأهلية', department: 'المخازن', currency: 'EGP' as const },
         movements: [{ id: 'm-test-1', item: 'كابلات شبكة', qin: '50' } as any],
         custody: [{ id: 'c-test-1', warehouseId: 'main', name: 'سويتش شبكات', quantity: 2, value: 8000 } as any],
         users: [{ id: 'u-admin-test', username: 'admin-test', role: 'admin' } as any],

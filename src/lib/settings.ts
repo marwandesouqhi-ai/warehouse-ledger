@@ -12,8 +12,8 @@ export const settingsStorageKey = 'warehouse-ledger-settings'
 export const logoBackupStorageKey = 'warehouse-ledger-custom-logo'
 
 export const defaultSettings: AppSettings = {
-  organization: 'المعهد',
-  department: 'قسم المخازن',
+  organization: 'جامعة الزقازيق الأهلية',
+  department: 'المخازن',
   currency: 'EGP',
 }
 
@@ -23,6 +23,15 @@ export function loadAppSettings(): AppSettings {
     const backupLogo = localStorage.getItem(logoBackupStorageKey) || ''
     if (stored) {
       const parsed = JSON.parse(stored) as Partial<AppSettings>
+
+      // Migrate obsolete placeholder names to the designated institution
+      if (!parsed.organization || parsed.organization === 'المعهد' || parsed.organization === 'معهد التكنولوجيا') {
+        parsed.organization = defaultSettings.organization
+      }
+      if (!parsed.department || parsed.department === 'قسم المخازن' || parsed.department === 'المخزن الهندسي') {
+        parsed.department = defaultSettings.department
+      }
+
       if (!parsed.logoDataUrl && !parsed.logoUrl && backupLogo) {
         if (backupLogo.startsWith('data:')) {
           parsed.logoDataUrl = backupLogo
@@ -30,13 +39,18 @@ export function loadAppSettings(): AppSettings {
           parsed.logoUrl = backupLogo
         }
       }
-      return { ...defaultSettings, ...parsed }
+      const loaded = { ...defaultSettings, ...parsed }
+      // Keep local storage up to date if migrated
+      localStorage.setItem(settingsStorageKey, JSON.stringify(loaded))
+      return loaded
     }
     if (backupLogo) {
-      return {
+      const loaded = {
         ...defaultSettings,
         ...(backupLogo.startsWith('data:') ? { logoDataUrl: backupLogo } : { logoUrl: backupLogo }),
       }
+      localStorage.setItem(settingsStorageKey, JSON.stringify(loaded))
+      return loaded
     }
   } catch {
     return defaultSettings
@@ -62,12 +76,40 @@ export function resolveSettingsWithCloud(
       ? cloudSettings.logoUrl
       : current.logoUrl || ''
 
-  return {
+  let resolvedOrg = cloudSettings.organization || current.organization || defaultSettings.organization
+  if (resolvedOrg === 'المعهد' || resolvedOrg === 'معهد التكنولوجيا') {
+    resolvedOrg = current.organization && current.organization !== 'المعهد' && current.organization !== 'معهد التكنولوجيا'
+      ? current.organization
+      : defaultSettings.organization
+  }
+
+  let resolvedDept = cloudSettings.department || current.department || defaultSettings.department
+  if (resolvedDept === 'قسم المخازن' || resolvedDept === 'المخزن الهندسي') {
+    resolvedDept = current.department && current.department !== 'قسم المخازن' && current.department !== 'المخزن الهندسي'
+      ? current.department
+      : defaultSettings.department
+  }
+
+  const resolved: AppSettings = {
     ...current,
     ...cloudSettings,
+    organization: resolvedOrg,
+    department: resolvedDept,
     logoDataUrl: resolvedLogoDataUrl,
     logoUrl: resolvedLogoUrl,
   }
+
+  try {
+    localStorage.setItem(settingsStorageKey, JSON.stringify(resolved))
+    const currentLogo = resolved.logoDataUrl || resolved.logoUrl || ''
+    if (currentLogo) {
+      localStorage.setItem(logoBackupStorageKey, currentLogo)
+    }
+  } catch {
+    // ignore
+  }
+
+  return resolved
 }
 
 export async function fetchAppSettingsFromCloud(): Promise<AppSettings | null> {
@@ -75,9 +117,20 @@ export async function fetchAppSettingsFromCloud(): Promise<AppSettings | null> {
   try {
     const { data, error } = await supabase.from('app_settings').select('*').eq('id', 'default').maybeSingle()
     if (error || !data) return null
+
+    let org = data.organization || defaultSettings.organization
+    if (org === 'المعهد' || org === 'معهد التكنولوجيا') {
+      org = defaultSettings.organization
+    }
+
+    let dept = data.department || defaultSettings.department
+    if (dept === 'قسم المخازن' || dept === 'المخزن الهندسي') {
+      dept = defaultSettings.department
+    }
+
     return {
-      organization: data.organization || defaultSettings.organization,
-      department: data.department || defaultSettings.department,
+      organization: org,
+      department: dept,
       currency: (data.currency as AppSettings['currency']) || defaultSettings.currency,
       logoUrl: data.logo_url || undefined,
       logoDataUrl: data.logo_data_url || undefined,
@@ -96,6 +149,9 @@ export async function saveAppSettingsToCloud(settings: AppSettings): Promise<voi
       localStorage.setItem(logoBackupStorageKey, currentLogo)
     } else {
       localStorage.removeItem(logoBackupStorageKey)
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('settings-changed'))
     }
   } catch (err) {
     console.warn('Could not save settings locally:', err)

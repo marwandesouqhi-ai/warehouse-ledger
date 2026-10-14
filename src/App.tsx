@@ -282,6 +282,26 @@ function App() {
       }
     }
   }, [logoSource])
+
+  useEffect(() => {
+    let active = true
+    void fetchAppSettingsFromCloud().then((cloudSettings) => {
+      if (active && cloudSettings) {
+        setSettings((current) => resolveSettingsWithCloud(current, cloudSettings))
+      }
+    })
+
+    function handleSettingsSync() {
+      setSettings(loadAppSettings())
+    }
+    window.addEventListener('settings-changed', handleSettingsSync)
+    window.addEventListener('storage', handleSettingsSync)
+    return () => {
+      active = false
+      window.removeEventListener('settings-changed', handleSettingsSync)
+      window.removeEventListener('storage', handleSettingsSync)
+    }
+  }, [])
   
   // Dashboard Interactive States
   const [chartMetric, setChartMetric] = useState<'value' | 'qty'>('value')
@@ -704,8 +724,16 @@ function App() {
 
   useEffect(() => {
     if (session?.user?.user_metadata?.app_settings) {
-      const cloudSettings = session.user.user_metadata.app_settings as Partial<AppSettings>
-      setSettings((current) => resolveSettingsWithCloud(current, cloudSettings))
+      const userSettings = { ...(session.user.user_metadata.app_settings as Partial<AppSettings>) }
+      if (userSettings.organization === 'المعهد' || userSettings.organization === 'معهد التكنولوجيا') {
+        delete userSettings.organization
+      }
+      if (userSettings.department === 'قسم المخازن' || userSettings.department === 'المخزن الهندسي') {
+        delete userSettings.department
+      }
+      if (Object.keys(userSettings).length > 0) {
+        setSettings((current) => resolveSettingsWithCloud(current, userSettings))
+      }
     }
   }, [session])
 
