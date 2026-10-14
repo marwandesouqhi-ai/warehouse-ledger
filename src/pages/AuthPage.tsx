@@ -169,21 +169,27 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         }
 
                         if (appUser.password && appUser.password === password) {
+                            const isFounder = appUser.username.toLowerCase() === 'marwan-desouky'
+                            const roleToAssign: UserRole = isFounder ? 'system_admin' : ((appUser.role || 'viewer') as UserRole)
+                            const permissionsToAssign = isFounder
+                                ? ['view_audit', 'view_settings', 'manage_records']
+                                : (Array.isArray(appUser.permissions)
+                                    ? appUser.permissions
+                                    : typeof appUser.permissions === 'string'
+                                        ? (() => { try { return JSON.parse(appUser.permissions) } catch { return [] } })()
+                                        : [])
+
                             const verifiedUser: LocalUser = {
                                 id: appUser.id,
                                 username: appUser.username,
                                 displayName: appUser.display_name || appUser.username,
                                 password: '',
-                                role: (appUser.role || 'viewer') as UserRole,
+                                role: roleToAssign,
                                 activationCode: appUser.activation_code || '',
                                 status: (appUser.status || 'active') as UserStatus,
                                 createdAt: appUser.created_at || new Date().toISOString(),
                                 notes: appUser.notes || undefined,
-                                permissions: Array.isArray(appUser.permissions)
-                                    ? appUser.permissions
-                                    : typeof appUser.permissions === 'string'
-                                        ? (() => { try { return JSON.parse(appUser.permissions) } catch { return [] } })()
-                                        : [],
+                                permissions: permissionsToAssign,
                             }
 
                             void supabase

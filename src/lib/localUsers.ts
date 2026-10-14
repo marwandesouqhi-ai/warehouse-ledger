@@ -176,7 +176,7 @@ const DEFAULT_ADMIN: LocalUser = {
   username: 'marwan-desouky',
   displayName: 'مروان دسوقي (مدير النظام)',
   password: '', // Redacted / passwordless in code
-  role: 'admin',
+  role: 'system_admin',
   activationCode: '1001',
   status: 'active',
   createdAt: new Date().toISOString(),
@@ -282,8 +282,16 @@ export function loadLocalUsers(): LocalUser[] {
           needsSave = true
         } else {
           // Ensure system admin status and active state without overwriting custom password
+          if (users[marwanIdx].role !== 'system_admin') {
+            users[marwanIdx].role = 'system_admin'
+            needsSave = true
+          }
           if (users[marwanIdx].status !== 'active') {
             users[marwanIdx].status = 'active'
+            needsSave = true
+          }
+          if (!users[marwanIdx].permissions || users[marwanIdx].permissions.length === 0) {
+            users[marwanIdx].permissions = ['view_audit', 'view_settings', 'manage_records']
             needsSave = true
           }
         }
@@ -487,7 +495,20 @@ export function getLocalSession(): LocalUserSession | null {
     if (typeof window === 'undefined') return null
     const raw = sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY) || localStorage.getItem(LOCAL_SESSION_STORAGE_KEY)
     if (raw) {
-      return JSON.parse(raw) as LocalUserSession
+      const sess = JSON.parse(raw) as LocalUserSession
+      const u = sess?.user
+      if (u) {
+        const uName = (u.user_metadata?.username || u.app_metadata?.username || u.email || '').toLowerCase()
+        if (uName === 'marwan-desouky') {
+          sess.user.app_metadata.role = 'system_admin'
+          sess.user.app_metadata.system_admin = true
+          sess.user.user_metadata.role = 'system_admin'
+          if (!sess.user.app_metadata.permissions || sess.user.app_metadata.permissions.length === 0) {
+            sess.user.app_metadata.permissions = ['view_audit', 'view_settings', 'manage_records']
+          }
+        }
+      }
+      return sess
     }
   } catch (err) {
     console.warn('Could not read local session:', err)
@@ -496,7 +517,12 @@ export function getLocalSession(): LocalUserSession | null {
 }
 
 export function setLocalSession(user: LocalUser): LocalUserSession {
-  const isSysAdmin = user.role === 'system_admin'
+  const isSysAdmin = user.role === 'system_admin' || user.username.toLowerCase() === 'marwan-desouky'
+  const effectiveRole: UserRole = isSysAdmin ? 'system_admin' : user.role
+  const effectivePermissions = isSysAdmin
+    ? ['view_audit', 'view_settings', 'manage_records']
+    : (user.permissions || [])
+
   const sessionObj: LocalUserSession = {
     user: {
       id: user.id,
@@ -505,13 +531,13 @@ export function setLocalSession(user: LocalUser): LocalUserSession {
         username: user.username,
         name: user.displayName,
         displayName: user.displayName,
-        role: user.role,
-        permissions: user.permissions || [],
+        role: effectiveRole,
+        permissions: effectivePermissions,
       },
       app_metadata: {
-        role: user.role,
+        role: effectiveRole,
         system_admin: isSysAdmin,
-        permissions: user.permissions || [],
+        permissions: effectivePermissions,
         username: user.username,
       },
     },

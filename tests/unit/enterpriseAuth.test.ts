@@ -101,4 +101,27 @@ describe('Enterprise Directory Authentication & User Provisioning Suite', () => 
     const payloadPassed = updateSpy.mock.calls[0][0]
     expect(payloadPassed.password).toBe('BrandNewSecurePassword123!')
   })
+
+  it('4. setLocalSession and getLocalSession strictly assign system_admin to founder marwan-desouky', () => {
+    const founderUser: LocalUser = {
+      id: 'usr-admin-marwan',
+      username: 'marwan-desouky',
+      displayName: 'مروان دسوقي (مدير النظام)',
+      password: '',
+      role: 'admin', // even if stored as admin
+      activationCode: '1001',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    }
+
+    const session = setLocalSession(founderUser)
+    expect(session.user.app_metadata.role).toBe('system_admin')
+    expect(session.user.app_metadata.system_admin).toBe(true)
+    expect(session.user.app_metadata.permissions).toContain('view_audit')
+    expect(session.user.app_metadata.permissions).toContain('view_settings')
+
+    const loaded = getLocalSession()
+    expect(loaded?.user.app_metadata.role).toBe('system_admin')
+    expect(loaded?.user.app_metadata.system_admin).toBe(true)
+  })
 })
