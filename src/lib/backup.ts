@@ -57,7 +57,17 @@ export function getStoredMovements(): FixtureMovement[] {
     const raw = localStorage.getItem('warehouse-ledger-movements')
     if (raw) {
       const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) return parsed as FixtureMovement[]
+      if (Array.isArray(parsed)) {
+        return (parsed as FixtureMovement[])
+          .filter((m) => (Number(m.qin) || 0) > 0)
+          .map((m) => ({
+            ...m,
+            to: '',
+            permit: '',
+            issue: '',
+            qout: '',
+          }))
+      }
     }
   } catch {
     // ignore

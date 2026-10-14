@@ -69,6 +69,7 @@ import {
   saveCustodyItemsToCloud,
   syncInwardMovementToCustody,
   syncOutwardMovementToCustody,
+  fixtureCustodyItems,
   WAREHOUSES,
 } from './lib/custody'
 import {
@@ -116,16 +117,18 @@ function loadMovements(): FixtureMovement[] {
       if (Array.isArray(parsed)) {
         // Migration: Strip disbursement data from purchases if present in existing localStorage
         const hasLegacyDisbursements = parsed.some(
-          (m: FixtureMovement) => Number(m.qin) > 0 && (Number(m.qout) > 0 || m.to || m.permit || m.issue)
+          (m: FixtureMovement) => Number(m.qout) > 0 || Boolean(m.to) || Boolean(m.permit) || Boolean(m.issue)
         )
         if (hasLegacyDisbursements) {
-          const cleaned = parsed.map((m: FixtureMovement) => ({
-            ...m,
-            to: '',
-            permit: '',
-            issue: '',
-            qout: '',
-          }))
+          const cleaned = parsed
+            .filter((m: FixtureMovement) => (Number(m.qin) || 0) > 0)
+            .map((m: FixtureMovement) => ({
+              ...m,
+              to: '',
+              permit: '',
+              issue: '',
+              qout: '',
+            }))
           try {
             localStorage.setItem(storageKey, JSON.stringify(cleaned))
           } catch {
@@ -296,6 +299,18 @@ function App() {
     }
     window.addEventListener('custody-changed', handleCustodySync)
     window.addEventListener('storage', handleCustodySync)
+
+    // Ensure Main Warehouse contains the purchase items if currently missing
+    setCustodyItems((current) => {
+      const hasMain = current.some((i) => i.warehouseId === 'main')
+      if (!hasMain && fixtureCustodyItems.length > 0) {
+        const merged = [...fixtureCustodyItems.map((i) => ({ ...i })), ...current]
+        saveCustodyItems(merged)
+        return merged
+      }
+      return current
+    })
+
     return () => {
       window.removeEventListener('custody-changed', handleCustodySync)
       window.removeEventListener('storage', handleCustodySync)
@@ -633,15 +648,19 @@ function App() {
       try {
         const cloudCustody = await fetchCustodyItemsFromCloud()
         if (cloudCustody.length > 0) {
-          setCustodyItems(cloudCustody)
-          saveCustodyItems(cloudCustody)
+          const hasMain = cloudCustody.some((i) => i.warehouseId === 'main')
+          const finalItems = hasMain ? cloudCustody : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudCustody]
+          setCustodyItems(finalItems)
+          saveCustodyItems(finalItems)
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('custody-changed'))
           }
         } else {
           const localCustody = loadCustodyItems()
-          if (localCustody.length > 0) {
-            void saveCustodyItemsToCloud(localCustody)
+          const hasMain = localCustody.some((i) => i.warehouseId === 'main')
+          const finalItems = hasMain ? localCustody : [...fixtureCustodyItems.map((i) => ({ ...i })), ...localCustody]
+          if (finalItems.length > 0) {
+            void saveCustodyItemsToCloud(finalItems)
           }
         }
       } catch {

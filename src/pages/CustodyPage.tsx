@@ -44,6 +44,7 @@ import {
   loadCustodyItems,
   saveCustodyItems,
   syncOutwardMovementToCustody,
+  fixtureCustodyItems,
   WAREHOUSES,
   type CustodyCategory,
   type CustodyCondition,
@@ -163,13 +164,26 @@ export default function CustodyPage({
     window.addEventListener('custody-changed', handleSyncUpdate)
     window.addEventListener('storage', handleSyncUpdate)
 
+    // Ensure main warehouse items exist locally if missing
+    setItems((currentItems) => {
+      const hasMain = currentItems.some((i) => i.warehouseId === 'main')
+      if (!hasMain && fixtureCustodyItems.length > 0) {
+        const merged = [...fixtureCustodyItems.map((i) => ({ ...i })), ...currentItems]
+        saveCustodyItems(merged)
+        return merged
+      }
+      return currentItems
+    })
+
     // Direct cloud sync on mount to ensure complete and up-to-date records
     let isMounted = true
     void fetchCustodyItemsFromCloud().then((cloudItems) => {
       if (!isMounted) return
       if (cloudItems && cloudItems.length > 0) {
-        setItems(cloudItems)
-        saveCustodyItems(cloudItems)
+        const hasMain = cloudItems.some((i) => i.warehouseId === 'main')
+        const finalItems = hasMain ? cloudItems : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudItems]
+        setItems(finalItems)
+        saveCustodyItems(finalItems)
       }
     })
 
