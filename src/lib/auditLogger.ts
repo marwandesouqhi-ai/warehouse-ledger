@@ -102,7 +102,7 @@ export async function logAuditEvent(params: {
     const localEntry: AuditLogEntry = {
         id: `local-log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         user_id: userId,
-        user_email: userEmail || 'مستخدم النظام',
+        user_email: userEmail || (userId ? `user-${userId.slice(0, 8)}` : ''),
         action: params.action,
         entity_type: params.entity_type ?? 'general',
         entity_id: params.entity_id ?? '',
@@ -115,12 +115,12 @@ export async function logAuditEvent(params: {
     // Always persist to local storage cache
     saveLocalAuditLog(localEntry)
 
-    // Also persist to Supabase if connected
-    if (supabase) {
+    // Persist to Supabase only if an authenticated session exists with a real user identity
+    if (supabase && (userId || userEmail)) {
         try {
             await supabase.from('audit_logs').insert({
                 user_id: userId,
-                user_email: userEmail || 'مجهول',
+                user_email: userEmail,
                 action: params.action,
                 entity_type: params.entity_type ?? 'general',
                 entity_id: params.entity_id ?? '',
@@ -131,6 +131,8 @@ export async function logAuditEvent(params: {
         } catch (err) {
             console.warn('Failed to log audit event to Supabase:', err)
         }
+    } else if (supabase && !userId && !userEmail) {
+        console.warn('Skipping cloud audit log insert: no authenticated session active (stored locally).')
     }
 }
 
