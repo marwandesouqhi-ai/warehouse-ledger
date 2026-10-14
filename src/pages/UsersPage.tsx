@@ -232,7 +232,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setShowEditPassword(false)
     }
 
-    function handleSaveEdit(e: React.FormEvent) {
+    async function handleSaveEdit(e: React.FormEvent) {
         e.preventDefault()
         if (!editingUser) return
         setEditError('')
@@ -247,6 +247,46 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
 
         try {
+            // 1. If password was provided, sync to Supabase Auth via admin-users Edge Function
+            if (editPassword && editPassword.trim().length > 0) {
+                if (editPassword.length < 12) {
+                    setEditError('كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً للأمان.')
+                    return
+                }
+                if (supabase && (isSystemAdmin || session)) {
+                    const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-users', {
+                        body: {
+                            action: 'change_password',
+                            username: editingUser.username,
+                            userId: editingUser.id,
+                            newPassword: editPassword,
+                            mustChangePassword: false,
+                        },
+                    })
+                    if (edgeErr || !edgeData?.success) {
+                        throw new Error(edgeErr?.message || edgeData?.error || 'تعذر تحديث كلمة المرور في خادم المصادقة.')
+                    }
+                }
+            }
+
+            // 2. Sync role and permissions to Supabase Auth
+            if (supabase && (isSystemAdmin || session)) {
+                try {
+                    await supabase.functions.invoke('admin-users', {
+                        body: {
+                            action: 'update_user',
+                            userId: editingUser.id,
+                            username: editingUser.username,
+                            displayName: editDisplayName,
+                            role: editRole,
+                            permissions: editPermissions,
+                        },
+                    })
+                } catch (edgeCatch) {
+                    console.warn('admin-users update_user fallback:', edgeCatch)
+                }
+            }
+
             updateLocalUser(editingUser.id, {
                 displayName: editDisplayName,
                 role: editRole,
@@ -335,7 +375,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setModalNewPassword(pwd)
     }
 
-    function handleSaveUserPassword(e: React.FormEvent) {
+    async function handleSaveUserPassword(e: React.FormEvent) {
         e.preventDefault()
         if (!pwdModalUser) return
         setPwdModalError('')
@@ -353,9 +393,27 @@ export default function UsersPage({ session }: UsersPageProps) {
 
         try {
             setPwdModalSaving(true)
+
+            // 1. Sync new password to Supabase Auth via admin-users Edge Function
+            if (supabase && (isSystemAdmin || session)) {
+                const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-users', {
+                    body: {
+                        action: 'change_password',
+                        username: pwdModalUser.username,
+                        userId: pwdModalUser.id,
+                        newPassword: modalNewPassword,
+                        mustChangePassword: false,
+                    },
+                })
+                if (edgeErr || !edgeData?.success) {
+                    throw new Error(edgeErr?.message || edgeData?.error || 'تعذر تحديث كلمة المرور في خادم المصادقة.')
+                }
+            }
+
+            // 2. Update local state and mirror database row
             changeUserPassword(pwdModalUser.id, modalNewPassword)
             reloadUsers()
-            setPwdModalSuccess(`تم تحديث كلمة المرور للمستخدم "${pwdModalUser.username}" بنجاح!`)
+            setPwdModalSuccess(`تم تحديث كلمة المرور للمستخدم "${pwdModalUser.username}" بنجاح! يمكنه تسجيل الدخول بها فوراً.`)
             void logAuditEvent({
                 action: `تغيير كلمة مرور المستخدم: ${pwdModalUser.username}`,
                 entity_type: 'user',

@@ -107,21 +107,7 @@ serve(async (req) => {
 
     const syntheticEmail = `${cleanUsername}@warehouse.local`
 
-    // 3. Check if user already exists in Supabase Auth
-    const { data: authSearch } = await supabaseAdmin.auth.admin.listUsers()
-    const existingAuthUser = (authSearch?.users || []).find(
-      (u) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
-    )
-
-    if (existingAuthUser) {
-      // User already migrated to Supabase Auth -> Proceed with standard client login
-      return new Response(JSON.stringify({ success: true, bridged: false }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // 4. Query mirror row from app_users
+    // 3. Query mirror row from app_users
     const { data: appUser, error: appUserErr } = await supabaseAdmin
       .from("app_users")
       .select("id, username, display_name, password, role, status, permissions")
@@ -139,7 +125,7 @@ serve(async (req) => {
       })
     }
 
-    // 4b. Explicitly reject disabled or suspended accounts
+    // 4. Explicitly reject disabled or suspended accounts
     if (appUser.status === "disabled" || appUser.status === "suspended") {
       await supabaseAdmin.from("login_attempts").insert({
         username: cleanUsername,
@@ -151,7 +137,7 @@ serve(async (req) => {
       })
     }
 
-    // 5. Constant-time password verification against legacy password column
+    // 5. Constant-time password verification against password stored in app_users
     const passwordMatches = await timingSafeEqualString(password, appUser.password || "")
     if (!passwordMatches) {
       await supabaseAdmin.from("login_attempts").insert({
@@ -160,6 +146,37 @@ serve(async (req) => {
       })
       return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
         status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // 6. Check if user already exists in Supabase Auth
+    const { data: authSearch } = await supabaseAdmin.auth.admin.listUsers()
+    const existingAuthUser = (authSearch?.users || []).find(
+      (u) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
+    )
+
+    if (existingAuthUser) {
+      // User exists in Auth, but client signIn failed: sync the updated password into Supabase Auth
+      await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
+        password: password,
+      })
+
+      await supabaseAdmin
+        .from("app_users")
+        .update({
+          auth_user_id: existingAuthUser.id,
+          status: "active",
+        })
+        .eq("id", appUser.id)
+
+      await supabaseAdmin.from("login_attempts").insert({
+        username: cleanUsername,
+        success: true,
+      })
+
+      return new Response(JSON.stringify({ success: true, bridged: true }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }

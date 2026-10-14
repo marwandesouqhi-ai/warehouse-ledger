@@ -268,24 +268,57 @@ serve(async (req) => {
 
     // ─── ACTION: change_password ─────────────────────────────────────────────
     if (action === "change_password") {
-      const { userId, newPassword, mustChangePassword = false } = body
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "معرّف المستخدم مطلوب." }), {
+      const { userId, username, newPassword, mustChangePassword = false } = body
+
+      let targetAuthUser: any = null
+      let targetUsername = username ? normalizeUsername(username) : ""
+
+      // 1. Try finding by Supabase Auth UID if it's a valid UUID
+      if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+        const { data: byId } = await supabaseAdmin.auth.admin.getUserById(userId)
+        if (byId?.user) {
+          targetAuthUser = byId.user
+          targetUsername = targetAuthUser.email?.replace(/@warehouse\.local$/, "") ?? ""
+        }
+      }
+
+      // 2. Look up by username or internal ID in app_users
+      if (!targetAuthUser) {
+        let appUserQuery = supabaseAdmin.from("app_users").select("*")
+        if (targetUsername) {
+          appUserQuery = appUserQuery.ilike("username", targetUsername)
+        } else if (userId) {
+          appUserQuery = appUserQuery.eq("id", userId)
+        }
+        const { data: dbUser } = await appUserQuery.maybeSingle()
+        if (dbUser) {
+          targetUsername = normalizeUsername(dbUser.username)
+          if (dbUser.auth_user_id) {
+            const { data: byAuthId } = await supabaseAdmin.auth.admin.getUserById(dbUser.auth_user_id)
+            if (byAuthId?.user) {
+              targetAuthUser = byAuthId.user
+            }
+          }
+        }
+      }
+
+      // 3. Look up by synthetic email in Auth users list
+      if (!targetAuthUser && targetUsername) {
+        const syntheticEmail = `${targetUsername}@warehouse.local`
+        const { data: authList } = await supabaseAdmin.auth.admin.listUsers()
+        targetAuthUser = (authList?.users || []).find(
+          (u) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
+        )
+      }
+
+      if (!targetUsername) {
+        return new Response(JSON.stringify({ error: "اسم المستخدم أو المعرّف مطلوب." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
 
-      const { data: targetUser, error: getError } = await supabaseAdmin.auth.admin.getUserById(userId)
-      if (getError || !targetUser?.user) {
-        return new Response(JSON.stringify({ error: "المستخدم غير موجود." }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
-      }
-
-      const targetUsername = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
-      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser.user.email)
+      const isTargetProtected = isProtectedUsername(targetUsername) || (targetAuthUser && isProtectedUsername(targetAuthUser.email))
 
       // Strictly forbid changing marwan-desouky's password via admin-users Edge Function
       if (isTargetProtected) {
@@ -309,20 +342,43 @@ serve(async (req) => {
         })
       }
 
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-        password: effectivePassword,
-        app_metadata: {
-          ...targetUser.user.app_metadata,
-          must_change_password: Boolean(mustChangePassword),
-        },
-      })
+      const syntheticEmail = `${targetUsername}@warehouse.local`
 
-      if (updateError) throw updateError
+      if (targetAuthUser) {
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetAuthUser.id, {
+          password: effectivePassword,
+          app_metadata: {
+            ...targetAuthUser.app_metadata,
+            must_change_password: Boolean(mustChangePassword),
+          },
+        })
+        if (updateError) throw updateError
+      } else {
+        // Create in Supabase Auth directly if not yet provisioned
+        const { data: createdAuth, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: syntheticEmail,
+          password: effectivePassword,
+          email_confirm: true,
+          user_metadata: {
+            username: targetUsername,
+          },
+          app_metadata: {
+            username: targetUsername,
+            role: "viewer",
+            system_admin: false,
+            must_change_password: Boolean(mustChangePassword),
+          },
+        })
+        if (createError) throw createError
+        targetAuthUser = createdAuth?.user
+      }
 
-      // Update must_change_password in app_users mirror row
+      // Update app_users row with new password, auth_user_id, and must_change_password
       await supabaseAdmin.from("app_users").update({
+        password: effectivePassword,
+        auth_user_id: targetAuthUser.id,
         must_change_password: Boolean(mustChangePassword),
-      }).eq("username", targetUsername.toLowerCase())
+      }).ilike("username", targetUsername)
 
       // Audit log (never includes password)
       await supabaseAdmin.from("audit_logs").insert({
@@ -330,7 +386,7 @@ serve(async (req) => {
         user_email: caller.email,
         action: `إعادة تعيين كلمة مرور المستخدم: ${targetUsername}`,
         entity_type: "user_management",
-        entity_id: userId,
+        entity_id: targetAuthUser.id,
         details: { target_username: targetUsername, must_change_password: Boolean(mustChangePassword) },
       })
 
