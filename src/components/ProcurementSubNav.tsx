@@ -21,7 +21,7 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
     {
       to: '/purchases/suppliers',
       id: 'suppliers',
-      label: 'إدارة الموردين',
+      label: 'إدارة الموردين والشركات',
       icon: Building2,
       end: false,
     },
@@ -35,8 +35,8 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
   ]
 
   return (
-    <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات">
-      <div className="procurement-subnav-container">
+    <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات" style={{ marginBottom: '20px', borderBottom: '1px solid var(--line)', paddingBottom: '12px' }}>
+      <div className="procurement-subnav-container" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isExplicitActive = activeTab ? activeTab === tab.id : undefined
@@ -50,8 +50,28 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
                 const active = isExplicitActive !== undefined ? isExplicitActive : isActive
                 return `procurement-tab-pill ${active ? 'active' : ''}`
               }}
+              style={({ isActive }) => {
+                const active = isExplicitActive !== undefined ? isExplicitActive : isActive
+                return {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  fontSize: '0.94rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  minHeight: '44px',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease',
+                  background: active ? 'var(--accent)' : 'var(--surface)',
+                  color: active ? '#ffffff' : 'var(--ink)',
+                  border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
+                  boxShadow: active ? '0 4px 12px rgba(8, 127, 104, 0.25)' : 'none',
+                }
+              }}
             >
-              <Icon size={17} />
+              <Icon size={18} />
               <span>{tab.label}</span>
             </NavLink>
           )

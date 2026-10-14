@@ -448,40 +448,40 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
           </p>
         </div>
       ) : (
-        <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-          <table className="movements-table responsive-table">
+        <div className="table-wrapper card-surface" style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--line)' }}>
+          <table className="custom-table" style={{ width: '100%', minWidth: '960px', borderCollapse: 'collapse', textAlign: 'right' }}>
             <thead>
-              <tr>
-                <th>اسم المورد</th>
-                <th>التصنيف</th>
-                <th>جهة الاتصال والهاتف</th>
-                <th style={{ textAlign: 'center' }}>أوامر الشراء</th>
-                <th style={{ textAlign: 'center' }}>الفواتير</th>
-                <th style={{ textAlign: 'center' }}>التقييم</th>
-                <th style={{ textAlign: 'center' }}>الحالة</th>
-                <th style={{ textAlign: 'center' }}>الإجراءات</th>
+              <tr style={{ background: 'rgba(0, 0, 0, 0.02)', borderBottom: '1px solid var(--line)' }}>
+                <th style={{ padding: '14px 16px', minWidth: '220px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>اسم المورد / الشركة</th>
+                <th style={{ padding: '14px 16px', minWidth: '140px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>التصنيف</th>
+                <th style={{ padding: '14px 16px', minWidth: '180px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>جهة الاتصال والهاتف</th>
+                <th style={{ padding: '14px 16px', minWidth: '110px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>أوامر الشراء</th>
+                <th style={{ padding: '14px 16px', minWidth: '100px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الفواتير</th>
+                <th style={{ padding: '14px 16px', minWidth: '100px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>التقييم</th>
+                <th style={{ padding: '14px 16px', minWidth: '110px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الحالة</th>
+                <th style={{ padding: '14px 16px', minWidth: '120px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
               {paginatedSuppliers.map((supplier) => (
-                <tr key={supplier.id}>
-                  <td>
+                <tr key={supplier.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                  <td style={{ padding: '14px 16px' }}>
                     <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{supplier.name}</div>
                     {supplier.commercial_register && (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '2px' }}>
                         س.ت: {supplier.commercial_register}
                       </div>
                     )}
                   </td>
-                  <td>
-                    <span className="badge neutral">{supplier.category || 'عام'}</span>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span className="badge neutral" style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem' }}>{supplier.category || 'عام'}</span>
                   </td>
-                  <td>
+                  <td style={{ padding: '14px 16px' }}>
                     {supplier.contact_name || supplier.phone ? (
                       <div style={{ fontSize: '0.85rem' }}>
-                        <div>{supplier.contact_name || '—'}</div>
+                        <div style={{ fontWeight: 500 }}>{supplier.contact_name || '—'}</div>
                         {supplier.phone && (
-                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', direction: 'ltr', textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', direction: 'ltr', textAlign: 'right', marginTop: '2px' }}>
                             {supplier.phone}
                           </div>
                         )}
@@ -490,21 +490,21 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       <span style={{ color: 'var(--muted)' }}>—</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 600 }}>
                     {supplier.po_count > 0 ? (
-                      <span className="badge info">{supplier.po_count}</span>
+                      <span className="badge info" style={{ padding: '4px 10px', borderRadius: '6px' }}>{supplier.po_count}</span>
                     ) : (
                       <span style={{ color: 'var(--muted)' }}>0</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 600 }}>
                     {supplier.invoices_count > 0 ? (
-                      <span className="badge ok">{supplier.invoices_count}</span>
+                      <span className="badge ok" style={{ padding: '4px 10px', borderRadius: '6px' }}>{supplier.invoices_count}</span>
                     ) : (
                       <span style={{ color: 'var(--muted)' }}>0</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                     {supplier.rating != null ? (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#d97706', fontWeight: 600 }}>
                         <Star size={14} fill="#d97706" />
@@ -514,7 +514,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       <span style={{ color: 'var(--muted)' }}>—</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                     {supplier.status === 'active' && (
                       <span className="stock-status-pill ok" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
                         نشط
@@ -531,13 +531,14 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       </span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', gap: '6px' }}>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
                       <button
                         type="button"
                         className="icon-action-btn"
                         title="تعديل المورد"
                         onClick={() => openEditModal(supplier)}
+                        style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--surface)', cursor: 'pointer' }}
                       >
                         <Pencil size={15} />
                       </button>
@@ -548,7 +549,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                         onChange={(e) => handleQuickStatusChange(supplier, e.target.value as SupplierStatus)}
                         className="quick-status-select"
                         title="تغيير حالة المورد"
-                        style={{ fontSize: '0.78rem', padding: '2px 6px', borderRadius: '6px', border: '1px solid var(--line)' }}
+                        style={{ fontSize: '0.78rem', padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       >
                         <option value="active">نشط</option>
                         <option value="under_review">تحت التقييم</option>
@@ -561,6 +562,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                           className="icon-action-btn danger"
                           title="حذف المورد نهائياً (متاح فقط إذا لم تكن له حركات)"
                           onClick={() => handleDeleteSupplier(supplier)}
+                          style={{ padding: '6px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', cursor: 'pointer' }}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -601,33 +603,64 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
       {/* Add / Edit Supplier Modal */}
       {(isAddModalOpen || editingSupplier) && (
-        <div className="modal-backdrop">
-          <div className="modal-surface card-surface" style={{ maxWidth: '520px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Building2 size={20} />
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 1200,
+            padding: '16px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAddModalOpen(false)
+              setEditingSupplier(null)
+            }
+          }}
+        >
+          <div
+            className="modal-surface card-surface"
+            style={{
+              maxWidth: '540px',
+              width: '100%',
+              padding: '24px',
+              borderRadius: '16px',
+              border: '1px solid var(--line)',
+              background: 'var(--surface)',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', color: 'var(--ink)' }}>
+                <Building2 size={22} style={{ color: 'var(--accent)' }} />
                 {editingSupplier ? 'تعديل بيانات المورد' : 'إضافة مورد جديد'}
               </h3>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
                 onClick={() => { setIsAddModalOpen(false); setEditingSupplier(null) }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
             {actionError && (
-              <div className="inline-message error" style={{ marginBottom: '14px' }}>
+              <div className="inline-message error" style={{ marginBottom: '16px' }}>
                 <AlertTriangle size={16} />
                 <span>{actionError}</span>
               </div>
             )}
 
             <form onSubmit={editingSupplier ? handleEditSupplierSubmit : handleAddSupplierSubmit}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <label>
-                  اسم المورد / الشركة *
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>
+                    اسم المورد / الشركة <span style={{ color: 'var(--bad)' }}>*</span>
+                  </label>
                   <input
                     type="text"
                     value={formName}
@@ -635,70 +668,130 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                     placeholder="مثال: شركة النيل للتوريدات الطبية"
                     required
                     autoFocus
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--surface)',
+                      color: 'var(--ink)',
+                      fontSize: '0.9rem',
+                    }}
                   />
-                </label>
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label>
-                    التصنيف
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>التصنيف</label>
                     <input
                       type="text"
                       value={formCategory}
                       onChange={(e) => setFormCategory(e.target.value)}
                       placeholder="مثال: أجهزة طبية، أدوات كتابية..."
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                      }}
                     />
-                  </label>
+                  </div>
 
-                  <label>
-                    السجل التجاري
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>السجل التجاري</label>
                     <input
                       type="text"
                       value={formCr}
                       onChange={(e) => setFormCr(e.target.value)}
                       placeholder="رقم السجل التجاري"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                      }}
                     />
-                  </label>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label>
-                    اسم مسؤول الاتصال
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>اسم مسؤول الاتصال</label>
                     <input
                       type="text"
                       value={formContact}
                       onChange={(e) => setFormContact(e.target.value)}
                       placeholder="اسم المندوب أو المدير"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                      }}
                     />
-                  </label>
+                  </div>
 
-                  <label>
-                    رقم الهاتف
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>رقم الهاتف</label>
                     <input
                       type="text"
                       value={formPhone}
                       onChange={(e) => setFormPhone(e.target.value)}
                       placeholder="الهاتف أو الجوال"
                       dir="ltr"
-                      style={{ textAlign: 'right' }}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                        textAlign: 'right',
+                      }}
                     />
-                  </label>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label>
-                    الحالة
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>الحالة</label>
                     <select
                       value={formStatus}
                       onChange={(e) => setFormStatus(e.target.value as SupplierStatus)}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                      }}
                     >
                       <option value="active">نشط (معتمد للتوريد)</option>
                       <option value="under_review">تحت التقييم (مسودة / مراجعة)</option>
                       <option value="suspended">موقوف (محظور مؤقتاً)</option>
                     </select>
-                  </label>
+                  </div>
 
-                  <label>
-                    التقييم (1 إلى 5)
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>التقييم (1 إلى 5)</label>
                     <input
                       type="number"
                       min="1"
@@ -707,27 +800,49 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       value={formRating}
                       onChange={(e) => setFormRating(e.target.value)}
                       placeholder="اختياري (1 - 5)"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '0.9rem',
+                      }}
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <label>
-                  ملاحظات إضافية
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>ملاحظات إضافية</label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                     placeholder="شروط التوريد، العنوان، شروط الدفع السابقة..."
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--surface)',
+                      color: 'var(--ink)',
+                      fontSize: '0.9rem',
+                      resize: 'vertical',
+                    }}
                   />
-                </label>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
                 <button
                   type="button"
                   className="secondary-btn"
                   disabled={isSubmitting}
                   onClick={() => { setIsAddModalOpen(false); setEditingSupplier(null) }}
+                  style={{ padding: '9px 18px', borderRadius: '8px', fontWeight: 600 }}
                 >
                   إلغاء
                 </button>
@@ -735,6 +850,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                   type="submit"
                   className="primary-btn"
                   disabled={isSubmitting}
+                  style={{ padding: '9px 20px', borderRadius: '8px', fontWeight: 600 }}
                 >
                   {isSubmitting ? 'جارٍ الحفظ...' : editingSupplier ? 'حفظ التعديلات' : 'تسجيل المورد'}
                 </button>
