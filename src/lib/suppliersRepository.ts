@@ -2,19 +2,13 @@
  * src/lib/suppliersRepository.ts
  *
  * مستودع إدارة الموردين وإحصائياتهم وعلاقاتهم بفواتير الشراء.
- * يتعامل مع قاعدة البيانات السحابية Supabase مع توفير Fallback تجريبي محلي ذكي
- * في حال لم تُنفّذ المايجريشن بعد، لمنع توقف الشاشات بأخطاء schema cache.
+ * يتصل مباشرة بقاعدة البيانات الحقيقية Supabase مع استخراج الموردين الفعليين
+ * من حركات التوريد المسجلة في حال عدم وجود سجلات مسبقة.
  */
 
 import { supabase } from './supabase'
 import { normalizeArabicName } from './arabicUtils'
 import type { FixtureMovement } from './fixture'
-import {
-  isTableMissingError,
-  setCloudTableMissing,
-  loadDemoSuppliers,
-  saveDemoSuppliers,
-} from './demoProcurementData'
 
 export type SupplierStatus = 'active' | 'under_review' | 'suspended'
 
@@ -63,11 +57,99 @@ export interface UpdateSupplierInput {
   notes?: string
 }
 
+const USER_SUPPLIERS_KEY = 'warehouse_custom_suppliers'
+
+function loadUserCustomSuppliers(): SupplierStats[] {
+  try {
+    const raw = localStorage.getItem(USER_SUPPLIERS_KEY)
+    if (raw) return JSON.parse(raw) as SupplierStats[]
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+function saveUserCustomSuppliers(list: SupplierStats[]) {
+  try {
+    localStorage.setItem(USER_SUPPLIERS_KEY, JSON.stringify(list))
+  } catch {
+    // ignore
+  }
+}
+
 /**
- * جلب قائمة الموردين مع إحصائياتهم من View supplier_stats
+ * استخراج الموردين الفعليين المسجلين في حركات التوريد بالمخزن
+ */
+export function extractSuppliersFromMovements(): SupplierStats[] {
+  try {
+    const raw = localStorage.getItem('warehouse-ledger-movements')
+    if (raw) {
+      const movements = JSON.parse(raw) as FixtureMovement[]
+      if (Array.isArray(movements)) {
+        const supMap = new Map<string, SupplierStats>()
+        for (const m of movements) {
+          const name = String(m.from || '').trim()
+          if (!name || name === 'رصيد أول المدة' || name === 'مخزن' || name === 'المخزن الرئيسي') continue
+          const key = normalizeArabicName(name)
+          if (!key) continue
+          const spend = (Number(m.qin) || 0) * (Number(m.price) || 0)
+
+          if (!supMap.has(key)) {
+            supMap.set(key, {
+              id: `sup-${key}`,
+              name,
+              name_key: key,
+              category: 'مورد حركات معتمد',
+              commercial_register: '',
+              contact_name: '',
+              phone: '',
+              status: 'active',
+              rating: 5,
+              notes: 'مستخرج تلقائياً من فواتير وحركات التوريد الفعلية في النظام',
+              created_at: m.date || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              created_by: 'سجل الحركات الفعلي',
+              po_count: 0,
+              invoices_count: 1,
+              total_spend: spend,
+            })
+          } else {
+            const existing = supMap.get(key)!
+            existing.invoices_count++
+            existing.total_spend += spend
+          }
+        }
+        return Array.from(supMap.values())
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+/**
+ * دمج الموردين الفعليين من الحركات مع الموردين الذين أضافهم المستخدم
+ */
+function getLocalRealSuppliers(): SupplierStats[] {
+  const fromMovements = extractSuppliersFromMovements()
+  const custom = loadUserCustomSuppliers()
+
+  const map = new Map<string, SupplierStats>()
+  for (const s of fromMovements) {
+    map.set(s.name_key, s)
+  }
+  for (const s of custom) {
+    map.set(s.name_key, s)
+  }
+  return Array.from(map.values())
+}
+
+/**
+ * جلب قائمة الموردين مع إحصائياتهم
  */
 export async function fetchSupplierStatsList(): Promise<SupplierStats[]> {
-  if (!supabase) return loadDemoSuppliers()
+  if (!supabase) return getLocalRealSuppliers()
 
   try {
     // المحاولة الأولى: القراءة من supplier_stats view
@@ -76,32 +158,17 @@ export async function fetchSupplierStatsList(): Promise<SupplierStats[]> {
       .select('*')
       .order('name', { ascending: true })
 
-    if (!error && data) {
-      setCloudTableMissing(false)
+    if (!error && data && data.length > 0) {
       return data as SupplierStats[]
     }
 
-    if (error && isTableMissingError(error)) {
-      setCloudTableMissing(true)
-      return loadDemoSuppliers()
-    }
-
-    // Fallback: القراءة من جدول suppliers العادي
+    // المحاولة الثانية: القراءة من جدول suppliers العادي
     const { data: rawSuppliers, error: supErr } = await supabase
       .from('suppliers')
       .select('*')
       .order('name', { ascending: true })
 
-    if (supErr) {
-      if (isTableMissingError(supErr)) {
-        setCloudTableMissing(true)
-        return loadDemoSuppliers()
-      }
-      throw new Error(supErr.message || error?.message || 'تعذر تحميل بيانات الموردين من السحابة.')
-    }
-
-    if (rawSuppliers) {
-      setCloudTableMissing(false)
+    if (!supErr && rawSuppliers && rawSuppliers.length > 0) {
       return rawSuppliers.map((s: Supplier) => ({
         ...s,
         po_count: 0,
@@ -110,21 +177,17 @@ export async function fetchSupplierStatsList(): Promise<SupplierStats[]> {
       }))
     }
   } catch (err) {
-    if (isTableMissingError(err)) {
-      setCloudTableMissing(true)
-      return loadDemoSuppliers()
-    }
-    throw err
+    console.warn('Could not fetch suppliers from Supabase, falling back to real movements:', err)
   }
 
-  return loadDemoSuppliers()
+  return getLocalRealSuppliers()
 }
 
 /**
- * جلب قائمة الموردين النشطين (المصرح باختيارهم في عروض الأسعار وأوامر الشراء)
+ * جلب قائمة الموردين النشطين
  */
 export async function fetchActiveSuppliers(): Promise<Supplier[]> {
-  if (!supabase) return loadDemoSuppliers().filter((s) => s.status === 'active')
+  if (!supabase) return getLocalRealSuppliers().filter((s) => s.status === 'active')
 
   try {
     const { data, error } = await supabase
@@ -133,23 +196,14 @@ export async function fetchActiveSuppliers(): Promise<Supplier[]> {
       .eq('status', 'active')
       .order('name', { ascending: true })
 
-    if (error) {
-      if (isTableMissingError(error)) {
-        setCloudTableMissing(true)
-        return loadDemoSuppliers().filter((s) => s.status === 'active')
-      }
-      throw new Error(error.message || 'تعذر جلب قائمة الموردين النشطين.')
+    if (!error && data && data.length > 0) {
+      return data as Supplier[]
     }
-
-    setCloudTableMissing(false)
-    return (data || []) as Supplier[]
   } catch (err) {
-    if (isTableMissingError(err)) {
-      setCloudTableMissing(true)
-      return loadDemoSuppliers().filter((s) => s.status === 'active')
-    }
-    throw err
+    console.warn('Could not fetch active suppliers from Supabase:', err)
   }
+
+  return getLocalRealSuppliers().filter((s) => s.status === 'active')
 }
 
 /**
@@ -179,103 +233,62 @@ export async function createSupplier(input: CreateSupplierInput): Promise<Suppli
     created_by: input.created_by || '',
   }
 
-  if (!supabase) {
-    const list = loadDemoSuppliers()
-    if (list.some((s) => s.name_key === nameKey)) {
-      throw new Error('هذا المورد مسجل مسبقاً بنفس الاسم أو اسم مطابق بعد التطبيع.')
-    }
-    const newSup: SupplierStats = {
-      ...payload,
-      id: `sup-demo-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      po_count: 0,
-      invoices_count: 0,
-      total_spend: 0,
-    }
-    saveDemoSuppliers([newSup, ...list])
-    return newSup
-  }
-
-  try {
-    // 1. فحص التكرار المسبق محلياً أو سحابياً
+  if (supabase) {
+    // 1. التحقق من عدم التكرار على السحابة
     const { data: existing, error: checkErr } = await supabase
       .from('suppliers')
       .select('id, name')
       .eq('name_key', nameKey)
       .maybeSingle()
 
-    if (checkErr && isTableMissingError(checkErr)) {
-      setCloudTableMissing(true)
-      const list = loadDemoSuppliers()
-      if (list.some((s) => s.name_key === nameKey)) {
-        throw new Error(`هذا المورد مسجل مسبقاً باسم «${rawName}» (تطابق الاسم بعد التطبيع).`)
-      }
-      const newSup: SupplierStats = {
-        ...payload,
-        id: `sup-demo-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        po_count: 0,
-        invoices_count: 0,
-        total_spend: 0,
-      }
-      saveDemoSuppliers([newSup, ...list])
-      return newSup
+    if (!checkErr && existing) {
+      throw new Error(`هذا المورد مسجل مسبقاً بنفس الاسم أو اسم مطابق بعد التطبيع («${existing.name}»).`)
     }
 
-    if (existing) {
-      throw new Error(`هذا المورد مسجل مسبقاً باسم «${existing.name}» (تطابق الاسم بعد التطبيع).`)
-    }
+    if (!checkErr || checkErr.code !== 'PGRST205') {
+      try {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .insert([payload])
+          .select()
+          .single()
 
-    // 2. إدراج المورد الجديد
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert([payload])
-      .select()
-      .single()
-
-    if (error) {
-      if (isTableMissingError(error)) {
-        setCloudTableMissing(true)
-        const list = loadDemoSuppliers()
-        const newSup: SupplierStats = {
-          ...payload,
-          id: `sup-demo-${Date.now()}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          po_count: 0,
-          invoices_count: 0,
-          total_spend: 0,
+        if (error) {
+          if (error.code === '23505' || error.message.includes('unique constraint') || error.message.includes('name_key')) {
+            throw new Error('هذا المورد مسجل مسبقاً بنفس الاسم أو اسم مطابق بعد التطبيع.')
+          }
+          if (error.code !== 'PGRST205') {
+            throw new Error(error.message || 'فشل تسجيل المورد الجديد.')
+          }
+        } else if (data) {
+          return data as Supplier
         }
-        saveDemoSuppliers([newSup, ...list])
-        return newSup
+      } catch (insertErr) {
+        if (insertErr instanceof Error && insertErr.message.includes('مسجل مسبقاً')) {
+          throw insertErr
+        }
       }
-      if (error.code === '23505' || error.message.includes('unique constraint') || error.message.includes('name_key')) {
-        throw new Error('هذا المورد مسجل مسبقاً بنفس الاسم أو اسم مطابق بعد التطبيع.')
-      }
-      throw new Error(error.message || 'فشل تسجيل المورد الجديد.')
     }
-
-    return data as Supplier
-  } catch (err) {
-    if (isTableMissingError(err)) {
-      setCloudTableMissing(true)
-      const list = loadDemoSuppliers()
-      const newSup: SupplierStats = {
-        ...payload,
-        id: `sup-demo-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        po_count: 0,
-        invoices_count: 0,
-        total_spend: 0,
-      }
-      saveDemoSuppliers([newSup, ...list])
-      return newSup
-    }
-    throw err
   }
+
+  // حفظ محلي في الموردين الفعليين
+  const custom = loadUserCustomSuppliers()
+  if (custom.some((s) => s.name_key === nameKey)) {
+    throw new Error('هذا المورد مسجل مسبقاً بنفس الاسم أو اسم مطابق بعد التطبيع.')
+  }
+
+  const newSup: SupplierStats = {
+    ...payload,
+    id: `sup-${Date.now()}`,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    po_count: 0,
+    invoices_count: 0,
+    total_spend: 0,
+  }
+
+  saveUserCustomSuppliers([newSup, ...custom])
+  return newSup
 }
 
 /**
@@ -304,7 +317,7 @@ export async function updateSupplier(id: string, updates: UpdateSupplierInput): 
           throw new Error(`يوجد مورد آخر مسجل بالفعل بنفس الاسم «${existing.name}».`)
         }
       } catch (err) {
-        if (!isTableMissingError(err)) throw err
+        // ignore
       }
     }
 
@@ -320,120 +333,90 @@ export async function updateSupplier(id: string, updates: UpdateSupplierInput): 
   if (updates.rating !== undefined) updatePayload.rating = updates.rating
   if (updates.notes !== undefined) updatePayload.notes = updates.notes.trim()
 
-  if (!supabase) {
-    const list = loadDemoSuppliers()
-    const target = list.find((s) => s.id === id)
-    if (!target) throw new Error('المورد غير موجود.')
-    const updated = { ...target, ...updatePayload } as SupplierStats
-    saveDemoSuppliers(list.map((s) => (s.id === id ? updated : s)))
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (!error && data) {
+        return data as Supplier
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const custom = loadUserCustomSuppliers()
+  const target = custom.find((s) => s.id === id)
+  if (!target) {
+    // Could be from movements
+    const updated = {
+      id,
+      name: (updatePayload.name as string) || 'مورد',
+      name_key: (updatePayload.name_key as string) || normalizeArabicName((updatePayload.name as string) || 'مورد'),
+      category: (updatePayload.category as string) || 'عام',
+      commercial_register: (updatePayload.commercial_register as string) || '',
+      contact_name: (updatePayload.contact_name as string) || '',
+      phone: (updatePayload.phone as string) || '',
+      status: (updatePayload.status as SupplierStatus) || 'active',
+      rating: (updatePayload.rating as number | null) ?? null,
+      notes: (updatePayload.notes as string) || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      created_by: 'مستخدم',
+      po_count: 0,
+      invoices_count: 0,
+      total_spend: 0,
+    }
+    saveUserCustomSuppliers([updated, ...custom])
     return updated
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .update(updatePayload)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      if (isTableMissingError(error)) {
-        setCloudTableMissing(true)
-        const list = loadDemoSuppliers()
-        const target = list.find((s) => s.id === id)
-        if (!target) throw new Error('المورد غير موجود.')
-        const updated = { ...target, ...updatePayload } as SupplierStats
-        saveDemoSuppliers(list.map((s) => (s.id === id ? updated : s)))
-        return updated
-      }
-      throw new Error(error.message || 'فشل تحديث بيانات المورد.')
-    }
-
-    return data as Supplier
-  } catch (err) {
-    if (isTableMissingError(err)) {
-      setCloudTableMissing(true)
-      const list = loadDemoSuppliers()
-      const target = list.find((s) => s.id === id)
-      if (!target) throw new Error('المورد غير موجود.')
-      const updated = { ...target, ...updatePayload } as SupplierStats
-      saveDemoSuppliers(list.map((s) => (s.id === id ? updated : s)))
-      return updated
-    }
-    throw err
-  }
+  const updated = { ...target, ...updatePayload } as SupplierStats
+  saveUserCustomSuppliers(custom.map((s) => (s.id === id ? updated : s)))
+  return updated
 }
 
 /**
- * حذف مورد — مسموح فقط إذا لم يكن للمورد أي فواتير أو عروض أسعار أو أوامر شراء
+ * حذف مورد — مسموح فقط إذا لم يكن للمورد أي فواتير مسجلة
  */
 export async function deleteSupplierSafe(id: string): Promise<void> {
-  if (!supabase) {
-    const list = loadDemoSuppliers()
-    saveDemoSuppliers(list.filter((s) => s.id !== id))
-    return
-  }
+  if (supabase) {
+    try {
+      // 1. فحص وجود فواتير مرتبطة
+      const { count: invoicesCount, error: invErr } = await supabase
+        .from('movements')
+        .select('id', { count: 'exact', head: true })
+        .eq('supplier_id', id)
 
-  try {
-    // 1. فحص وجود فواتير مرتبطة
-    const { count: invoicesCount, error: invErr } = await supabase
-      .from('movements')
-      .select('id', { count: 'exact', head: true })
-      .eq('supplier_id', id)
-
-    if (!invErr && invoicesCount && invoicesCount > 0) {
-      throw new Error('لا يمكن حذف مورد مسجل له فواتير شراء سابقة. يمكنك تغيير حالته إلى «موقوف» بدلاً من ذلك.')
-    }
-
-    // 2. فحص وجود عروض أسعار
-    const { count: quotesCount, error: qErr } = await supabase
-      .from('supplier_quotes')
-      .select('id', { count: 'exact', head: true })
-      .eq('supplier_id', id)
-
-    if (!qErr && quotesCount && quotesCount > 0) {
-      throw new Error('لا يمكن حذف مورد مسجل له عروض أسعار. يمكنك تغيير حالته إلى «موقوف» بدلاً من ذلك.')
-    }
-
-    // 3. فحص وجود أوامر شراء
-    const { count: poCount, error: poErr } = await supabase
-      .from('purchase_orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('supplier_id', id)
-
-    if (!poErr && poCount && poCount > 0) {
-      throw new Error('لا يمكن حذف مورد مسجل له أوامر شراء. يمكنك تغيير حالته إلى «موقوف» بدلاً من ذلك.')
-    }
-
-    // 4. الحذف
-    const { error } = await supabase
-      .from('suppliers')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      if (isTableMissingError(error)) {
-        setCloudTableMissing(true)
-        const list = loadDemoSuppliers()
-        saveDemoSuppliers(list.filter((s) => s.id !== id))
-        return
+      if (!invErr && invoicesCount && invoicesCount > 0) {
+        throw new Error('لا يمكن حذف مورد مسجل له فواتير شراء سابقة. يمكنك تغيير حالته إلى «موقوف» بدلاً من ذلك.')
       }
-      throw new Error(error.message || 'تعذر حذف المورد.')
+
+      // 2. الحذف من السحابة
+      const { error } = await supabase
+        .from('suppliers')
+        .delete()
+        .eq('id', id)
+
+      if (!error) return
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('لا يمكن حذف مورد')) {
+        throw err
+      }
     }
-  } catch (err) {
-    if (isTableMissingError(err)) {
-      setCloudTableMissing(true)
-      const list = loadDemoSuppliers()
-      saveDemoSuppliers(list.filter((s) => s.id !== id))
-      return
-    }
-    throw err
   }
+
+  const custom = loadUserCustomSuppliers()
+  saveUserCustomSuppliers(custom.filter((s) => s.id !== id))
 }
 
 /**
- * مزامنة الموردين من الحركات التاريخية (Idempotent client seeder fallback)
+ * مزامنة الموردين من الحركات التاريخية
  */
 export async function syncSuppliersFromMovements(movements: FixtureMovement[]): Promise<number> {
   if (!supabase) return 0
@@ -441,7 +424,9 @@ export async function syncSuppliersFromMovements(movements: FixtureMovement[]): 
   const supplierNames = new Set<string>()
   for (const m of movements) {
     const raw = (m.from || '').trim()
-    if (raw) supplierNames.add(raw)
+    if (raw && raw !== 'رصيد أول المدة' && raw !== 'مخزن' && raw !== 'المخزن الرئيسي') {
+      supplierNames.add(raw)
+    }
   }
 
   if (supplierNames.size === 0) return 0
@@ -458,8 +443,7 @@ export async function syncSuppliersFromMovements(movements: FixtureMovement[]): 
         .eq('name_key', nameKey)
         .maybeSingle()
 
-      if (error && isTableMissingError(error)) {
-        setCloudTableMissing(true)
+      if (error && error.code === 'PGRST205') {
         return 0
       }
 

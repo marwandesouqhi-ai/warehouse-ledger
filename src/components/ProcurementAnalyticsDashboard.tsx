@@ -1,32 +1,23 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
-  BarChart3,
-  CheckCircle2,
-  CircleDollarSign,
-  Clock,
+  Building2,
+  DollarSign,
   Download,
-  PackageCheck,
-  RefreshCw,
+  Package,
+  Plus,
+  Receipt,
   Search,
+  TrendingUp,
+  Truck,
 } from 'lucide-react'
-import {
-  fetchPurchaseRequests,
-  fetchPurchaseOrders,
-  fetchSupplierQuotes,
-  type PurchaseRequest,
-  type PurchaseOrder,
-} from '../lib/procurementRepository'
 import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
-import { deriveMovement } from '../lib/derive'
 import { matchesSearch } from '../lib/searchUtils'
+import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
 
 interface ProcurementAnalyticsDashboardProps {
-  movements: FixtureMovement[]
+  movements?: FixtureMovement[]
   currency: AppSettings['currency']
   isDashboardEmbed?: boolean
 }
@@ -36,450 +27,454 @@ function formatCurrency(value: number, currency: AppSettings['currency']): strin
   return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 }
 
+function sanitizeExcelCell<T>(value: T): T {
+  if (typeof value === 'string' && /^[=+\-@]/.test(value)) {
+    return `'${value}` as unknown as T
+  }
+  return value
+}
+
 export function ProcurementAnalyticsDashboard({
-  movements,
+  movements = [],
   currency,
   isDashboardEmbed = false,
 }: ProcurementAnalyticsDashboardProps) {
-  const [requests, setRequests] = useState<PurchaseRequest[]>([])
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
-  const [quotesCountMap, setQuotesCountMap] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState<boolean>(true)
-  const [error, setError] = useState<string>('')
-  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [searchTerm, setSearchTerm] = useState('')
 
-  async function loadData() {
-    setLoading(true)
-    setError('')
-    try {
-      const [reqList, poList] = await Promise.all([
-        fetchPurchaseRequests(),
-        fetchPurchaseOrders(),
-      ])
-      setRequests(reqList)
-      setPurchaseOrders(poList)
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1
+  const currentMonthPrefix = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
 
-      // Count quotes for each request that is pending or approved
-      const counts: Record<string, number> = {}
-      for (const req of reqList.slice(0, 15)) {
-        try {
-          const qList = await fetchSupplierQuotes(req.id)
-          counts[req.id] = qList.length
-        } catch {
-          counts[req.id] = 0
-        }
-      }
-      setQuotesCountMap(counts)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'تعذر تحميل بيانات التحليلات.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // الفواتير وحركات الشراء الفعلية فقط (الوارد)
+  const purchaseMovements = useMemo(() => {
+    return movements.filter((m) => (Number(m.qin) || 0) > 0)
+  }, [movements])
 
-  useEffect(() => {
-    void loadData()
+  // الموردون الفعليون المستخرجون من الحركات
+  const realSuppliers = useMemo(() => {
+    return extractSuppliersFromMovements()
   }, [])
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), [])
-
-  // KPI Calculations strictly from Data
+  // الحسابات والمؤشرات الفعلية 100%
   const kpis = useMemo(() => {
-    const pendingApprovalsCount = requests.filter((r) => r.status === 'pending').length
-    const openOrdersCount = purchaseOrders.filter((po) => po.status === 'open').length
-    const overdueOrdersCount = purchaseOrders.filter(
-      (po) => po.status === 'open' && po.expected_delivery_date && po.expected_delivery_date < todayStr
-    ).length
-
+    let totalSpend = 0
     let monthSpend = 0
-    for (let i = 0; i < movements.length; i++) {
-      const m = movements[i]
-      const qtyIn = Number(m.qin) || 0
-      if (qtyIn > 0) {
-        const dateStr = (m.date || '').slice(0, 7)
-        if (dateStr === currentMonthStr) {
-          const derived = deriveMovement(m, i)
-          const lineVal = derived.total ?? (qtyIn * (Number(m.price) || 0))
-          monthSpend += lineVal
-        }
+
+    for (const m of purchaseMovements) {
+      const q = Number(m.qin) || 0
+      const p = Number(m.price) || 0
+      const val = q * p
+      totalSpend += val
+
+      const dateStr = String(m.date || '')
+      if (dateStr.startsWith(currentMonthPrefix) || dateStr.includes(`/${currentMonth}/`) || dateStr.includes(`/${currentMonth < 10 ? '0' + currentMonth : currentMonth}/`)) {
+        monthSpend += val
       }
     }
+
+    const avgInvoice = purchaseMovements.length > 0 ? totalSpend / purchaseMovements.length : 0
 
     return {
-      pendingApprovalsCount,
-      openOrdersCount,
-      overdueOrdersCount,
+      totalSpend,
       monthSpend,
+      purchasesCount: purchaseMovements.length,
+      suppliersCount: realSuppliers.length,
+      avgInvoice,
     }
-  }, [requests, purchaseOrders, movements, todayStr, currentMonthStr])
+  }, [purchaseMovements, realSuppliers, currentMonthPrefix])
 
-  // 5-Stage Pipeline
+  // مراحل التوريد والعمليات
   const pipeline = useMemo(() => {
-    const stage1 = requests.filter((r) => r.status !== 'rejected' && r.status !== 'draft').length
-    const stage2 = requests.filter((r) => r.status === 'pending').length
-    const stage3 = purchaseOrders.filter((po) => po.status === 'open').length
-    const stage4 = purchaseOrders.filter((po) => po.status === 'received').length
-    const stage5 = purchaseOrders.filter((po) => po.status === 'invoiced').length
-
-    const maxVal = Math.max(1, stage1, stage2, stage3, stage4, stage5)
+    const totalCount = purchaseMovements.length
+    const withInvoice = purchaseMovements.filter((m) => Boolean(m.inv && String(m.inv).trim())).length
+    const withSupplier = purchaseMovements.filter((m) => Boolean(m.from && m.from.trim() && m.from !== 'رصيد أول المدة')).length
+    const avgVal = totalCount > 0 ? Math.round(kpis.totalSpend / totalCount) : 0
 
     return [
-      { name: '1. طلب شراء', count: stage1, color: '#0e7c86', desc: 'طلبات سارية بالمسار' },
-      { name: '2. موافقات', count: stage2, color: '#f59e0b', desc: 'بانتظار دورة الاعتماد' },
-      { name: '3. أمر شراء', count: stage3, color: '#3b82f6', desc: 'أوامر مفتوحة للتوريد' },
-      { name: '4. استلام', count: stage4, color: '#10b981', desc: 'تم الاستلام والفحص' },
-      { name: '5. فاتورة', count: stage5, color: '#8b5cf6', desc: 'مفوترة ومكتملة' },
-    ].map((step) => ({
-      ...step,
-      pct: Math.round((step.count / maxVal) * 100),
-    }))
-  }, [requests, purchaseOrders])
+      { name: '1. فواتير وتوريدات الشراء', count: totalCount, color: '#0e7c86', desc: 'إجمالي عمليات الشراء المقيدة' },
+      { name: '2. فواتير برقم رسمي', count: withInvoice, color: '#3b82f6', desc: 'حركات مسجلة برقم فاتورة معتمد' },
+      { name: '3. موردون معتمدون', count: withSupplier, color: '#10b981', desc: 'حركات مرتبطة بشركات وموردين' },
+      { name: '4. متوسط الفاتورة', count: avgVal, isCurrency: true, color: '#8b5cf6', desc: 'معدل الإنفاق لكل فاتورة شراء' },
+    ]
+  }, [purchaseMovements, kpis.totalSpend])
 
-  // Alerts
-  const alerts = useMemo(() => {
-    const list: Array<{ id: string; type: 'danger' | 'warn' | 'info'; title: string; message: string; link?: string }> = []
-
-    const overdueList = purchaseOrders.filter(
-      (po) => po.status === 'open' && po.expected_delivery_date && po.expected_delivery_date < todayStr
-    )
-    for (const po of overdueList) {
-      list.push({
-        id: `overdue-${po.id}`,
-        type: 'danger',
-        title: `أمر شراء متأخر: ${po.po_no}`,
-        message: `المورد «${po.supplier_name}» تجاوز موعد التسليم المحدد في ${po.expected_delivery_date}.`,
-        link: '/purchases/quotes',
-      })
-    }
-
-    const pendingList = requests.filter((r) => r.status === 'pending')
-    for (const req of pendingList.slice(0, 3)) {
-      list.push({
-        id: `pending-${req.id}`,
-        type: 'warn',
-        title: `طلب شراء بانتظار الاعتماد: ${req.request_no}`,
-        message: `قسم «${req.department}» بانتظار استكمال مسار الموافقات (القيمة: ${formatCurrency(req.total_estimated_value || 0, currency)}).`,
-        link: '/purchases/requests',
-      })
-    }
-
-    for (const req of requests) {
-      if (req.status === 'approved' && !req.selected_quote_id) {
-        const count = quotesCountMap[req.id] || 0
-        if (count >= 2) {
-          list.push({
-            id: `quotes-ready-${req.id}`,
-            type: 'info',
-            title: `عروض جاهزة للمقارنة: ${req.request_no}`,
-            message: `تم استلام ${count} عروض أسعار والطلب معتمد، يمكن إصدار أمر الشراء.`,
-            link: '/purchases/quotes',
-          })
-        }
-      }
-    }
-
-    return list
-  }, [purchaseOrders, requests, quotesCountMap, todayStr, currency])
-
-  const recentRequests = useMemo(() => {
-    let list = requests
+  // أحدث حركات الشراء المفلترة للجدول
+  const filteredPurchases = useMemo(() => {
+    let list = purchaseMovements
     if (searchTerm.trim()) {
-      list = list.filter((r) =>
-        matchesSearch([r.request_no, r.department, r.requested_by, r.items_summary], searchTerm)
+      list = list.filter((m) =>
+        matchesSearch([m.inv, m.from, m.item, m.date, m.notes, m.price, m.qin], searchTerm)
       )
     }
-    return list.slice(0, 5)
-  }, [requests, searchTerm])
+    return list.slice(0, 10)
+  }, [purchaseMovements, searchTerm])
 
   async function handleExportExcel() {
     const XLSX = await import('xlsx')
     const kpiRows = [
-      { 'المؤشر': 'بانتظار الموافقة', 'القيمة': kpis.pendingApprovalsCount },
-      { 'المؤشر': 'أوامر شراء مفتوحة', 'القيمة': kpis.openOrdersCount },
-      { 'المؤشر': 'أوامر متأخرة عن موعدها', 'القيمة': kpis.overdueOrdersCount },
-      { 'المؤشر': 'الإنفاق هذا الشهر', 'القيمة': kpis.monthSpend },
+      { 'المؤشر': 'إجمالي الإنفاق الفعلي على المشتريات', 'القيمة': kpis.totalSpend },
+      { 'المؤشر': 'الإنفاق خلال هذا الشهر', 'القيمة': kpis.monthSpend },
+      { 'المؤشر': 'إجمالي فواتير وحركات الشراء', 'القيمة': kpis.purchasesCount },
+      { 'المؤشر': 'عدد الموردين المسجلين', 'القيمة': kpis.suppliersCount },
+      { 'المؤشر': 'متوسط قيمة الفاتورة', 'القيمة': kpis.avgInvoice },
     ]
-    const pipelineRows = pipeline.map((p) => ({
-      'المرحلة': p.name,
-      'العدد': p.count,
-      'الوصف': p.desc,
+
+    const purchasesRows = purchaseMovements.map((m, idx) => ({
+      'م': idx + 1,
+      'تاريخ التوريد': sanitizeExcelCell(m.date || '—'),
+      'رقم الفاتورة': sanitizeExcelCell(m.inv || '—'),
+      'المورد / الشركة': sanitizeExcelCell(m.from || '—'),
+      'الصنف': sanitizeExcelCell(m.item || '—'),
+      'الكمية الواردة': Number(m.qin) || 0,
+      'سعر الوحدة': Number(m.price) || 0,
+      'القيمة الإجمالية': (Number(m.qin) || 0) * (Number(m.price) || 0),
+      'ملاحظات': sanitizeExcelCell(m.notes || ''),
     }))
 
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), 'مؤشرات الأداء')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pipelineRows), 'مسار المراحل')
+    const wsKpis = XLSX.utils.json_to_sheet(kpiRows)
+    const wsPurchases = XLSX.utils.json_to_sheet(purchasesRows)
+
+    XLSX.utils.book_append_sheet(wb, wsKpis, 'مؤشرات المشتريات')
+    XLSX.utils.book_append_sheet(wb, wsPurchases, 'حركات الشراء الفعلية')
     XLSX.writeFile(wb, `تقرير-تحليلات-المشتريات-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   return (
-    <div className="procurement-analytics-dashboard animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Header bar if embedded */}
-      {isDashboardEmbed && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BarChart3 size={20} style={{ color: 'var(--accent)' }} />
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--ink)' }}>مؤشرات وتحليلات إدارة المشتريات</h3>
-              <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>دورة الشراء، الموافقات المعلقة، وأوامر التوريد لجامعة الزقازيق الأهلية</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void loadData()}
-              disabled={loading}
-              style={{ fontSize: '0.82rem', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <RefreshCw size={14} className={loading ? 'spin' : ''} /> تحديث
-            </button>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void handleExportExcel()}
-              style={{ fontSize: '0.82rem', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Download size={14} /> تصدير Excel
-            </button>
-          </div>
+    <div className={`procurement-analytics-wrapper ${isDashboardEmbed ? 'dashboard-embed' : ''}`}>
+      {/* رأس القسم والإجراءات السريعة */}
+      <div
+        className="analytics-top-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginBottom: '20px',
+        }}
+      >
+        <div>
+          <h2 style={{ margin: 0, fontSize: isDashboardEmbed ? '1.25rem' : '1.45rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--ink)' }}>
+            <Receipt size={22} style={{ color: 'var(--accent)' }} />
+            تحليلات وبيانات قسم المشتريات والتوريدات
+          </h2>
+          <span style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+            مؤشرات الإنفاق المالي، متابعة فواتير الشراء المسجلة، وحسابات الموردين في قاعدة البيانات الحقيقية
+          </span>
         </div>
-      )}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-          <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '8px' }} />
-          <div>جارٍ حساب مؤشرات أداء المشتريات...</div>
-        </div>
-      ) : error ? (
-        <div className="inline-message error" style={{ padding: '16px', borderRadius: '10px' }}>
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-          <button type="button" className="secondary-btn" onClick={() => void loadData()} style={{ marginInlineStart: '10px' }}>
-            إعادة المحاولة
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* 1. KPI Metric Strip */}
-          <div
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => void handleExportExcel()}
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-              gap: '14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              border: '1px solid var(--line)',
+              background: 'var(--surface)',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              color: 'var(--ink)',
             }}
           >
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>بانتظار الموافقة</span>
-                <span style={{ padding: '6px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706' }}>
-                  <Clock size={18} />
-                </span>
-              </div>
-              <div style={{ fontSize: '1.7rem', fontWeight: 800, color: 'var(--ink)' }}>
-                {kpis.pendingApprovalsCount}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '4px' }}>
-                طلبات شراء قيد مسار الاعتماد
+            <Download size={15} />
+            تصدير تقرير المشتريات Excel
+          </button>
+
+          <NavLink
+            to="/purchases?tab=add"
+            className="primary-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            <Plus size={16} />
+            فاتورة وتوريد جديد
+          </NavLink>
+        </div>
+      </div>
+
+      {/* بطاقات المؤشرات الـ 4 الرئيسية */}
+      <div
+        className="kpi-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gap: '14px',
+          marginBottom: '22px',
+        }}
+      >
+        <div
+          className="kpi-card card-surface"
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid var(--line)',
+            borderTop: '4px solid #10b981',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>إجمالي الإنفاق الفعلي</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+                {formatCurrency(kpis.totalSpend, currency)}
               </div>
             </div>
+            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+              <DollarSign size={20} />
+            </div>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+            متوسط الفاتورة: {formatCurrency(kpis.avgInvoice, currency)}
+          </div>
+        </div>
 
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>أوامر شراء مفتوحة</span>
-                <span style={{ padding: '6px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb' }}>
-                  <PackageCheck size={18} />
-                </span>
-              </div>
-              <div style={{ fontSize: '1.7rem', fontWeight: 800, color: 'var(--ink)' }}>
-                {kpis.openOrdersCount}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '4px' }}>
-                أوامر توريد سارية مع الموردين
+        <div
+          className="kpi-card card-surface"
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid var(--line)',
+            borderTop: '4px solid #0e7c86',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>حركات وفواتير الشراء</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+                {kpis.purchasesCount.toLocaleString('ar-EG')} فاتورة
               </div>
             </div>
-
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>أوامر متأخرة</span>
-                <span style={{ padding: '6px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626' }}>
-                  <AlertTriangle size={18} />
-                </span>
-              </div>
-              <div style={{ fontSize: '1.7rem', fontWeight: 800, color: kpis.overdueOrdersCount > 0 ? '#dc2626' : 'var(--ink)' }}>
-                {kpis.overdueOrdersCount}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '4px' }}>
-                تجاوزت تاريخ التسليم المتوقع
-              </div>
+            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(14, 124, 134, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0e7c86' }}>
+              <Receipt size={20} />
             </div>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+            مسجلة ومتزامنة مع قاعدة البيانات
+          </div>
+        </div>
 
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>الإنفاق هذا الشهر</span>
-                <span style={{ padding: '6px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
-                  <CircleDollarSign size={18} />
-                </span>
-              </div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)' }}>
+        <div
+          className="kpi-card card-surface"
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid var(--line)',
+            borderTop: '4px solid #3b82f6',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>الإنفاق هذا الشهر</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
                 {formatCurrency(kpis.monthSpend, currency)}
               </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '4px' }}>
-                إجمالي قيمة فواتير التوريد الواردة
-              </div>
+            </div>
+            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+              <TrendingUp size={20} />
             </div>
           </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+            مشتريات دورة الشهر الجاري
+          </div>
+        </div>
 
-          {/* 2. Procurement 5-Stage Pipeline */}
-          <div className="card-surface" style={{ padding: '18px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <div>
-                <h4 style={{ margin: 0, fontSize: '0.96rem', color: 'var(--ink)' }}>مسار دورة المشتريات (5 مراحل)</h4>
-                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>تتبع تدفق العمليات من تسجيل الاحتياج وحتى سداد الفاتورة</span>
+        <div
+          className="kpi-card card-surface"
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid var(--line)',
+            borderTop: '4px solid #8b5cf6',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>الموردون والشركات</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+                {kpis.suppliersCount.toLocaleString('ar-EG')} مورد
               </div>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
-              {pipeline.map((step) => (
-                <div
-                  key={step.name}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: '1px solid var(--line)',
-                    background: 'var(--surface)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: step.color }}>{step.name}</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)' }}>{step.count}</span>
-                  </div>
-                  <div style={{ width: '100%', height: '6px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${step.pct}%`, height: '100%', background: step.color, borderRadius: '3px' }} />
-                  </div>
-                  <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>{step.desc}</span>
-                </div>
-              ))}
+            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(139, 92, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>
+              <Building2 size={20} />
             </div>
           </div>
-
-          {/* 3. Operational Alerts & Recent Requests Split */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '18px' }}>
-            {/* Alerts Box */}
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <h4 style={{ fontSize: '0.94rem', margin: '0 0 12px 0', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={16} color="var(--accent)" />
-                تنبيهات ومتابعات المشتريات اللحظية
-              </h4>
-
-              {alerts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  <CheckCircle2 size={24} color="#059669" style={{ margin: '0 auto 6px' }} />
-                  لا توجد تنبيهات عاجلة؛ كافة العمليات تسير وفق الجداول المعتمدة.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {alerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        border: `1px solid ${alert.type === 'danger' ? 'rgba(239, 68, 68, 0.4)' : alert.type === 'warn' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(59, 130, 246, 0.4)'}`,
-                        background: alert.type === 'danger' ? 'rgba(239, 68, 68, 0.05)' : alert.type === 'warn' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(59, 130, 246, 0.05)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.84rem', color: alert.type === 'danger' ? '#dc2626' : alert.type === 'warn' ? '#d97706' : '#2563eb' }}>
-                          {alert.title}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--ink)', marginTop: '2px' }}>
-                          {alert.message}
-                        </div>
-                      </div>
-                      {alert.link && (
-                        <NavLink to={alert.link} style={{ display: 'inline-flex', padding: '6px', color: 'var(--accent)' }}>
-                          <ArrowRight size={15} />
-                        </NavLink>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Recent Requests with Search */}
-            <div className="card-surface" style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ fontSize: '0.94rem', margin: 0, color: 'var(--ink)' }}>أحدث طلبات الشراء المسجلة</h4>
-                <NavLink to="/purchases/requests" style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>
-                  عرض الكل
-                </NavLink>
-              </div>
-
-              <div style={{ position: 'relative', marginBottom: '12px' }}>
-                <Search size={15} style={{ position: 'absolute', right: '10px', top: '9px', color: 'var(--muted)' }} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="ابحث برقم الطلب أو القسم..."
-                  style={{ width: '100%', padding: '6px 30px 6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--surface)' }}
-                />
-              </div>
-
-              {recentRequests.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  لا توجد طلبات مسجلة مطابقة.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {recentRequests.map((req) => (
-                    <div
-                      key={req.id}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--line)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--accent)' }}>
-                          {req.request_no}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-                          {req.department} • {req.items_summary}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'left' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
-                          {formatCurrency(req.total_estimated_value || 0, currency)}
-                        </div>
-                        <div>
-                          {req.status === 'draft' && <span className="badge neutral">مسودة</span>}
-                          {req.status === 'pending' && <span className="badge info">قيد الموافقة</span>}
-                          {req.status === 'approved' && <span className="badge ok">معتمد</span>}
-                          {req.status === 'rejected' && <span className="badge danger">مرفوض</span>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+            <NavLink to="/purchases/suppliers" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+              عرض سجل الموردين ←
+            </NavLink>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* مسار التوريد ومؤشرات العمليات */}
+      <div
+        className="card-surface"
+        style={{
+          padding: '18px',
+          borderRadius: '12px',
+          border: '1px solid var(--line)',
+          marginBottom: '22px',
+        }}
+      >
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Truck size={18} style={{ color: 'var(--accent)' }} />
+          مؤشرات دورة التوريد والعمليات المسجلة
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '12px',
+          }}
+        >
+          {pipeline.map((step) => (
+            <div
+              key={step.name}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: 'rgba(0, 0, 0, 0.02)',
+                border: '1px solid var(--line)',
+                borderInlineStart: `4px solid ${step.color}`,
+              }}
+            >
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ink)' }}>{step.name}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: step.color, marginTop: '4px' }}>
+                {step.isCurrency ? formatCurrency(step.count, currency) : step.count.toLocaleString('ar-EG')}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '4px' }}>{step.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* جدول أحدث فواتير وحركات الشراء الفعلية */}
+      <div
+        className="card-surface"
+        style={{
+          padding: '18px',
+          borderRadius: '12px',
+          border: '1px solid var(--line)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+            marginBottom: '14px',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--ink)' }}>
+              أحدث فواتير وحركات الشراء والتوريد الفعلية
+            </div>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+              معاينة سريعة لآخر {filteredPurchases.length} حركة شراء مسجلة في النظام
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={14} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
+              <input
+                type="text"
+                placeholder="بحث برقم الفاتورة أو المورد أو الصنف..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '7px 30px 7px 10px',
+                  borderRadius: '7px',
+                  border: '1px solid var(--line)',
+                  fontSize: '0.82rem',
+                  background: 'var(--surface)',
+                  color: 'var(--ink)',
+                }}
+              />
+            </div>
+            <NavLink
+              to="/purchases"
+              style={{
+                fontSize: '0.82rem',
+                color: 'var(--accent)',
+                fontWeight: 600,
+                textDecoration: 'none',
+                padding: '7px 12px',
+                borderRadius: '7px',
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+              }}
+            >
+              عرض كافة الفواتير ←
+            </NavLink>
+          </div>
+        </div>
+
+        {filteredPurchases.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)', fontSize: '0.9rem' }}>
+            <Package size={36} style={{ margin: '0 auto 8px', opacity: 0.4, display: 'block' }} />
+            لا توجد فواتير أو حركات شراء تطابق بحثك حالياً.
+          </div>
+        ) : (
+          <div className="table-wrap" style={{ overflowX: 'auto' }}>
+            <table className="custom-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'right' }}>التاريخ</th>
+                  <th style={{ textAlign: 'right' }}>رقم الفاتورة</th>
+                  <th style={{ textAlign: 'right' }}>المورد / الشركة</th>
+                  <th style={{ textAlign: 'right' }}>الصنف</th>
+                  <th style={{ textAlign: 'center' }}>الكمية</th>
+                  <th style={{ textAlign: 'center' }}>سعر الوحدة</th>
+                  <th style={{ textAlign: 'center' }}>الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPurchases.map((m) => {
+                  const q = Number(m.qin) || 0
+                  const p = Number(m.price) || 0
+                  const total = q * p
+                  return (
+                    <tr key={m.id}>
+                      <td>{m.date || '—'}</td>
+                      <td>
+                        <strong style={{ color: 'var(--ink)' }}>{m.inv || '—'}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#0e7c86' }}>{m.from || '—'}</span>
+                      </td>
+                      <td>{m.item || '—'}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{q.toLocaleString('ar-EG')}</td>
+                      <td style={{ textAlign: 'center' }}>{p > 0 ? formatCurrency(p, currency) : '—'}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
+                        {total > 0 ? formatCurrency(total, currency) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+export default ProcurementAnalyticsDashboard

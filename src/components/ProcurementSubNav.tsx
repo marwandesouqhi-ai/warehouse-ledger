@@ -1,15 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import {
-  BarChart3,
   Building2,
-  ClipboardList,
   FileSpreadsheet,
   Receipt,
 } from 'lucide-react'
-import { ProcurementDemoNotice } from './ProcurementDemoNotice'
 
 export interface ProcurementSubNavProps {
-  activeTab?: 'invoices' | 'requests' | 'suppliers' | 'quotes' | 'analytics'
+  activeTab?: 'invoices' | 'suppliers' | 'quotes'
 }
 
 export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps) {
@@ -20,13 +17,6 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
       label: 'فواتير وتوريدات الشراء',
       icon: Receipt,
       end: true,
-    },
-    {
-      to: '/purchases/requests',
-      id: 'requests',
-      label: 'طلبات الشراء',
-      icon: ClipboardList,
-      end: false,
     },
     {
       to: '/purchases/suppliers',
@@ -42,41 +32,31 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
       icon: FileSpreadsheet,
       end: false,
     },
-    {
-      to: '/purchases/analytics',
-      id: 'analytics',
-      label: 'التحليلات ومسار المشتريات',
-      icon: BarChart3,
-      end: false,
-    },
   ]
 
   return (
-    <>
-      <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات">
-        <div className="procurement-subnav-container">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isExplicitActive = activeTab ? activeTab === tab.id : undefined
+    <nav className="procurement-subnav" aria-label="أقسام موديول المشتريات">
+      <div className="procurement-subnav-container">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isExplicitActive = activeTab ? activeTab === tab.id : undefined
 
-            return (
-              <NavLink
-                key={tab.to}
-                to={tab.to}
-                end={tab.end}
-                className={({ isActive }) => {
-                  const active = isExplicitActive !== undefined ? isExplicitActive : isActive
-                  return `procurement-tab-pill ${active ? 'active' : ''}`
-                }}
-              >
-                <Icon size={17} />
-                <span>{tab.label}</span>
-              </NavLink>
-            )
-          })}
-        </div>
-      </nav>
-      <ProcurementDemoNotice />
-    </>
+          return (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end={tab.end}
+              className={({ isActive }) => {
+                const active = isExplicitActive !== undefined ? isExplicitActive : isActive
+                return `procurement-tab-pill ${active ? 'active' : ''}`
+              }}
+            >
+              <Icon size={17} />
+              <span>{tab.label}</span>
+            </NavLink>
+          )
+        })}
+      </div>
+    </nav>
   )
 }
