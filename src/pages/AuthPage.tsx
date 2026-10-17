@@ -118,21 +118,54 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             // Mode: signIn
             const cleanUser = username.trim().toLowerCase()
             if (!cleanUser) {
-                throw new Error('يرجى إدخال اسم المستخدم أو البريد الإلكتروني.')
+                throw new Error('يرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني.')
             }
             if (!password) {
                 throw new Error('يرجى إدخال كلمة المرور.')
             }
 
-            let targetEmail = toSyntheticEmail(cleanUser)
+            // Check if account is suspended or disabled via app_users lookup
+            let resolvedEmail = ''
+            if (supabase) {
+                try {
+                    const { data: matchedProfile } = await supabase
+                        .from('app_users')
+                        .select('username, email, employee_id, status')
+                        .or(`username.ilike.${cleanUser},employee_id.ilike.${cleanUser},email.ilike.${cleanUser}`)
+                        .maybeSingle()
+
+                    if (matchedProfile) {
+                        if (matchedProfile.status === 'suspended' || matchedProfile.status === 'disabled') {
+                            throw new Error('تم تعليق هذا الحساب. يرجى مراجعة إدارة النظام.')
+                        }
+                        if (matchedProfile.status === 'pending_activation' || matchedProfile.status === 'pending') {
+                            throw new Error('الحساب قيد المراجعة والاعتماد. يرجى انتظار موافقة الإدارة.')
+                        }
+                        if (matchedProfile.email) {
+                            resolvedEmail = matchedProfile.email
+                        }
+                    }
+                } catch (statusErr) {
+                    if (statusErr instanceof Error && (statusErr.message.includes('تعليق') || statusErr.message.includes('المراجعة'))) {
+                        throw statusErr
+                    }
+                }
+            }
+
+            // Check specific alias for protected system admin
+            if (cleanUser === 'sys-adm-000001' || cleanUser === 'marwan-desouky' || cleanUser === 'marwandesouqhi@gmail.com') {
+                resolvedEmail = 'marwandesouqhi@gmail.com'
+            }
+
+            let targetEmail = resolvedEmail || toSyntheticEmail(cleanUser)
             let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
                 email: targetEmail,
                 password,
             })
 
             // If sign-in failed and user entered username or email alias, try alternate address
-            if (signInError && (cleanUser === 'marwan-desouky' || cleanUser === 'marwandesouqhi@gmail.com')) {
-                const alternateEmail = cleanUser === 'marwan-desouky' ? 'marwandesouqhi@gmail.com' : 'marwan-desouky@warehouse.local'
+            if (signInError && (cleanUser === 'marwan-desouky' || cleanUser === 'sys-adm-000001' || cleanUser === 'marwandesouqhi@gmail.com')) {
+                const alternateEmail = targetEmail === 'marwandesouqhi@gmail.com' ? 'marwan-desouky@warehouse.local' : 'marwandesouqhi@gmail.com'
                 const retry = await supabase.auth.signInWithPassword({
                     email: alternateEmail,
                     password,
@@ -143,17 +176,18 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 }
             }
 
-            // Transitional Login Bridge: For existing directory users migrating to Supabase Auth without lockout
+            // Transitional Login Bridge: For directory users and Unique-ID users migrating to Supabase Auth without lockout
             if (signInError && supabase && isAuthTransitionalMode()) {
                 try {
                     const { data: bridgeData, error: bridgeError } = await supabase.functions.invoke('login-bridge', {
-                        body: { username: cleanUser, password },
+                        body: { username: cleanUser, identifier: cleanUser, password },
                     })
 
                     if (!bridgeError && bridgeData?.bridged === true) {
                         // Account was seamlessly provisioned into Supabase Auth -> Complete sign in
+                        const retryEmail = bridgeData?.email || targetEmail
                         const retry = await supabase.auth.signInWithPassword({
-                            email: targetEmail,
+                            email: retryEmail,
                             password,
                         })
                         if (!retry.error && retry.data) {
@@ -168,9 +202,12 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         if (status === 429 || bridgeError.message?.includes('429')) {
                             throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
                         }
+                        if (bridgeError.message?.includes('تعطيل') || bridgeError.message?.includes('تعليق')) {
+                            throw new Error('تم تعليق هذا الحساب. يرجى مراجعة إدارة النظام.')
+                        }
                     }
                 } catch (bridgeCatch) {
-                    if (bridgeCatch instanceof Error && bridgeCatch.message.includes('15 دقيقة')) {
+                    if (bridgeCatch instanceof Error && (bridgeCatch.message.includes('15 دقيقة') || bridgeCatch.message.includes('تعليق'))) {
                         throw bridgeCatch
                     }
                     // Fall through to standard error handling
@@ -179,12 +216,19 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
             if (signInError) {
                 if (signInError.message.toLowerCase().includes('invalid login credentials')) {
-                    throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم وكلمة المرور.')
+                    throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
                 }
                 if (signInError.message.toLowerCase().includes('email not confirmed')) {
-                    throw new Error('الحساب قيد الانتظار أو غير مفعّل. يرجى التواصل مع مدير النظام.')
+                    throw new Error('الحساب قيد الانتظار أو لم يتم تأكيد بريده. يرجى مراجعة إدارة النظام.')
                 }
                 throw signInError
+            }
+
+            // Verify account status in authenticated metadata
+            const appMetadata = (signInData.user?.app_metadata as Record<string, unknown>) || {}
+            if (appMetadata.status === 'suspended' || appMetadata.status === 'disabled') {
+                await supabase.auth.signOut()
+                throw new Error('تم تعليق هذا الحساب. يرجى مراجعة إدارة النظام.')
             }
 
             // If user is required to change password on first login
@@ -374,15 +418,15 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 ) : (
                     <>
                         <h1>تسجيل الدخول</h1>
-                        <p>سجّل الدخول باسم المستخدم وكلمة المرور للوصول إلى النظام عبر Supabase Auth.</p>
+                        <p>سجّل الدخول باسم المستخدم أو الرقم الوظيفي وكلمة المرور للوصول إلى النظام عبر Supabase Auth.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
                             <label>
-                                اسم المستخدم
+                                اسم المستخدم أو الرقم الوظيفي
                                 <input
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="اسم المستخدم (مثال: user123)"
+                                    placeholder="اسم المستخدم أو الرقم الوظيفي (مثال: marwan-desouky أو WH-EMP-000001)"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required

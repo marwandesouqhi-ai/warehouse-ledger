@@ -3,13 +3,16 @@ import type { Session } from '@supabase/supabase-js'
 import {
     Check,
     CheckCircle2,
+    Clock,
     Copy,
     Edit2,
     Eye,
     EyeOff,
     KeyRound,
     Lock,
+    RefreshCw,
     Search,
+    Send,
     ShieldAlert,
     ShieldCheck,
     Sparkles,
@@ -17,6 +20,7 @@ import {
     UserCheck,
     UserPlus,
     UsersRound,
+    UserX,
     X,
 } from 'lucide-react'
 
@@ -43,18 +47,25 @@ import {
     getLocalSession,
     isLastActiveSystemAdmin,
     loadLocalUsers,
-    purgeDeletedAccount,
     updateLocalUser,
     type LocalUser,
     type UserRole,
+    type UserStatus,
 } from '../lib/localUsers'
+import {
+    fetchRegistrationRequests,
+    approveRegistrationRequest,
+    rejectRegistrationRequest,
+    setUserAccountStatus,
+} from '../lib/registrationService'
+import type { RegistrationRequest } from '../lib/employeeIdentity'
+import { formatEmployeeId } from '../lib/employeeIdentity'
 
 type UsersPageProps = {
     session?: Session | null
 }
 
 export default function UsersPage({ session }: UsersPageProps) {
-    purgeDeletedAccount('marwandesouqhi@gmail.com')
     const isSystemAdmin = checkIsSystemAdmin(session)
     const localSess = getLocalSession()
     const activeUserEmail = (
@@ -68,6 +79,24 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     // Check if current caller is marwan-desouky (protected System Admin)
     const isCallerProtected = isProtectedUsername(activeUserEmail) || isProtectedUsername(session?.user?.email)
+
+    // Navigation Tab & Filter States
+    const [mainTab, setMainTab] = useState<'employees' | 'requests'>('employees')
+    const [deptFilter, setDeptFilter] = useState<string>('all')
+    const [roleFilter, setRoleFilter] = useState<string>('all')
+    const [statusFilter, setStatusFilter] = useState<string>('all')
+
+    // Registration Requests State
+    const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([])
+    const [requestStatusFilter, setRequestStatusFilter] = useState<string>('all')
+    const [requestsLoading, setRequestsLoading] = useState(false)
+    const [approvingReq, setApprovingReq] = useState<RegistrationRequest | null>(null)
+    const [selectedApprovedRole, setSelectedApprovedRole] = useState<string>('')
+    const [rejectingReq, setRejectingReq] = useState<RegistrationRequest | null>(null)
+    const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('')
+    const [suspendingUser, setSuspendingUser] = useState<LocalUser | null>(null)
+    const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+    const [isActionLoading, setIsActionLoading] = useState(false)
 
     // Local Users State
     const [localUsers, setLocalUsers] = useState<LocalUser[]>(loadLocalUsers)
@@ -86,9 +115,11 @@ export default function UsersPage({ session }: UsersPageProps) {
     // Add User Form State
     const [newUsername, setNewUsername] = useState('')
     const [newDisplayName, setNewDisplayName] = useState('')
+    const [newDepartment, setNewDepartment] = useState<'المخازن' | 'المشتريات' | 'الإدارة العامة'>('المخازن')
+    const [newEmail, setNewEmail] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [showNewPassword, setShowNewPassword] = useState(false)
-    const [newRole, setNewRole] = useState<UserRole>('editor')
+    const [newRole, setNewRole] = useState<UserRole>('warehouse_employee')
     const [newPermissions, setNewPermissions] = useState<string[]>([])
     const [newActivationCode, setNewActivationCode] = useState(() => generateActivationPin())
     const [newRequirePasswordChange, setNewRequirePasswordChange] = useState(true)
@@ -105,7 +136,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [editPassword, setEditPassword] = useState('')
     const [showEditPassword, setShowEditPassword] = useState(false)
     const [editActivationCode, setEditActivationCode] = useState('')
-    const [editStatus, setEditStatus] = useState<'active' | 'pending_activation'>('active')
+    const [editStatus, setEditStatus] = useState<UserStatus>('active')
     const [editError, setEditError] = useState('')
 
     // Delete confirmation modal state
@@ -127,11 +158,25 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [selfPasswordSuccess, setSelfPasswordSuccess] = useState('')
     const [selfPasswordError, setSelfPasswordError] = useState('')
 
+    async function loadRequests() {
+        setRequestsLoading(true)
+        try {
+            const reqs = await fetchRegistrationRequests()
+            setRegistrationRequests(reqs)
+        } catch (err) {
+            console.warn('Failed to load requests:', err)
+        } finally {
+            setRequestsLoading(false)
+        }
+    }
+
     function reloadUsers() {
         setLocalUsers(loadLocalUsers())
+        void loadRequests()
     }
 
     useEffect(() => {
+        void loadRequests()
         window.addEventListener('local-users-changed', reloadUsers)
         return () => window.removeEventListener('local-users-changed', reloadUsers)
     }, [])
@@ -316,20 +361,96 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    function handleToggleStatus(user: LocalUser) {
+    async function handleApproveRequest() {
+        if (!approvingReq) return
+        setIsActionLoading(true)
+        setActionFeedback(null)
+        try {
+            const roleToAssign = selectedApprovedRole || approvingReq.requestedRole || 'warehouse_employee'
+            const res = await approveRegistrationRequest(approvingReq.id, roleToAssign)
+            if (res.success) {
+                setActionFeedback({
+                    message: `تم اعتماد وتسجيل الموظف "${approvingReq.fullName}" بنجاح! كود الموظف المُعيَّن: ${res.employeeId || 'تم تخصيصه'}`,
+                    type: 'success',
+                })
+                void logAuditEvent({
+                    action: `اعتماد طلب تسجيل موظف: ${approvingReq.fullName} (كود: ${res.employeeId})`,
+                    entity_type: 'user',
+                    details: { requestId: approvingReq.id, employeeId: res.employeeId, role: roleToAssign },
+                    user: currentSession?.user,
+                })
+                setApprovingReq(null)
+                reloadUsers()
+            } else {
+                setActionFeedback({ message: res.error || 'تعذر اعتماد طلب الموظف.', type: 'error' })
+            }
+        } catch (err) {
+            setActionFeedback({ message: err instanceof Error ? err.message : 'حدث خطأ أثناء الاعتماد.', type: 'error' })
+        } finally {
+            setIsActionLoading(false)
+        }
+    }
+
+    async function handleRejectRequest() {
+        if (!rejectingReq) return
+        setIsActionLoading(true)
+        setActionFeedback(null)
+        try {
+            const res = await rejectRegistrationRequest(rejectingReq.id, rejectionReasonInput)
+            if (res.success) {
+                setActionFeedback({
+                    message: `تم رفض طلب التسجيل للمتقدم "${rejectingReq.fullName}".`,
+                    type: 'success',
+                })
+                void logAuditEvent({
+                    action: `رفض طلب تسجيل: ${rejectingReq.fullName}`,
+                    entity_type: 'user',
+                    details: { requestId: rejectingReq.id, reason: rejectionReasonInput },
+                    user: currentSession?.user,
+                })
+                setRejectingReq(null)
+                setRejectionReasonInput('')
+                reloadUsers()
+            } else {
+                setActionFeedback({ message: res.error || 'تعذر رفض طلب التسجيل.', type: 'error' })
+            }
+        } catch (err) {
+            setActionFeedback({ message: err instanceof Error ? err.message : 'حدث خطأ أثناء الرفض.', type: 'error' })
+        } finally {
+            setIsActionLoading(false)
+        }
+    }
+
+    async function handleSetStatus(user: LocalUser, newStatus: 'active' | 'suspended') {
         if (isProtectedUsername(user.username)) {
-            alert('غير مصرح: لا يمكن تعطيل حساب مدير النظام الرئيسي المحمي.')
+            alert('غير مصرح: حساب مدير النظام الرئيسي محمي ولا يمكن تعليقه.')
             return
         }
+        setIsActionLoading(true)
+        setActionFeedback(null)
         try {
-            const nextStatus = user.status === 'active' ? 'pending_activation' : 'active'
-            updateLocalUser(user.id, {
-                status: nextStatus,
-                ...(nextStatus === 'active' ? { activatedAt: new Date().toISOString() } : {}),
-            })
-            reloadUsers()
+            const res = await setUserAccountStatus(user.id, newStatus, user.username)
+            if (res.success) {
+                updateLocalUser(user.id, { status: newStatus })
+                reloadUsers()
+                setActionFeedback({
+                    message: `تم تحديث حالة حساب "${user.username}" إلى "${newStatus === 'active' ? 'نشط' : 'معلق'}".`,
+                    type: 'success',
+                })
+                void logAuditEvent({
+                    action: `تغيير حالة حساب: ${user.username} إلى ${newStatus}`,
+                    entity_type: 'user',
+                    details: { userId: user.id, username: user.username, newStatus },
+                    user: currentSession?.user,
+                })
+                setSuspendingUser(null)
+            } else {
+                setActionFeedback({ message: res.error || 'تعذر تحديث حالة الحساب.', type: 'error' })
+            }
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'تعذر تحديث الحالة.')
+            setActionFeedback({ message: err instanceof Error ? err.message : 'حدث خطأ.', type: 'error' })
+        } finally {
+            setIsActionLoading(false)
         }
     }
 
@@ -491,17 +612,39 @@ export default function UsersPage({ session }: UsersPageProps) {
     }
 
     const filteredUsers = useMemo(() => {
-        if (!userSearchTerm.trim()) return visibleLocalUsers
         return visibleLocalUsers.filter((u) => {
-            const roleArabic =
-                u.role === 'admin' ? 'مدير نظام مشرف ادمن' : u.role === 'editor' ? 'محرر كاتب' : 'مشاهد عرض'
-            const statusArabic = u.status === 'active' ? 'نشط مفعل' : 'بانتظار التفعيل'
-            return matchesSearch([u.username, u.displayName, u.role, roleArabic, u.activationCode, statusArabic], userSearchTerm)
+            if (deptFilter !== 'all' && (u.department || 'المخازن') !== deptFilter) return false
+            if (roleFilter !== 'all' && u.role !== roleFilter) return false
+            if (statusFilter !== 'all' && u.status !== statusFilter) return false
+            if (!userSearchTerm.trim()) return true
+            const roleArabic = ROLE_LABELS[u.role as EffectiveRole] || u.role
+            const statusArabic = u.status === 'active' ? 'نشط مفعل' : u.status === 'suspended' ? 'معلق موقوف' : 'بانتظار التفعيل'
+            return matchesSearch([
+                u.username,
+                u.displayName,
+                u.employeeId || '',
+                u.email || '',
+                u.department || '',
+                u.role,
+                roleArabic,
+                u.activationCode,
+                statusArabic,
+            ], userSearchTerm)
         })
-    }, [visibleLocalUsers, userSearchTerm])
+    }, [visibleLocalUsers, userSearchTerm, deptFilter, roleFilter, statusFilter])
+
+    const pendingRequestsCount = useMemo(() => {
+        return registrationRequests.filter((r) => r.approvalStatus === 'pending_approval' || !r.approvalStatus).length
+    }, [registrationRequests])
+
+    const filteredRequests = useMemo(() => {
+        return registrationRequests.filter((r) => {
+            if (requestStatusFilter !== 'all' && r.approvalStatus !== requestStatusFilter) return false
+            return true
+        })
+    }, [registrationRequests, requestStatusFilter])
 
     const activeUsersCount = visibleLocalUsers.filter((u) => u.status === 'active').length
-    const pendingUsersCount = visibleLocalUsers.filter((u) => u.status === 'pending_activation').length
 
     if (!isSystemAdmin) {
         return (
@@ -549,9 +692,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <UsersRound size={22} />
                 </div>
                 <div>
-                    <p className="eyebrow">إدارة الوصول المحلي والأمان</p>
-                    <h2>المستخدمون والصلاحيات</h2>
-                    <p>إدارة حسابات المستخدمين محلياً، الصلاحيات، أكواد تأكيد التفعيل، وكلمات المرور دون الحاجة لبريد إلكتروني.</p>
+                    <p className="eyebrow">إدارة الوصول والأمان والهوية الموحدة</p>
+                    <h2>المستخدمون وسجل الموظفين</h2>
+                    <p>إدارة حسابات الموظفين، أكواد الهوية الفريدة (Unique ID)، الصلاحيات، وطلبات تسجيل بوت تيليجرام.</p>
                 </div>
             </header>
 
@@ -560,9 +703,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                 <div className="kpi-item tone-primary">
                     <span className="kpi-icon"><UsersRound size={18} /></span>
                     <div className="kpi-data">
-                        <span className="kpi-label">إجمالي المستخدمين</span>
+                        <span className="kpi-label">إجمالي الموظفين</span>
                         <strong className="kpi-val">{visibleLocalUsers.length}</strong>
-                        <span className="kpi-sub">حسابات مسجلة</span>
+                        <span className="kpi-sub">حسابات مسجلة بالنظام</span>
                     </div>
                 </div>
 
@@ -575,12 +718,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
                 </div>
 
-                <div className="kpi-item tone-warn">
-                    <span className="kpi-icon"><KeyRound size={18} /></span>
+                <div className="kpi-item tone-warn" style={{ cursor: 'pointer' }} onClick={() => setMainTab('requests')}>
+                    <span className="kpi-icon"><Send size={18} /></span>
                     <div className="kpi-data">
-                        <span className="kpi-label">بانتظار كود التفعيل</span>
-                        <strong className="kpi-val">{pendingUsersCount}</strong>
-                        <span className="kpi-sub">تتطلب إدخال كود التفعيل (PIN)</span>
+                        <span className="kpi-label">طلبات تيليجرام بانتظار الاعتماد</span>
+                        <strong className="kpi-val" style={{ color: pendingRequestsCount > 0 ? '#ef4444' : 'inherit' }}>
+                            {pendingRequestsCount}
+                        </strong>
+                        <span className="kpi-sub">اضغط لعرض الطلبات واعتمادها</span>
                     </div>
                 </div>
 
@@ -596,368 +741,688 @@ export default function UsersPage({ session }: UsersPageProps) {
                 </div>
             </div>
 
-            {/* Add User Section (Admin Only) */}
-            {isSystemAdmin && (
-                <div className="card-surface settings-section" style={{ padding: '22px' }}>
-                    <div className="section-head" style={{ marginBottom: '16px' }}>
-                        <div>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <UserPlus size={19} color="var(--accent)" />
-                                إضافة مستخدم محلي جديد
-                            </h3>
-                            <span>إنشاء حساب محلي باسم مستخدم وكلمة مرور وكود تأكيد تفعيل مخصص</span>
-                        </div>
+            {/* Action Feedback Banner */}
+            {actionFeedback && (
+                <div
+                    className={`inline-message ${actionFeedback.type === 'success' ? 'success' : 'error'}`}
+                    style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {actionFeedback.type === 'success' ? <CheckCircle2 size={18} /> : <ShieldAlert size={18} />}
+                        <span>{actionFeedback.message}</span>
                     </div>
-
-                    <form onSubmit={handleAddUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', alignItems: 'start' }}>
-                        <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                            اسم المستخدم (Username) <span style={{ color: 'var(--accent)' }}>*</span>
-                            <input
-                                type="text"
-                                value={newUsername}
-                                onChange={(e) => setNewUsername(e.target.value)}
-                                placeholder="مثال: store_keeper أو ahmed"
-                                required
-                                style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                            />
-                        </label>
-
-                        <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                            الاسم الكامل / المسمى الوظيفي
-                            <input
-                                type="text"
-                                value={newDisplayName}
-                                onChange={(e) => setNewDisplayName(e.target.value)}
-                                placeholder="مثال: م. أحمد عبد الرحمن - أمين العهدة"
-                                style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                            />
-                        </label>
-
-                        <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                            الصلاحية في النظام <span style={{ color: 'var(--accent)' }}>*</span>
-                            <select
-                                value={newRole}
-                                onChange={(e) => setNewRole(e.target.value as UserRole)}
-                                style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                            >
-                                {ASSIGNABLE_ROLES.map((r) => (
-                                    <option key={r.value} value={r.value}>{r.label}</option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <div style={{ gridColumn: '1 / -1', background: 'rgba(14, 124, 134, 0.05)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
-                            <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', marginBottom: '8px', color: 'var(--ink)' }}>
-                                صلاحيات استثنائية إضافية (تمنح للمستخدم بصرف النظر عن دوره):
-                            </span>
-                            <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
-                                {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
-                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', cursor: 'pointer', color: 'var(--ink)' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={newPermissions.includes(p)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) setNewPermissions([...newPermissions, p])
-                                                else setNewPermissions(newPermissions.filter(x => x !== p))
-                                            }}
-                                            style={{ accentColor: 'var(--accent)' }}
-                                        />
-                                        <span>{PERMISSION_LABELS[p]}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-
-                        <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
-                                <button
-                                    type="button"
-                                    onClick={generateRandomPassword}
-                                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}
-                                >
-                                    <Sparkles size={13} /> توليد عشوائي
-                                </button>
-                            </div>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                <input
-                                    type={showNewPassword ? 'text' : 'password'}
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    placeholder="أدخل كلمة المرور"
-                                    required
-                                    style={{ width: '100%', padding: '10px 38px 10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowNewPassword(!showNewPassword)}
-                                    style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
-                                    title={showNewPassword ? 'إخفاء' : 'إظهار'}
-                                >
-                                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </button>
-                            </div>
-                        </label>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', height: '100%', paddingTop: '18px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={newRequirePasswordChange}
-                                    onChange={(e) => setNewRequirePasswordChange(e.target.checked)}
-                                    style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
-                                />
-                                <span>إلزام المستخدم بتعيين كلمة مرور سرية جديدة عند أول تسجيل دخول (موصى به)</span>
-                            </label>
-                            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-                                {newRequirePasswordChange
-                                    ? 'سيطلب النظام تلقائياً من المستخدم إنشاء كلمة مرور سرية خاصة به فور تسجيل الدخول بكلمة المرور أعلاه.'
-                                    : 'سيتمكن المستخدم من الدخول بكلمة المرور المحددة أعلاه مباشرة دون إلزامه بتغييرها.'}
-                            </span>
-                        </div>
-
-                        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
-                            <button type="submit" className="primary-btn" style={{ height: '42px', padding: '0 24px' }}>
-                                <UserPlus size={16} /> حفظ وإضافة المستخدم
-                            </button>
-                        </div>
-                    </form>
-
-                    {addSuccess && (
-                        <div className="inline-message success" role="status" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <CheckCircle2 size={18} />
-                                <span>{addSuccess}</span>
-                            </div>
-                            <button
-                                type="button"
-                                className="text-link-btn"
-                                onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
-                                style={{ fontSize: '0.82rem' }}
-                            >
-                                <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
-                            </button>
-                        </div>
-                    )}
-
-                    {addError && (
-                        <div className="inline-message error" role="alert" style={{ marginTop: '16px' }}>
-                            {addError}
-                        </div>
-                    )}
+                    <button type="button" onClick={() => setActionFeedback(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>
+                        <X size={16} />
+                    </button>
                 </div>
             )}
 
-            {/* Local Users Table Section */}
-            <div className="card-surface settings-section" style={{ padding: '20px' }}>
-                <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-                    <div>
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <UsersRound size={19} color="var(--accent)" />
-                            سجل المستخدمين وأكواد التفعيل
-                        </h3>
-                        <span>قائمة الحسابات المحلية النشطة وأكواد تفعيلها</span>
-                    </div>
+            {/* Navigation Tabs */}
+            <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '20px' }}>
+                <button
+                    type="button"
+                    onClick={() => setMainTab('employees')}
+                    className={mainTab === 'employees' ? 'primary-btn' : 'secondary-btn'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '8px', fontWeight: 600 }}
+                >
+                    <UsersRound size={17} />
+                    دليل الموظفين والحسابات ({visibleLocalUsers.length})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => {
+                        setMainTab('requests')
+                        void loadRequests()
+                    }}
+                    className={mainTab === 'requests' ? 'primary-btn' : 'secondary-btn'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '8px', fontWeight: 600, position: 'relative' }}
+                >
+                    <Send size={16} />
+                    طلبات التسجيل (تيليجرام)
+                    {pendingRequestsCount > 0 && (
+                        <span style={{
+                            background: '#ef4444',
+                            color: '#fff',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            marginRight: '6px',
+                        }}>
+                            {pendingRequestsCount} جديد
+                        </span>
+                    )}
+                </button>
+            </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '240px' }}>
-                        <div style={{ position: 'relative', width: '100%' }}>
-                            <input
-                                type="search"
-                                placeholder="ابحث باسم المستخدم، الكود، أو الصلاحية..."
-                                value={userSearchTerm}
-                                onChange={(e) => setUserSearchTerm(e.target.value)}
-                                style={{ width: '100%', padding: '8px 32px 8px 10px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
-                            />
-                            <Search size={15} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
+            {/* Tab 1: Employee Directory */}
+            {mainTab === 'employees' && (
+                <>
+                    {/* Add User Section (Admin Only) */}
+                    {isSystemAdmin && (
+                        <div className="card-surface settings-section" style={{ padding: '22px', marginBottom: '20px' }}>
+                            <div className="section-head" style={{ marginBottom: '16px' }}>
+                                <div>
+                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <UserPlus size={19} color="var(--accent)" />
+                                        إضافة وتعيين موظف جديد مباشرة
+                                    </h3>
+                                    <span>إنشاء حساب موظف جديد باسم مستخدم، قسم، كلمة مرور، وتوليد كود التفعيل</span>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleAddUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'start' }}>
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    اسم المستخدم (Username) <span style={{ color: 'var(--accent)' }}>*</span>
+                                    <input
+                                        type="text"
+                                        value={newUsername}
+                                        onChange={(e) => setNewUsername(e.target.value)}
+                                        placeholder="مثال: store_keeper أو ahmed"
+                                        required
+                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    />
+                                </label>
+
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    الاسم الكامل / المسمى الوظيفي
+                                    <input
+                                        type="text"
+                                        value={newDisplayName}
+                                        onChange={(e) => setNewDisplayName(e.target.value)}
+                                        placeholder="مثال: م. أحمد عبد الرحمن - أمين العهدة"
+                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    />
+                                </label>
+
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    القسم التابع له <span style={{ color: 'var(--accent)' }}>*</span>
+                                    <select
+                                        value={newDepartment}
+                                        onChange={(e) => setNewDepartment(e.target.value as any)}
+                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    >
+                                        <option value="المخازن">المخازن (Warehouse)</option>
+                                        <option value="المشتريات">المشتريات (Procurement)</option>
+                                        <option value="الإدارة العامة">الإدارة العامة (General Admin)</option>
+                                    </select>
+                                </label>
+
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    البريد الإلكتروني للموظف (اختياري)
+                                    <input
+                                        type="email"
+                                        value={newEmail}
+                                        onChange={(e) => setNewEmail(e.target.value)}
+                                        placeholder="employee@company.com"
+                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    />
+                                </label>
+
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    الدور والصلاحية في النظام <span style={{ color: 'var(--accent)' }}>*</span>
+                                    <select
+                                        value={newRole}
+                                        onChange={(e) => setNewRole(e.target.value as UserRole)}
+                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    >
+                                        {ASSIGNABLE_ROLES.map((r) => (
+                                            <option key={r.value} value={r.value}>{r.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+
+                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                        <button
+                                            type="button"
+                                            onClick={generateRandomPassword}
+                                            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                        >
+                                            <Sparkles size={13} /> توليد عشوائي
+                                        </button>
+                                    </div>
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                        <input
+                                            type={showNewPassword ? 'text' : 'password'}
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="أدخل كلمة المرور"
+                                            required
+                                            style={{ width: '100%', padding: '10px 38px 10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowNewPassword(!showNewPassword)}
+                                            style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
+                                        >
+                                            {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </label>
+
+                                <div style={{ gridColumn: '1 / -1', background: 'rgba(14, 124, 134, 0.05)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
+                                    <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', marginBottom: '8px', color: 'var(--ink)' }}>
+                                        صلاحيات استثنائية إضافية:
+                                    </span>
+                                    <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+                                        {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
+                                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newPermissions.includes(p)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setNewPermissions([...newPermissions, p])
+                                                        else setNewPermissions(newPermissions.filter(x => x !== p))
+                                                    }}
+                                                    style={{ accentColor: 'var(--accent)' }}
+                                                />
+                                                <span>{PERMISSION_LABELS[p]}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
+                                    <button type="submit" className="primary-btn" style={{ height: '42px', padding: '0 24px' }}>
+                                        <UserPlus size={16} /> حفظ وتفعيل الموظف
+                                    </button>
+                                </div>
+                            </form>
+
+                            {addSuccess && (
+                                <div className="inline-message success" role="status" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <CheckCircle2 size={18} />
+                                        <span>{addSuccess}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="text-link-btn"
+                                        onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
+                                        style={{ fontSize: '0.82rem' }}
+                                    >
+                                        <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
+                                    </button>
+                                </div>
+                            )}
+
+                            {addError && (
+                                <div className="inline-message error" role="alert" style={{ marginTop: '16px' }}>
+                                    {addError}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                </div>
+                    )}
 
-                <div className="table-scroll-container">
-                    <table className="custody-table">
-                        <thead>
-                            <tr>
-                                <th>م</th>
-                                <th>اسم المستخدم (Username)</th>
-                                <th>الاسم الكامل / الصفة</th>
-                                <th>الصلاحية</th>
-                                <th>كود تأكيد التفعيل (PIN)</th>
-                                <th>حالة الحساب</th>
-                                <th>تاريخ الإنشاء</th>
-                                {isSystemAdmin && <th className="actions-header">الإجراءات</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredUsers.length === 0 ? (
-                                <tr>
-                                    <td colSpan={isSystemAdmin ? 8 : 7} style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
-                                        لا توجد حسابات مطابقة للبحث
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredUsers.map((user, idx) => (
-                                    <tr key={user.id}>
-                                        <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
-                                        <td>
-                                            <strong style={{ direction: 'ltr', display: 'inline-block', color: 'var(--ink)', fontSize: '0.92rem' }}>
-                                                {user.username}
-                                            </strong>
-                                            {user.username === currentSession?.user?.email && (
-                                                <span style={{ marginRight: '6px', fontSize: '0.72rem', background: 'var(--accent-wash)', color: 'var(--accent)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                                    أنت
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>{user.displayName || '—'}</td>
-                                        <td>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                                <span style={{
-                                                    fontSize: '0.78rem',
-                                                    padding: '3px 8px',
-                                                    borderRadius: '6px',
-                                                    fontWeight: 600,
-                                                    background: (user.role === 'system_admin' || user.role === 'admin')
-                                                        ? 'rgba(14, 124, 134, 0.12)'
-                                                        : (user.role === 'warehouse_staff' || user.role === 'editor')
-                                                            ? 'rgba(59, 130, 246, 0.12)'
-                                                            : user.role === 'purchasing_staff'
-                                                                ? 'rgba(16, 185, 129, 0.12)'
-                                                                : 'rgba(107, 114, 128, 0.12)',
-                                                    color: (user.role === 'system_admin' || user.role === 'admin')
-                                                        ? 'var(--accent)'
-                                                        : (user.role === 'warehouse_staff' || user.role === 'editor')
-                                                            ? '#2563eb'
-                                                            : user.role === 'purchasing_staff'
-                                                                ? '#059669'
-                                                                : 'var(--muted)',
-                                                }}>
-                                                    {ROLE_LABELS[user.role as EffectiveRole] || user.role}
-                                                </span>
-                                                {Array.isArray(user.permissions) && user.permissions.length > 0 && (
-                                                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
-                                                        {user.permissions.map((p) => (
-                                                            <span
-                                                                key={p}
-                                                                style={{
-                                                                    fontSize: '0.68rem',
-                                                                    padding: '1px 5px',
-                                                                    borderRadius: '4px',
-                                                                    background: 'rgba(245, 158, 11, 0.12)',
-                                                                    color: '#d97706',
-                                                                    fontWeight: 500,
-                                                                }}
-                                                                title={PERMISSION_LABELS[p as Permission] || p}
-                                                            >
-                                                                +{p === 'view_audit' ? 'سجل' : p === 'view_settings' ? 'إعدادات' : 'تعديل/حذف'}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 0, 0, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
-                                                <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.9rem', color: 'var(--ink)' }}>
-                                                    {user.activationCode}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => copyToClipboard(user.activationCode)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '2px', display: 'flex' }}
-                                                    title="نسخ كود التفعيل"
-                                                >
-                                                    <Copy size={13} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <button
-                                                type="button"
-                                                onClick={() => isSystemAdmin && !isLastActiveSystemAdmin(user.id, localUsers) && handleToggleStatus(user)}
-                                                disabled={!isSystemAdmin || isLastActiveSystemAdmin(user.id, localUsers)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    cursor: isSystemAdmin && !isLastActiveSystemAdmin(user.id, localUsers) ? 'pointer' : 'default',
-                                                    padding: 0,
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '5px',
-                                                }}
-                                                title={isLastActiveSystemAdmin(user.id, localUsers) ? 'آخر مدير نظام نشط محمي ضد التعطيل' : isSystemAdmin ? 'انقر لتغيير حالة التفعيل' : ''}
-                                            >
-                                                <span style={{
-                                                    fontSize: '0.78rem',
-                                                    padding: '2px 8px',
-                                                    borderRadius: '999px',
-                                                    fontWeight: 600,
-                                                    background: user.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.14)',
-                                                    color: user.status === 'active' ? '#059669' : '#d97706',
-                                                    border: `1px solid ${user.status === 'active' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`,
-                                                }}>
-                                                    {user.status === 'active' ? 'مفعل نشط' : 'معلق (اضغط للتفعيل فوراً)'}
-                                                </span>
-                                            </button>
-                                        </td>
-                                        <td style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-                                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString('ar-EG') : '—'}
-                                        </td>
-                                        {isSystemAdmin && (
-                                            <td className="actions-cell">
-                                                <div className="action-buttons-wrap">
-                                                    <button
-                                                        type="button"
-                                                        className="action-icon-btn edit-btn"
-                                                        onClick={() => handleOpenChangePassword(user)}
-                                                        title="تغيير كلمة المرور لهذا المستخدم"
-                                                        style={{ color: '#0e7c86' }}
-                                                    >
-                                                        <KeyRound size={15} />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="action-icon-btn edit-btn"
-                                                        onClick={() => handleOpenEdit(user)}
-                                                        title="تعديل المستخدم وكود التفعيل"
-                                                    >
-                                                        <Edit2 size={15} />
-                                                    </button>
-                                                    {!isLastActiveSystemAdmin(user.id, localUsers) && !isProtectedUsername(user.username) && user.username.toLowerCase() !== 'admin' ? (
-                                                        <button
-                                                            type="button"
-                                                            className="action-icon-btn delete-btn"
-                                                            onClick={() => setDeletingUser(user)}
-                                                            title="حذف المستخدم"
-                                                        >
-                                                            <Trash2 size={15} />
-                                                        </button>
+                    {/* Local Users Table Section */}
+                    <div className="card-surface settings-section" style={{ padding: '20px' }}>
+                        <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <UsersRound size={19} color="var(--accent)" />
+                                    دليل الموظفين والحسابات المسجلة
+                                </h3>
+                                <span>قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
+                            </div>
+
+                            {/* Search & Filters */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <select
+                                    value={deptFilter}
+                                    onChange={(e) => setDeptFilter(e.target.value)}
+                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                >
+                                    <option value="all">كل الأقسام</option>
+                                    <option value="المخازن">المخازن</option>
+                                    <option value="المشتريات">المشتريات</option>
+                                    <option value="الإدارة العامة">الإدارة العامة</option>
+                                </select>
+
+                                <select
+                                    value={roleFilter}
+                                    onChange={(e) => setRoleFilter(e.target.value)}
+                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                >
+                                    <option value="all">كل الصلاحيات</option>
+                                    {ASSIGNABLE_ROLES.map((r) => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                    ))}
+                                </select>
+
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                >
+                                    <option value="all">كل الحالات</option>
+                                    <option value="active">نشط ومفعل</option>
+                                    <option value="pending_activation">معلق / بانتظار التفعيل</option>
+                                    <option value="suspended">موقوف مؤقتاً</option>
+                                </select>
+
+                                <div style={{ position: 'relative', minWidth: '220px' }}>
+                                    <input
+                                        type="search"
+                                        placeholder="بحث بالاسم، الكود، المعرف..."
+                                        value={userSearchTerm}
+                                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                                        style={{ width: '100%', padding: '8px 32px 8px 10px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                    />
+                                    <Search size={15} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="table-scroll-container">
+                            <table className="custody-table">
+                                <thead>
+                                    <tr>
+                                        <th>م</th>
+                                        <th>كود الموظف (Unique ID)</th>
+                                        <th>اسم المستخدم</th>
+                                        <th>الاسم والبريد</th>
+                                        <th>القسم والصلاحية</th>
+                                        <th>كود التفعيل (PIN)</th>
+                                        <th>حالة الحساب</th>
+                                        <th>تاريخ الإنشاء</th>
+                                        {isSystemAdmin && <th className="actions-header">الإجراءات</th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredUsers.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={isSystemAdmin ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
+                                                لا توجد حسابات موظفين مطابقة للبحث أو الفلتر
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredUsers.map((user, idx) => (
+                                            <tr key={user.id}>
+                                                <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
+                                                <td>
+                                                    {user.employeeId ? (
+                                                        <span style={{
+                                                            fontFamily: 'monospace',
+                                                            fontWeight: 700,
+                                                            fontSize: '0.86rem',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            background: 'rgba(14, 124, 134, 0.08)',
+                                                            color: 'var(--accent)',
+                                                            border: '1px solid rgba(14, 124, 134, 0.2)',
+                                                            display: 'inline-block',
+                                                            direction: 'ltr',
+                                                        }}>
+                                                            {formatEmployeeId(user.employeeId)}
+                                                        </span>
                                                     ) : (
-                                                        <span
-                                                            style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                width: '28px',
-                                                                height: '28px',
-                                                                borderRadius: '6px',
-                                                                background: 'rgba(14, 124, 134, 0.12)',
-                                                                color: 'var(--accent)',
-                                                            }}
-                                                            title="حساب محمي بشكل دائم ضد الحذف"
-                                                        >
-                                                            <ShieldCheck size={16} />
+                                                        <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>—</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <strong style={{ direction: 'ltr', display: 'inline-block', color: 'var(--ink)', fontSize: '0.92rem' }}>
+                                                        {user.username}
+                                                    </strong>
+                                                    {(user.username === currentSession?.user?.email || user.username === activeUserEmail) && (
+                                                        <span style={{ marginRight: '6px', fontSize: '0.72rem', background: 'var(--accent-wash)', color: 'var(--accent)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                                            أنت
                                                         </span>
                                                     )}
-                                                </div>
-                                            </td>
-                                        )}
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        <span style={{ fontWeight: 500 }}>{user.displayName || '—'}</span>
+                                                        {user.email && (
+                                                            <span style={{ fontSize: '0.76rem', color: 'var(--muted)', direction: 'ltr', textAlign: 'right' }}>
+                                                                {user.email}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 500 }}>
+                                                            {user.department || 'المخازن'}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '0.78rem',
+                                                            padding: '3px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: 600,
+                                                            background: (user.role === 'system_admin' || user.role === 'admin')
+                                                                ? 'rgba(14, 124, 134, 0.12)'
+                                                                : (user.role === 'warehouse_staff' || user.role === 'editor' || user.role === 'warehouse_employee' || user.role === 'warehouse_admin')
+                                                                    ? 'rgba(59, 130, 246, 0.12)'
+                                                                    : 'rgba(16, 185, 129, 0.12)',
+                                                            color: (user.role === 'system_admin' || user.role === 'admin')
+                                                                ? 'var(--accent)'
+                                                                : (user.role === 'warehouse_staff' || user.role === 'editor' || user.role === 'warehouse_employee' || user.role === 'warehouse_admin')
+                                                                    ? '#2563eb'
+                                                                    : '#059669',
+                                                        }}>
+                                                            {ROLE_LABELS[user.role as EffectiveRole] || user.role}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 0, 0, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
+                                                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.88rem', color: 'var(--ink)' }}>
+                                                            {user.activationCode || '—'}
+                                                        </span>
+                                                        {user.activationCode && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => copyToClipboard(user.activationCode)}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '2px', display: 'flex' }}
+                                                                title="نسخ كود التفعيل"
+                                                            >
+                                                                <Copy size={13} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span style={{
+                                                        fontSize: '0.78rem',
+                                                        padding: '3px 9px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: user.status === 'active'
+                                                            ? 'rgba(16, 185, 129, 0.12)'
+                                                            : user.status === 'suspended'
+                                                                ? 'rgba(239, 68, 68, 0.12)'
+                                                                : 'rgba(245, 158, 11, 0.14)',
+                                                        color: user.status === 'active'
+                                                            ? '#059669'
+                                                            : user.status === 'suspended'
+                                                                ? '#dc2626'
+                                                                : '#d97706',
+                                                        border: `1px solid ${user.status === 'active'
+                                                            ? 'rgba(16, 185, 129, 0.25)'
+                                                            : user.status === 'suspended'
+                                                                ? 'rgba(239, 68, 68, 0.25)'
+                                                                : 'rgba(245, 158, 11, 0.3)'}`,
+                                                    }}>
+                                                        {user.status === 'active'
+                                                            ? 'نشط مفعل'
+                                                            : user.status === 'suspended'
+                                                                ? 'موقوف مؤقتاً'
+                                                                : 'بانتظار التفعيل'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('ar-EG') : '—'}
+                                                </td>
+                                                {isSystemAdmin && (
+                                                    <td className="actions-cell">
+                                                        <div className="action-buttons-wrap">
+                                                            <button
+                                                                type="button"
+                                                                className="action-icon-btn edit-btn"
+                                                                onClick={() => handleOpenChangePassword(user)}
+                                                                title="تغيير كلمة المرور لهذا المستخدم"
+                                                                style={{ color: '#0e7c86' }}
+                                                            >
+                                                                <KeyRound size={15} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="action-icon-btn edit-btn"
+                                                                onClick={() => handleOpenEdit(user)}
+                                                                title="تعديل المستخدم وكود التفعيل"
+                                                            >
+                                                                <Edit2 size={15} />
+                                                            </button>
+                                                            {!isProtectedUsername(user.username) && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="action-icon-btn"
+                                                                    onClick={() => {
+                                                                        if (user.status === 'suspended') {
+                                                                            void handleSetStatus(user, 'active')
+                                                                        } else {
+                                                                            setSuspendingUser(user)
+                                                                        }
+                                                                    }}
+                                                                    title={user.status === 'suspended' ? 'إعادة تنشيط الحساب' : 'تعليق وإيقاف الحساب'}
+                                                                    style={{ color: user.status === 'suspended' ? '#059669' : '#d97706' }}
+                                                                >
+                                                                    {user.status === 'suspended' ? <UserCheck size={15} /> : <UserX size={15} />}
+                                                                </button>
+                                                            )}
+                                                            {!isLastActiveSystemAdmin(user.id, localUsers) && !isProtectedUsername(user.username) && user.username.toLowerCase() !== 'admin' ? (
+                                                                <button
+                                                                    type="button"
+                                                                    className="action-icon-btn delete-btn"
+                                                                    onClick={() => setDeletingUser(user)}
+                                                                    title="حذف المستخدم"
+                                                                >
+                                                                    <Trash2 size={15} />
+                                                                </button>
+                                                            ) : (
+                                                                <span
+                                                                    style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        width: '28px',
+                                                                        height: '28px',
+                                                                        borderRadius: '6px',
+                                                                        background: 'rgba(14, 124, 134, 0.12)',
+                                                                        color: 'var(--accent)',
+                                                                    }}
+                                                                    title="حساب محمي بشكل دائم ضد الحذف"
+                                                                >
+                                                                    <ShieldCheck size={16} />
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Tab 2: Telegram Registration Requests */}
+            {mainTab === 'requests' && (
+                <div className="card-surface settings-section" style={{ padding: '20px' }}>
+                    <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Send size={19} color="var(--accent)" />
+                                طلبات التسجيل الواردة عبر بوت تيليجرام
+                            </h3>
+                            <span>مراجعة بيانات الموظفين المتقدمين، التحقق من البريد الإلكتروني، والاعتماد وتخصيص كود فريد</span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <select
+                                value={requestStatusFilter}
+                                onChange={(e) => setRequestStatusFilter(e.target.value)}
+                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                            >
+                                <option value="all">كل الحالات ({registrationRequests.length})</option>
+                                <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
+                                <option value="approved">المعتمدة</option>
+                                <option value="rejected">المرفوضة</option>
+                            </select>
+
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => void loadRequests()}
+                                disabled={requestsLoading}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '0.84rem' }}
+                            >
+                                <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
+                                تحديث
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="table-scroll-container">
+                        <table className="custody-table">
+                            <thead>
+                                <tr>
+                                    <th>م</th>
+                                    <th>اسم المتقدم</th>
+                                    <th>البريد الإلكتروني</th>
+                                    <th>التحقق (OTP)</th>
+                                    <th>القسم المطلوب</th>
+                                    <th>الدور المطلوب</th>
+                                    <th>تيليجرام ID</th>
+                                    <th>تاريخ التقديم</th>
+                                    <th>حالة الطلب</th>
+                                    <th className="actions-header">الإجراءات والقرار</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredRequests.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                                            {requestsLoading ? 'جارٍ تحميل طلبات التسجيل...' : 'لا توجد طلبات تسجيل مطابقة لهذا الفلتر حالياً.'}
+                                        </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                ) : (
+                                    filteredRequests.map((req, idx) => (
+                                        <tr key={req.id}>
+                                            <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
+                                            <td>
+                                                <strong style={{ color: 'var(--ink)' }}>{req.fullName}</strong>
+                                            </td>
+                                            <td style={{ direction: 'ltr', textAlign: 'right', fontSize: '0.86rem' }}>
+                                                {req.email}
+                                            </td>
+                                            <td>
+                                                {req.verificationStatus === 'verified' ? (
+                                                    <span style={{
+                                                        fontSize: '0.74rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: 'rgba(16, 185, 129, 0.12)',
+                                                        color: '#059669',
+                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                    }}>
+                                                        <CheckCircle2 size={12} /> تم التحقق
+                                                    </span>
+                                                ) : (
+                                                    <span style={{
+                                                        fontSize: '0.74rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: 'rgba(245, 158, 11, 0.12)',
+                                                        color: '#d97706',
+                                                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                    }}>
+                                                        <Clock size={12} /> بانتظار OTP
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
+                                                    {req.requestedDepartment}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>
+                                                    {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
+                                                </span>
+                                            </td>
+                                            <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                                {req.telegramUserId || '—'}
+                                            </td>
+                                            <td style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                                {new Date(req.createdAt).toLocaleDateString('ar-EG')}
+                                            </td>
+                                            <td>
+                                                <span style={{
+                                                    fontSize: '0.76rem',
+                                                    padding: '3px 9px',
+                                                    borderRadius: '999px',
+                                                    fontWeight: 600,
+                                                    background: req.approvalStatus === 'approved'
+                                                        ? 'rgba(16, 185, 129, 0.12)'
+                                                        : req.approvalStatus === 'rejected'
+                                                            ? 'rgba(239, 68, 68, 0.12)'
+                                                            : 'rgba(59, 130, 246, 0.12)',
+                                                    color: req.approvalStatus === 'approved'
+                                                        ? '#059669'
+                                                        : req.approvalStatus === 'rejected'
+                                                            ? '#dc2626'
+                                                            : '#2563eb',
+                                                    border: `1px solid ${req.approvalStatus === 'approved'
+                                                        ? 'rgba(16, 185, 129, 0.25)'
+                                                        : req.approvalStatus === 'rejected'
+                                                            ? 'rgba(239, 68, 68, 0.25)'
+                                                            : 'rgba(59, 130, 246, 0.25)'}`,
+                                                }}>
+                                                    {req.approvalStatus === 'approved'
+                                                        ? 'معتمد ومُسجل'
+                                                        : req.approvalStatus === 'rejected'
+                                                            ? 'مرفوض'
+                                                            : 'بانتظار الاعتماد'}
+                                                </span>
+                                            </td>
+                                            <td className="actions-cell">
+                                                {req.approvalStatus === 'pending_approval' || !req.approvalStatus ? (
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <button
+                                                            type="button"
+                                                            className="primary-btn"
+                                                            onClick={() => {
+                                                                setApprovingReq(req)
+                                                                setSelectedApprovedRole(req.requestedRole || 'warehouse_employee')
+                                                            }}
+                                                            style={{ height: '32px', padding: '0 12px', fontSize: '0.78rem' }}
+                                                        >
+                                                            <CheckCircle2 size={13} /> اعتماد
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="secondary-btn"
+                                                            onClick={() => {
+                                                                setRejectingReq(req)
+                                                                setRejectionReasonInput('')
+                                                            }}
+                                                            style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', color: '#dc2626' }}
+                                                        >
+                                                            <UserX size={13} /> رفض
+                                                        </button>
+                                                    </div>
+                                                ) : req.approvalStatus === 'approved' ? (
+                                                    <span style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Check size={14} /> تم تعيينه ({req.approvedRole})
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }} title={req.rejectionReason || ''}>
+                                                        مرفوض {req.rejectionReason ? `(${req.rejectionReason})` : ''}
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Current User Password Change Section */}
             <div className="card-surface settings-section" style={{ padding: '20px' }}>
@@ -1279,6 +1744,197 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Approve Registration Request Modal */}
+            {approvingReq && (
+                <div className="modal-backdrop" onClick={() => !isActionLoading && setApprovingReq(null)}>
+                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title-wrap">
+                                <div className="modal-title-icon" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
+                                    <CheckCircle2 size={18} />
+                                </div>
+                                <div>
+                                    <h3>اعتماد طلب تسجيل الموظف</h3>
+                                    <span className="modal-subtitle">المتقدم: {approvingReq.fullName}</span>
+                                </div>
+                            </div>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setApprovingReq(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="modal-body" style={{ padding: '20px' }}>
+                            <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '16px', fontSize: '0.86rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '8px', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--muted)' }}>البريد الإلكتروني:</span>
+                                    <strong style={{ direction: 'ltr', textAlign: 'right' }}>{approvingReq.email}</strong>
+
+                                    <span style={{ color: 'var(--muted)' }}>القسم المطلوب:</span>
+                                    <span>{approvingReq.requestedDepartment}</span>
+
+                                    <span style={{ color: 'var(--muted)' }}>الدور المطلوب:</span>
+                                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                        {ROLE_LABELS[approvingReq.requestedRole as EffectiveRole] || approvingReq.requestedRole}
+                                    </span>
+
+                                    <span style={{ color: 'var(--muted)' }}>حالة التحقق:</span>
+                                    <span>
+                                        {approvingReq.verificationStatus === 'verified'
+                                            ? 'تم التحقق من البريد الإلكتروني بنجاح'
+                                            : 'بانتظار رمز OTP'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', marginBottom: '16px' }}>
+                                <span>الدور النهائي المُعتمد للموظف <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <select
+                                    value={selectedApprovedRole}
+                                    onChange={(e) => setSelectedApprovedRole(e.target.value)}
+                                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                >
+                                    {ASSIGNABLE_ROLES.map((r) => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                    ))}
+                                </select>
+                                <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+                                    ملاحظة أمنية: سيتم توليد وتخصيص كود فريد (Unique ID) فورياً بحسب هذا الدور المحدد بصورة تسلسلية محكمة ومحمية من التكرار.
+                                </span>
+                            </label>
+
+                            <div className="form-actions" style={{ marginTop: '16px' }}>
+                                <button
+                                    type="button"
+                                    className="secondary-btn"
+                                    onClick={() => setApprovingReq(null)}
+                                    disabled={isActionLoading}
+                                >
+                                    إلغاء
+                                </button>
+                                <button
+                                    type="button"
+                                    className="primary-btn"
+                                    onClick={handleApproveRequest}
+                                    disabled={isActionLoading}
+                                >
+                                    {isActionLoading ? 'جارٍ الاعتماد والتسجيل...' : 'تأكيد الاعتماد وتعيين الكود'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Reject Registration Request Modal */}
+            {rejectingReq && (
+                <div className="modal-backdrop" onClick={() => !isActionLoading && setRejectingReq(null)}>
+                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title-wrap">
+                                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }}>
+                                    <UserX size={18} />
+                                </div>
+                                <div>
+                                    <h3>رفض طلب التسجيل</h3>
+                                    <span className="modal-subtitle">المتقدم: {rejectingReq.fullName}</span>
+                                </div>
+                            </div>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setRejectingReq(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="modal-body" style={{ padding: '20px' }}>
+                            <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--ink)' }}>
+                                هل أنت متأكد من رغبتك في رفض طلب التسجيل للمتقدم <strong>"{rejectingReq.fullName}"</strong>؟
+                            </p>
+
+                            <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', marginBottom: '16px' }}>
+                                <span>سبب الرفض (سيتم حفظه في السجل وإبلاغ المتقدم):</span>
+                                <textarea
+                                    value={rejectionReasonInput}
+                                    onChange={(e) => setRejectionReasonInput(e.target.value)}
+                                    placeholder="مثال: لم يتم استيفاء شروط الانضمام، أو بيانات الاتصال غير مطابقة..."
+                                    rows={3}
+                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)', fontSize: '0.86rem' }}
+                                />
+                            </label>
+
+                            <div className="form-actions" style={{ marginTop: '16px' }}>
+                                <button
+                                    type="button"
+                                    className="secondary-btn"
+                                    onClick={() => setRejectingReq(null)}
+                                    disabled={isActionLoading}
+                                >
+                                    إلغاء
+                                </button>
+                                <button
+                                    type="button"
+                                    className="primary-btn"
+                                    onClick={handleRejectRequest}
+                                    disabled={isActionLoading}
+                                    style={{ background: '#dc2626', borderColor: '#dc2626' }}
+                                >
+                                    {isActionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Suspend Confirmation Modal */}
+            {suspendingUser && (
+                <div className="modal-backdrop" onClick={() => !isActionLoading && setSuspendingUser(null)}>
+                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title-wrap">
+                                <div className="modal-title-icon" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706' }}>
+                                    <UserX size={18} />
+                                </div>
+                                <div>
+                                    <h3>تعليق حساب الموظف</h3>
+                                    <span className="modal-subtitle">المستخدم: {suspendingUser.username}</span>
+                                </div>
+                            </div>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setSuspendingUser(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="modal-body" style={{ padding: '20px' }}>
+                            <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--ink)' }}>
+                                هل أنت متأكد من رغبتك في إيقاف وتعليق حساب الموظف <strong>"{suspendingUser.displayName || suspendingUser.username}"</strong>؟
+                            </p>
+                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)', lineHeight: '1.5' }}>
+                                لن يتمكن الموظف من تسجيل الدخول إلى النظام أو إجراء أي عمليات حتى يتم رفع التعليق وإعادة تنشيطه من قِبل مدير النظام.
+                            </p>
+
+                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                                <button
+                                    type="button"
+                                    className="secondary-btn"
+                                    onClick={() => setSuspendingUser(null)}
+                                    disabled={isActionLoading}
+                                >
+                                    إلغاء
+                                </button>
+                                <button
+                                    type="button"
+                                    className="primary-btn"
+                                    onClick={() => handleSetStatus(suspendingUser, 'suspended')}
+                                    disabled={isActionLoading}
+                                    style={{ background: '#d97706', borderColor: '#d97706' }}
+                                >
+                                    {isActionLoading ? 'جارٍ التعليق...' : 'تأكيد إيقاف الحساب'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -17,15 +17,19 @@ import type { LocalUserSession } from './localUsers'
 
 /**
  * الدور الفعلي المحسوب — يختلف عن القيمة المخزنة في قاعدة البيانات
- * القيم القديمة (admin, editor, viewer) تبقى للتوافق الرجعي
+ * القيم القديمة (admin, editor, viewer, warehouse_staff, purchasing_staff) تبقى للتوافق الرجعي
  */
 export type EffectiveRole =
-  | 'system_admin'     // مدير النظام — موثق عبر app_metadata فقط
-  | 'admin'            // أدمن عادي — يشوف كل شيء ما عدا audit/users/settings
-  | 'warehouse_staff'  // موظف مخازن — صفحات المخازن والعهدة والمنصرف
-  | 'purchasing_staff' // موظف مشتريات — صفحات المشتريات فقط
-  | 'editor'           // محرر (توافق رجعي) — يعمل كـ warehouse_staff عند القراءة
-  | 'viewer'           // مشاهد — قراءة فقط
+  | 'system_admin'         // مدير النظام — موثق عبر app_metadata فقط
+  | 'warehouse_admin'      // مشرف مخازن — إدارة كاملة للمخازن والعهدة والجودة
+  | 'warehouse_employee'   // موظف مخازن — عمليات المخازن والعهدة والمنصرف
+  | 'procurement_admin'    // مشرف مشتريات — إدارة كاملة للمشتريات والموردين والطلبات
+  | 'procurement_employee' // موظف مشتريات — فواتير الشراء والطلبات المحددة
+  | 'admin'                // أدمن عام — يشوف كل شيء ما عدا audit/users/settings
+  | 'warehouse_staff'      // موظف مخازن (توافق رجعي)
+  | 'purchasing_staff'     // موظف مشتريات (توافق رجعي)
+  | 'editor'               // محرر (توافق رجعي) — يعمل كـ warehouse_staff عند القراءة
+  | 'viewer'               // مشاهد — قراءة فقط
 
 /**
  * الصلاحيات الإضافية — يمنحها السيستم أدمن لأي مستخدم بصرف النظر عن دوره
@@ -44,8 +48,12 @@ export const PURCHASES_SCOPE: PurchasesScope = 'all'
 // ─── الأسماء العربية للأدوار ──────────────────────────────────────────────────
 
 export const ROLE_LABELS: Record<EffectiveRole, string> = {
-  system_admin: 'مدير النظام',
-  admin: 'أدمن',
+  system_admin: 'مدير النظام الرئيسي',
+  warehouse_admin: 'مشرف مخازن',
+  warehouse_employee: 'موظف مخازن',
+  procurement_admin: 'مشرف مشتريات',
+  procurement_employee: 'موظف مشتريات',
+  admin: 'أدمن عام',
   warehouse_staff: 'موظف مخازن',
   purchasing_staff: 'موظف مشتريات',
   editor: 'محرر مخزن',
@@ -53,10 +61,14 @@ export const ROLE_LABELS: Record<EffectiveRole, string> = {
 }
 
 /** الأدوار التي يمكن للسيستم أدمن اختيارها لأي مستخدم */
-export const ASSIGNABLE_ROLES: Array<{ value: EffectiveRole; label: string }> = [
-  { value: 'admin', label: 'أدمن' },
-  { value: 'warehouse_staff', label: 'موظف مخازن' },
-  { value: 'purchasing_staff', label: 'موظف مشتريات' },
+export const ASSIGNABLE_ROLES: Array<{ value: EffectiveRole; label: string; department?: string }> = [
+  { value: 'warehouse_employee', label: 'موظف مخازن', department: 'المخازن' },
+  { value: 'warehouse_admin', label: 'مشرف مخازن', department: 'المخازن' },
+  { value: 'procurement_employee', label: 'موظف مشتريات', department: 'المشتريات' },
+  { value: 'procurement_admin', label: 'مشرف مشتريات', department: 'المشتريات' },
+  { value: 'admin', label: 'أدمن عام' },
+  { value: 'warehouse_staff', label: 'موظف مخازن (توافق)' },
+  { value: 'purchasing_staff', label: 'موظف مشتريات (توافق)' },
   { value: 'editor', label: 'محرر مخزن' },
   { value: 'viewer', label: 'مشاهد (قراءة فقط)' },
 ]
@@ -71,22 +83,22 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 // ─── مصفوفة الوصول للراوتس ────────────────────────────────────────────────────
 
 const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
-  '/':                     ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
-  '/purchases':            ['system_admin', 'admin', 'purchasing_staff', 'editor'],
-  '/purchases/requests':     ['system_admin', 'admin', 'purchasing_staff'],
-  '/purchases/requests/new': ['system_admin', 'admin', 'purchasing_staff'],
-  '/purchases/suppliers':    ['system_admin', 'admin', 'purchasing_staff'],
-  '/purchases/quotes':       ['system_admin', 'admin', 'purchasing_staff'],
-  '/purchases/analytics':    ['system_admin', 'admin', 'purchasing_staff'],
-  '/custody':              ['system_admin', 'admin', 'warehouse_staff', 'editor'],
-  '/reports':              ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'],
-  '/imports':              ['system_admin', 'admin', 'purchasing_staff'],
-  '/quality':              ['system_admin', 'admin', 'warehouse_staff', 'editor'],
+  '/':                     ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/purchases':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
+  '/purchases/requests':     ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/purchases/requests/new': ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/purchases/suppliers':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/purchases/quotes':       ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/purchases/analytics':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/custody':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
+  '/reports':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor'],
+  '/imports':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/quality':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/audit':                ['system_admin'],   // يُفتح أيضاً بصلاحية view_audit
-  '/users':                ['system_admin'],
+  '/users':                ['system_admin', 'warehouse_admin', 'procurement_admin'],
   '/settings':             ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
   // إعادة توجيه من الراوتس القديمة — يُعامل نفس /purchases
-  '/movements':            ['system_admin', 'admin', 'purchasing_staff', 'editor'],
+  '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
 }
 
 // ─── الدوال الأساسية ──────────────────────────────────────────────────────────
@@ -108,7 +120,13 @@ export function normalizeRole(
   // دور system_admin مخزن صراحةً
   if (storedRole === 'system_admin') return 'system_admin'
 
-  // أدوار جديدة صريحة
+  // أدوار الهيكل الجديد للأقسام
+  if (storedRole === 'warehouse_admin') return 'warehouse_admin'
+  if (storedRole === 'warehouse_employee') return 'warehouse_employee'
+  if (storedRole === 'procurement_admin') return 'procurement_admin'
+  if (storedRole === 'procurement_employee') return 'procurement_employee'
+
+  // أدوار موجودة صريحة
   if (storedRole === 'warehouse_staff') return 'warehouse_staff'
   if (storedRole === 'purchasing_staff') return 'purchasing_staff'
 
@@ -128,11 +146,12 @@ export function normalizeRole(
  * واسم المستخدم لمنع أي تصعيد صلاحيات.
  */
 export function getEffectiveRole(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): EffectiveRole {
   if (!session) return 'viewer'
+  if (typeof session === 'string') return normalizeRole(session)
 
-  const user = 'user' in session ? session.user : null
+  const user = (typeof session === 'object' && 'user' in session) ? session.user : null
   if (!user) return 'viewer'
 
   const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
@@ -159,10 +178,10 @@ export function getEffectiveRole(
  * أمان: يقرأ حصرياً من app_metadata الموثوقة.
  */
 export function getExtraPermissions(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): Permission[] {
-  if (!session) return []
-  const user = 'user' in session ? session.user : null
+  if (!session || typeof session === 'string') return []
+  const user = (typeof session === 'object' && 'user' in session) ? session.user : null
   if (!user) return []
 
   const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
@@ -192,7 +211,7 @@ export function isSystemAdmin(
  * الصلاحيات الإضافية تُفتح بصرف النظر عن الدور.
  */
 export function can(
-  session: Session | LocalUserSession | null | undefined,
+  session: Session | LocalUserSession | string | null | undefined,
   permission: Permission
 ): boolean {
   const role = getEffectiveRole(session)
@@ -211,58 +230,71 @@ export function can(
  * canCreatePurchase — هل المستخدم يستطيع إضافة فاتورة شراء؟
  */
 export function canCreatePurchase(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): boolean {
   const role = getEffectiveRole(session)
-  return ['system_admin', 'admin', 'purchasing_staff'].includes(role)
+  return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
 }
 
 /**
  * canCreateDisbursement — هل المستخدم يستطيع إنشاء إذن صرف؟
  */
 export function canCreateDisbursement(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): boolean {
   const role = getEffectiveRole(session)
-  return ['system_admin', 'admin', 'warehouse_staff'].includes(role)
+  return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff'].includes(role)
 }
 
 /**
  * canAccessProcurementModule — هل المستخدم مصرح له بالدخول لصفحات موديول المشتريات الجديد؟
- * مقتصر حصرياً على موظفي المشتريات والأدمن ومدير النظام.
+ * مقتصر حصرياً على موظفي ومشرفي المشتريات والأدمن العام ومدير النظام.
  */
 export function canAccessProcurementModule(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): boolean {
   const role = getEffectiveRole(session)
-  return ['system_admin', 'admin', 'purchasing_staff'].includes(role)
+  return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
 }
 
 /**
  * canViewPage — هل المستخدم يملك صلاحية عرض صفحة معينة في الـ nav؟
  */
+/**
+ * canViewPage — هل المستخدم يملك صلاحية عرض صفحة معينة في الـ nav؟
+ */
 export function canViewPage(
-  session: Session | LocalUserSession | null | undefined,
-  page: 'purchases' | 'custody' | 'reports' | 'imports' | 'quality' | 'audit' | 'users' | 'settings'
+  sessionOrPage: Session | LocalUserSession | string | null | undefined,
+  pageOrSession?: string | Session | LocalUserSession | null | undefined
 ): boolean {
+  let session = sessionOrPage
+  let page = pageOrSession as string
+
+  const knownPages = ['purchases', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement']
+  if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
+    page = sessionOrPage
+    session = pageOrSession
+  }
+  if (page === 'procurement') page = 'purchases'
+
   const role = getEffectiveRole(session)
   const extra = getExtraPermissions(session)
 
   switch (page) {
     case 'purchases':
-      return ['system_admin', 'admin', 'purchasing_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'].includes(role)
     case 'custody':
-      return ['system_admin', 'admin', 'warehouse_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'reports':
-      return ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(role)
     case 'imports':
-      return ['system_admin', 'admin', 'purchasing_staff'].includes(role)
+      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
     case 'quality':
-      return ['system_admin', 'admin', 'warehouse_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'audit':
       return role === 'system_admin' || extra.includes('view_audit')
     case 'users':
-      return role === 'system_admin'
+      return ['system_admin', 'warehouse_admin', 'procurement_admin'].includes(role)
     case 'settings':
       return role === 'system_admin' || extra.includes('view_settings')
     default:
@@ -276,7 +308,7 @@ export function canViewPage(
  * يستخدم في حماية الراوتس (ليس فقط إخفاء الروابط).
  */
 export function canAccessRoute(
-  session: Session | LocalUserSession | null | undefined,
+  session: Session | LocalUserSession | string | null | undefined,
   path: string
 ): boolean {
   const role = getEffectiveRole(session)
@@ -306,12 +338,12 @@ export function canAccessRoute(
  * getDashboardScope — ماذا يرى المستخدم في لوحة التحكم؟
  */
 export function getDashboardScope(
-  session: Session | LocalUserSession | null | undefined
+  session: Session | LocalUserSession | string | null | undefined
 ): 'full' | 'warehouse_only' | 'purchases_only' {
   const role = getEffectiveRole(session)
 
   if (role === 'system_admin' || role === 'admin') return 'full'
-  if (role === 'purchasing_staff') return 'purchases_only'
-  if (role === 'warehouse_staff' || role === 'editor') return 'warehouse_only'
+  if (role === 'procurement_admin' || role === 'procurement_employee' || role === 'purchasing_staff') return 'purchases_only'
+  if (role === 'warehouse_admin' || role === 'warehouse_employee' || role === 'warehouse_staff' || role === 'editor') return 'warehouse_only'
   return 'full' // viewer يرى الكل للقراءة
 }

@@ -65,20 +65,20 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 
     const body = await req.json().catch(() => ({}))
-    const rawUsername = body.username
+    const rawIdentifier = body.identifier || body.username
     const password = body.password
 
-    const cleanUsername = normalizeUsername(rawUsername)
+    const cleanIdentifier = normalizeUsername(rawIdentifier)
 
-    if (!cleanUsername || !password || typeof password !== "string") {
-      return new Response(JSON.stringify({ error: "اسم المستخدم وكلمة المرور مطلوبان." }), {
+    if (!cleanIdentifier || !password || typeof password !== "string") {
+      return new Response(JSON.stringify({ error: "اسم المستخدم أو الرقم الوظيفي وكلمة المرور مطلوبان." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
     // 1. Fixed System Admin marwan-desouky is strictly excluded from login-bridge
-    if (isProtectedUsername(cleanUsername)) {
+    if (isProtectedUsername(cleanIdentifier)) {
       return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -92,7 +92,7 @@ serve(async (req) => {
     const { count: failedAttemptsCount } = await supabaseAdmin
       .from("login_attempts")
       .select("id", { count: "exact", head: true })
-      .eq("username", cleanUsername)
+      .eq("username", cleanIdentifier)
       .eq("success", false)
       .gte("attempted_at", fifteenMinutesAgo)
 
@@ -105,20 +105,27 @@ serve(async (req) => {
       })
     }
 
-    const syntheticEmail = `${cleanUsername}@warehouse.local`
-
-    // 3. Query mirror row from app_users
+    // 3. Query mirror row from app_users by username, employee_id, or email
     const { data: appUser, error: appUserErr } = await supabaseAdmin
       .from("app_users")
-      .select("id, username, display_name, password, role, status, permissions")
-      .ilike("username", cleanUsername)
+      .select("id, username, display_name, password, role, status, permissions, employee_id, email, department")
+      .or(`username.ilike.${cleanIdentifier},employee_id.ilike.${cleanIdentifier},email.ilike.${cleanIdentifier}`)
       .maybeSingle()
 
     if (appUserErr || !appUser) {
       await supabaseAdmin.from("login_attempts").insert({
-        username: cleanUsername,
+        username: cleanIdentifier,
         success: false,
       })
+      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    const cleanUsername = normalizeUsername(appUser.username)
+
+    if (isProtectedUsername(cleanUsername)) {
       return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -128,7 +135,7 @@ serve(async (req) => {
     // 4. Explicitly reject disabled or suspended accounts
     if (appUser.status === "disabled" || appUser.status === "suspended") {
       await supabaseAdmin.from("login_attempts").insert({
-        username: cleanUsername,
+        username: cleanIdentifier,
         success: false,
       })
       return new Response(JSON.stringify({ error: "تم تعطيل هذا الحساب. يرجى مراجعة إدارة النظام." }), {
@@ -141,7 +148,7 @@ serve(async (req) => {
     const passwordMatches = await timingSafeEqualString(password, appUser.password || "")
     if (!passwordMatches) {
       await supabaseAdmin.from("login_attempts").insert({
-        username: cleanUsername,
+        username: cleanIdentifier,
         success: false,
       })
       return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
@@ -150,10 +157,13 @@ serve(async (req) => {
       })
     }
 
+    const effectiveAuthEmail = appUser.email || `${cleanUsername}@warehouse.local`
+
     // 6. Check if user already exists in Supabase Auth
     const { data: authSearch } = await supabaseAdmin.auth.admin.listUsers()
     const existingAuthUser = (authSearch?.users || []).find(
-      (u) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
+      (u) => normalizeUsername(u.email) === normalizeUsername(effectiveAuthEmail) ||
+             normalizeUsername(u.email) === normalizeUsername(`${cleanUsername}@warehouse.local`)
     )
 
     if (existingAuthUser) {
@@ -175,7 +185,12 @@ serve(async (req) => {
         success: true,
       })
 
-      return new Response(JSON.stringify({ success: true, bridged: true }), {
+      return new Response(JSON.stringify({
+        success: true,
+        bridged: true,
+        email: existingAuthUser.email || effectiveAuthEmail,
+        employee_id: appUser.employee_id || null,
+      }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
@@ -189,13 +204,15 @@ serve(async (req) => {
         : []
 
     const { data: newAuthUser, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
-      email: syntheticEmail,
+      email: effectiveAuthEmail,
       password: password,
       email_confirm: true,
       user_metadata: {
         username: cleanUsername,
         displayName: appUser.display_name || cleanUsername,
         name: appUser.display_name || cleanUsername,
+        employee_id: appUser.employee_id || null,
+        department: appUser.department || null,
       },
       app_metadata: {
         username: cleanUsername,
@@ -203,6 +220,8 @@ serve(async (req) => {
         system_admin: false,
         permissions: permissionsArray,
         must_change_password: true,
+        employee_id: appUser.employee_id || null,
+        department: appUser.department || null,
       },
     })
 
@@ -226,7 +245,12 @@ serve(async (req) => {
       success: true,
     })
 
-    return new Response(JSON.stringify({ success: true, bridged: true }), {
+    return new Response(JSON.stringify({
+      success: true,
+      bridged: true,
+      email: effectiveAuthEmail,
+      employee_id: appUser.employee_id || null,
+    }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

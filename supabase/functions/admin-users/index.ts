@@ -105,13 +105,16 @@ serve(async (req) => {
       // Fetch mirror profile data from app_users
       const { data: appUsersData } = await supabaseAdmin
         .from("app_users")
-        .select("id, username, display_name, role, status, created_at, activated_at, last_login_at, notes, permissions, auth_user_id, must_change_password")
+        .select("id, username, display_name, role, status, created_at, activated_at, last_login_at, notes, permissions, auth_user_id, must_change_password, employee_id, email, department, telegram_user_id")
 
       const appUserMap = new Map((appUsersData || []).map((u) => [normalizeUsername(u.username), u]))
 
       const allUsers = (listData?.users || []).map((u) => {
         const username = (u.app_metadata?.username as string) || (u.email?.replace(/@warehouse\.local$/, "") ?? "")
         const mirror = appUserMap.get(normalizeUsername(username))
+
+        const employeeId = mirror?.employee_id || (u.app_metadata?.employee_id as string) || (isProtectedUsername(username) ? "SYS-ADM-000001" : "")
+        const department = mirror?.department || (u.app_metadata?.department as string) || (isProtectedUsername(username) ? "الإدارة العامة" : "")
 
         return {
           id: u.id,
@@ -120,7 +123,10 @@ serve(async (req) => {
           email: u.email ?? "",
           role: u.app_metadata?.role || mirror?.role || "viewer",
           systemAdmin: u.app_metadata?.system_admin === true || u.app_metadata?.role === "system_admin",
-          status: mirror?.status || "active",
+          status: mirror?.status || (u.app_metadata?.status as string) || "active",
+          employeeId,
+          department,
+          telegramUserId: mirror?.telegram_user_id || null,
           permissions: (u.app_metadata?.permissions as string[]) || mirror?.permissions || [],
           mustChangePassword: Boolean(u.app_metadata?.must_change_password ?? mirror?.must_change_password),
           createdAt: u.created_at,
@@ -562,6 +568,337 @@ serve(async (req) => {
       })
 
       return new Response(JSON.stringify({ success: true, message: "تم حذف المستخدم بنجاح." }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: list_registration_requests ──────────────────────────────────
+    if (action === "list_registration_requests") {
+      const { data: requests, error: reqErr } = await supabaseAdmin
+        .from("registration_requests")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (reqErr) throw reqErr
+
+      return new Response(JSON.stringify({ success: true, requests: requests || [] }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: approve_registration_request ────────────────────────────────
+    if (action === "approve_registration_request") {
+      const { requestId, approvedRole } = body
+      if (!requestId) {
+        return new Response(JSON.stringify({ error: "معرّف طلب التسجيل مطلوب." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // Fetch request
+      const { data: regReq, error: fetchErr } = await supabaseAdmin
+        .from("registration_requests")
+        .select("*")
+        .eq("id", requestId)
+        .maybeSingle()
+
+      if (fetchErr || !regReq) {
+        return new Response(JSON.stringify({ error: "طلب التسجيل غير موجود." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      if (regReq.approval_status === "approved") {
+        return new Response(JSON.stringify({
+          error: `تم اعتماد هذا الطلب مسبقاً بالرقم الوظيفي: ${regReq.employee_id}`,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      if (regReq.verification_status !== "verified") {
+        return new Response(JSON.stringify({
+          error: "لا يمكن اعتماد طلب تسجيل لم يتم التحقق من بريده الإلكتروني بعد.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const roleToAssign = approvedRole || regReq.requested_role
+
+      if (roleToAssign === "system_admin") {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن منح دور مدير النظام الرئيسي من خلال طلبات تسجيل الموظفين.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // Execute SQL RPC approve_employee_registration
+      const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc("approve_employee_registration", {
+        p_request_id: requestId,
+        p_approved_role: roleToAssign,
+        p_reviewer_id: caller.id,
+      })
+
+      if (rpcErr) {
+        throw rpcErr
+      }
+
+      const allocatedEmployeeId = rpcRes?.employee_id
+
+      // Provision or link user in Supabase Auth with real email
+      let authUserId: string | null = null
+      const { data: authList } = await supabaseAdmin.auth.admin.listUsers()
+      const existingAuth = (authList?.users || []).find(
+        (u) => normalizeUsername(u.email) === normalizeUsername(regReq.email)
+      )
+
+      if (existingAuth) {
+        authUserId = existingAuth.id
+        await supabaseAdmin.auth.admin.updateUserById(existingAuth.id, {
+          app_metadata: {
+            ...existingAuth.app_metadata,
+            role: roleToAssign,
+            employee_id: allocatedEmployeeId,
+            department: regReq.requested_department,
+            status: "active",
+          },
+        })
+      } else {
+        const tempPassword = generateSecureTempPassword()
+        const { data: newAuth, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
+          email: regReq.email,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: {
+            name: regReq.full_name,
+            displayName: regReq.full_name,
+            employee_id: allocatedEmployeeId,
+          },
+          app_metadata: {
+            role: roleToAssign,
+            employee_id: allocatedEmployeeId,
+            department: regReq.requested_department,
+            system_admin: false,
+            status: "active",
+            must_change_password: true,
+          },
+        })
+
+        if (!createAuthErr && newAuth?.user) {
+          authUserId = newAuth.user.id
+        }
+      }
+
+      if (authUserId) {
+        await supabaseAdmin
+          .from("app_users")
+          .update({ auth_user_id: authUserId })
+          .eq("employee_id", allocatedEmployeeId)
+      }
+
+      // Notify Telegram user if configured
+      const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")
+      if (botToken && regReq.telegram_user_id) {
+        const notifyUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
+        const notifyMsg = `تهانينا! تمت الموافقة على طلب اعتماد حسابك.\n\nالرقم الوظيفي: <b>${allocatedEmployeeId}</b>\nالدور: ${roleToAssign}\nالقسم: ${regReq.requested_department}\n\nيمكنك الآن تسجيل الدخول إلى النظام باستخدام الرقم الوظيفي أو بريدك الإلكتروني.`
+        try {
+          await fetch(notifyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: regReq.telegram_user_id,
+              text: notifyMsg,
+              parse_mode: "HTML",
+            }),
+          })
+        } catch {
+          // ignore notification failure
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم اعتماد الموظف وتخصيص الرقم الوظيفي بنجاح.",
+        employeeId: allocatedEmployeeId,
+        role: roleToAssign,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: reject_registration_request ─────────────────────────────────
+    if (action === "reject_registration_request") {
+      const { requestId, rejectionReason } = body
+      if (!requestId) {
+        return new Response(JSON.stringify({ error: "معرّف طلب التسجيل مطلوب." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const { data: regReq } = await supabaseAdmin
+        .from("registration_requests")
+        .select("*")
+        .eq("id", requestId)
+        .maybeSingle()
+
+      if (!regReq) {
+        return new Response(JSON.stringify({ error: "طلب التسجيل غير موجود." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      await supabaseAdmin
+        .from("registration_requests")
+        .update({
+          approval_status: "rejected",
+          rejection_reason: rejectionReason || "لم يتم تحديد سبب",
+          reviewed_by: caller.id,
+          reviewed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", requestId)
+
+      await supabaseAdmin.from("audit_logs").insert({
+        user_id: caller.id,
+        user_email: caller.email,
+        action: `رفض طلب تسجيل الموظف: ${regReq.email}`,
+        entity_type: "employee_approval",
+        entity_id: requestId,
+        details: { requestId, rejectionReason },
+      })
+
+      // Notify Telegram user if botToken configured
+      const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")
+      if (botToken && regReq.telegram_user_id) {
+        const notifyUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
+        try {
+          await fetch(notifyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: regReq.telegram_user_id,
+              text: `تم مراجعة طلب التسجيل ولم تتم الموافقة عليه.\nالسبب: ${rejectionReason || "لم يتم تحديد سبب"}`,
+            }),
+          })
+        } catch {
+          // ignore notification failure
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم رفض طلب التسجيل بنجاح.",
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: set_user_status ─────────────────────────────────────────────
+    if (action === "set_user_status") {
+      const { userId, status } = body
+      if (!userId || !status) {
+        return new Response(JSON.stringify({ error: "معرّف المستخدم والحالة الجديدة مطلوبان." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const validStatuses = ["active", "suspended", "pending_activation"]
+      if (!validStatuses.includes(status)) {
+        return new Response(JSON.stringify({ error: "الحالة المحددة غير صالحة." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // Check if target is protected system admin
+      const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(userId)
+      const targetUsername = targetUser?.user?.email?.replace(/@warehouse\.local$/, "") || ""
+      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser?.user?.email)
+
+      if (isTargetProtected && status === "suspended") {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن تعليق أو تعطيل حساب مدير النظام الرئيسي.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      if (targetUser?.user) {
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          app_metadata: {
+            ...targetUser.user.app_metadata,
+            status,
+          },
+        })
+      }
+
+      // Mirror to app_users
+      await supabaseAdmin
+        .from("app_users")
+        .update({ status })
+        .or(`auth_user_id.eq.${userId},id.eq.${userId}`)
+
+      await supabaseAdmin.from("audit_logs").insert({
+        user_id: caller.id,
+        user_email: caller.email,
+        action: `تعديل حالة حساب المستخدم إلى (${status}): ${targetUsername || userId}`,
+        entity_type: "user_management",
+        entity_id: userId,
+        details: { target_id: userId, status },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: `تم تحديث حالة الحساب إلى ${status === "suspended" ? "معلّق" : "نشط"} بنجاح.`,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: bootstrap_system_admin ──────────────────────────────────────
+    if (action === "bootstrap_system_admin") {
+      const { data: bootRes, error: bootErr } = await supabaseAdmin.rpc("bootstrap_system_admin", {
+        p_email: "marwandesouqhi@gmail.com",
+        p_username: "marwan-desouky",
+        p_auth_user_id: caller.id,
+      })
+
+      if (bootErr) throw bootErr
+
+      // Sync caller's Auth app_metadata
+      await supabaseAdmin.auth.admin.updateUserById(caller.id, {
+        app_metadata: {
+          ...caller.app_metadata,
+          role: "system_admin",
+          system_admin: true,
+          employee_id: "SYS-ADM-000001",
+          department: "الإدارة العامة",
+          permissions: ["view_audit", "view_settings", "manage_records"],
+          status: "active",
+        },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم تهيئة وتثبيت حساب مدير النظام الرئيسي بنجاح.",
+        details: bootRes,
+      }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })

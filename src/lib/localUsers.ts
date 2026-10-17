@@ -11,7 +11,7 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
   try {
     const { data, error } = await supabase
       .from('app_users')
-      .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions')
+      .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions, employee_id, email, department, telegram_user_id')
       .order('created_at', { ascending: true })
     if (error || !data) return []
     return data.map((row) => ({
@@ -26,6 +26,10 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
       activatedAt: row.activated_at || undefined,
       lastLoginAt: row.last_login_at || undefined,
       notes: row.notes || undefined,
+      employeeId: row.employee_id || undefined,
+      email: row.email || undefined,
+      department: row.department || undefined,
+      telegramUserId: row.telegram_user_id || undefined,
       permissions: Array.isArray(row.permissions)
         ? row.permissions
         : typeof row.permissions === 'string'
@@ -53,6 +57,10 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       created_at: user.createdAt,
       activated_at: user.activatedAt || null,
       last_login_at: user.lastLoginAt || null,
+      employee_id: user.employeeId || null,
+      email: user.email || null,
+      department: user.department || null,
+      telegram_user_id: user.telegramUserId || null,
     }
     if (user.password && user.password.trim().length > 0) {
       payload.password = user.password
@@ -128,13 +136,17 @@ export async function syncUsersWithCloud(): Promise<LocalUser[]> {
 
 export type UserRole =
   | 'system_admin'
+  | 'warehouse_admin'
+  | 'warehouse_employee'
+  | 'procurement_admin'
+  | 'procurement_employee'
   | 'admin'
   | 'warehouse_staff'
   | 'purchasing_staff'
   | 'editor'
   | 'viewer'
 
-export type UserStatus = 'active' | 'pending_activation'
+export type UserStatus = 'active' | 'pending_activation' | 'suspended' | 'rejected'
 
 export type LocalUser = {
   id: string
@@ -149,6 +161,10 @@ export type LocalUser = {
   lastLoginAt?: string
   notes?: string
   permissions?: string[]
+  employeeId?: string
+  email?: string
+  department?: string
+  telegramUserId?: number
 }
 
 export type LocalUserSession = {
@@ -161,12 +177,14 @@ export type LocalUserSession = {
       displayName: string
       role: UserRole
       permissions?: string[]
+      employeeId?: string
     }
     app_metadata: {
       role: UserRole
       system_admin: boolean
       permissions?: string[]
       username?: string
+      employeeId?: string
     }
   }
   access_token: string
@@ -185,6 +203,9 @@ const DEFAULT_ADMIN: LocalUser = {
   status: 'active',
   createdAt: new Date().toISOString(),
   permissions: ['view_audit', 'view_settings', 'manage_records'],
+  employeeId: 'SYS-ADM-000001',
+  email: 'marwandesouqhi@gmail.com',
+  department: 'الإدارة العامة',
 }
 
 export function isLastActiveSystemAdmin(userId: string, users: LocalUser[]): boolean {
@@ -200,10 +221,17 @@ export function isProtectedUser(_username?: string | null): boolean {
   return false
 }
 
-export function purgeDeletedAccount(emailOrUsername = 'marwandesouqhi@gmail.com'): void {
+export function purgeDeletedAccount(emailOrUsername = ''): void {
+  // marwandesouqhi@gmail.com is the authorized system administrator email.
+  // Purging system administrator session or account is strictly forbidden.
+  if (!emailOrUsername) return
+  const target = emailOrUsername.toLowerCase().trim()
+  if (target === 'marwandesouqhi@gmail.com' || target === 'marwan-desouky') {
+    return
+  }
+
   try {
     if (typeof window === 'undefined') return
-    const target = emailOrUsername.toLowerCase().trim()
 
     // 1. Purge from local storage users
     const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
@@ -262,7 +290,6 @@ export function generateActivationPin(): string {
 }
 
 export function loadLocalUsers(): LocalUser[] {
-  purgeDeletedAccount('marwandesouqhi@gmail.com')
   try {
     if (typeof window === 'undefined') return [DEFAULT_ADMIN]
     const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
