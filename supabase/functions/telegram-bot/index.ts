@@ -219,6 +219,212 @@ async function checkAndRecordRateLimit(
   return { allowed: true, remaining: maxAllowed - currentCount - 1 }
 }
 
+// ─── Callback Query Answerer ──────────────────────────────────────────────────
+async function answerCallbackQuery(botToken: string, callbackQueryId: string, text?: string) {
+  if (!botToken || !callbackQueryId) return
+  const url = `https://api.telegram.org/bot${botToken}/answerCallbackQuery`
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    })
+  } catch {
+    // ignore
+  }
+}
+
+// ─── User Session Management for Multi-Step Registration ─────────────────────
+interface UserSession {
+  step: "awaiting_name" | "awaiting_email" | "awaiting_dept" | "awaiting_role" | "confirm"
+  fullName?: string
+  email?: string
+  department?: string
+  role?: string
+}
+
+const memorySessions = new Map<number, UserSession>()
+
+async function getUserSession(supabaseAdmin: any, tgUserId: number): Promise<UserSession | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("telegram_user_sessions")
+      .select("*")
+      .eq("telegram_user_id", tgUserId)
+      .maybeSingle()
+    if (!error && data && data.step) {
+      return {
+        step: data.step,
+        fullName: data.full_name,
+        email: data.email,
+        department: data.department,
+        role: data.role,
+      }
+    }
+  } catch {
+    // fallback to memory
+  }
+  return memorySessions.get(tgUserId) || null
+}
+
+async function saveUserSession(supabaseAdmin: any, tgUserId: number, session: UserSession): Promise<void> {
+  memorySessions.set(tgUserId, session)
+  try {
+    await supabaseAdmin
+      .from("telegram_user_sessions")
+      .upsert({
+        telegram_user_id: tgUserId,
+        step: session.step,
+        full_name: session.fullName || null,
+        email: session.email || null,
+        department: session.department || null,
+        role: session.role || null,
+        updated_at: new Date().toISOString(),
+      })
+  } catch {
+    // fallback to memory
+  }
+}
+
+async function clearUserSession(supabaseAdmin: any, tgUserId: number): Promise<void> {
+  memorySessions.delete(tgUserId)
+  try {
+    await supabaseAdmin
+      .from("telegram_user_sessions")
+      .delete()
+      .eq("telegram_user_id", tgUserId)
+  } catch {
+    // ignore
+  }
+}
+
+// ─── Registration Execution Core ──────────────────────────────────────────────
+async function executeRegistration(params: {
+  supabaseAdmin: any
+  botToken: string
+  chatId: number
+  tgUserId: number
+  tgUsername: string
+  fullName: string
+  email: string
+  requestedDept: string
+  requestedRole: string
+  otpPepper: string
+  resendApiKey: string
+  emailFrom: string
+}) {
+  const {
+    supabaseAdmin,
+    botToken,
+    chatId,
+    tgUserId,
+    tgUsername,
+    fullName,
+    email,
+    requestedDept,
+    requestedRole,
+    otpPepper,
+    resendApiKey,
+    emailFrom,
+  } = params
+
+  // 1. Rate limit registration submissions: max 3 per hour per TG user and per email
+  const rateTg = await checkAndRecordRateLimit(supabaseAdmin, "register", String(tgUserId), 3, 3600)
+  const rateEmail = await checkAndRecordRateLimit(supabaseAdmin, "register", email, 3, 3600)
+
+  if (!rateTg.allowed || !rateEmail.allowed) {
+    await sendTelegramMessage(botToken, chatId, "تم تجاوز الحد الأقصى لطلبات التسجيل في الساعة الواحدة. يرجى الانتظار والمحاولة لاحقاً.")
+    return
+  }
+
+  // 2. Duplicate Check with Parameterized Queries
+  const { data: userByEmail } = await supabaseAdmin
+    .from("app_users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle()
+
+  const { data: userByTg } = await supabaseAdmin
+    .from("app_users")
+    .select("id")
+    .eq("telegram_user_id", tgUserId)
+    .maybeSingle()
+
+  if (userByEmail || userByTg) {
+    await sendTelegramMessage(botToken, chatId, "تعذر إنشاء الطلب: توجد بيانات مسجلة مسبقاً تطابق هذا الحساب. يرجى مراجعة إدارة النظام.")
+    return
+  }
+
+  // 3. Check active pending registration requests
+  const { data: pendingByEmail } = await supabaseAdmin
+    .from("registration_requests")
+    .select("id")
+    .eq("email", email)
+    .eq("approval_status", "pending")
+    .maybeSingle()
+
+  const { data: pendingByTg } = await supabaseAdmin
+    .from("registration_requests")
+    .select("id")
+    .eq("telegram_user_id", tgUserId)
+    .eq("approval_status", "pending")
+    .maybeSingle()
+
+  if (pendingByEmail || pendingByTg) {
+    await sendTelegramMessage(botToken, chatId, "يوجد طلب تسجيل معلق قيد المعالجة بالفعل لهذا الحساب أو البريد. يمكنك متابعة حالة الطلب عبر الأمر /status.")
+    return
+  }
+
+  // 4. Generate Uniform 6-digit OTP and Hash with server pepper
+  const otp = generateUniform6DigitOtp()
+  const tokenHash = await hashTokenWithPepper(otp, otpPepper)
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
+
+  // 5. Send OTP via server-side Resend API (NEVER in Telegram message!)
+  const emailRes = await sendOtpEmailViaResend(resendApiKey, emailFrom, email, fullName, otp)
+
+  const emailSendStatus = emailRes.accepted ? "sent" : "failed"
+  const verificationStatus = emailRes.accepted ? "pending" : "delivery_failed"
+
+  // 6. Insert registration request
+  const { error: insertErr } = await supabaseAdmin.from("registration_requests").insert({
+    full_name: fullName,
+    email: email,
+    telegram_user_id: tgUserId,
+    telegram_username: tgUsername || "",
+    requested_department: requestedDept,
+    requested_role: requestedRole,
+    verification_status: verificationStatus,
+    verification_token_hash: tokenHash,
+    verification_token_expires_at: expiresAt,
+    approval_status: "pending",
+    email_send_status: emailSendStatus,
+    email_sent_at: emailRes.accepted ? new Date().toISOString() : null,
+  })
+
+  if (insertErr) {
+    console.error("Insert registration error:", insertErr)
+    await sendTelegramMessage(botToken, chatId, "حدث خطأ أثناء حفظ الطلب في قاعدة البيانات. يرجى المحاولة مرة أخرى لاحقاً.")
+    return
+  }
+
+  if (!emailRes.accepted) {
+    const errorMsg = `تم استلام بياناتك بنجاح ولكن تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً بسبب عدم اكتمال تهيئة مزود البريد.\n\nالاسم: <b>${fullName}</b>\nالبريد: <b>${email}</b>\nالقسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\nالدور: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\nتم تسجيل طلبك بحالة (تعذر التسليم). يمكنك إعادة طلب إرسال الرمز لاحقاً عبر /resend.`
+    await sendTelegramMessage(botToken, chatId, errorMsg)
+  } else {
+    const confirmMsg = `📩 <b>تم استلام بياناتك وإرسال رمز التحقق بنجاح!</b>\n\n` +
+      `• الاسم: <b>${fullName}</b>\n` +
+      `• البريد الإلكتروني: <b>${email}</b>\n` +
+      `• القسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\n` +
+      `• الدور المطلوب: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\n` +
+      `تم إرسال رمز التحقق المكون من 6 أرقام إلى بريدك الإلكتروني (صالح لمدة 10 دقائق).\n` +
+      `يرجى فحص صندوق الوارد (أو مجلد Spam)، ثم كتابة الرمز هنا عبر الأمر:\n` +
+      `<code>/verify الرمز</code>\n\n` +
+      `مثال: <code>/verify 123456</code>`
+    await sendTelegramMessage(botToken, chatId, confirmMsg)
+  }
+}
+
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -279,22 +485,148 @@ serve(async (req) => {
       }
     }
 
-    // ─── Handle Callback Query (Inline Buttons) ───────────────────────────────
+    // ─── Handle Callback Query (Inline Buttons / Tabs) ────────────────────────
     if (update.callback_query) {
       const query = update.callback_query
       const chatId = query.message?.chat?.id
       const data = query.data || ""
       const tgUser = query.from
+      const tgUserId = tgUser?.id
 
-      if (!chatId || !tgUser) {
+      if (!chatId || !tgUserId) {
         return new Response("ok", { headers: corsHeaders })
       }
 
+      // Step 1: Start registration wizard
       if (data === "register_start") {
-        const promptMsg = `لبدء تسجيل طلبك، يرجى إرسال بياناتك برسالة نصية واحدة بالصيغة التالية:\n\n` +
-          `<b>الاسم الكامل | البريد الإلكتروني | القسم | الدور المطلوب</b>\n\n` +
-          `مثال:\n<code>أحمد محمد علي | ahmed@example.com | المخازن | موظف مخازن</code>`
-        await sendTelegramMessage(botToken, chatId, promptMsg)
+        await answerCallbackQuery(botToken, query.id)
+        await saveUserSession(supabaseAdmin, tgUserId, { step: "awaiting_name" })
+        const promptMsg = `👤 <b>الخطوة 1 من 4: الاسم بالكامل</b>\n\nيرجى كتابة اسمك الكامل (ثلاثي أو رباعي) في رسالة نصية:`
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: "❌ إلغاء التسجيل", callback_data: "reg_cancel" }],
+          ],
+        }
+        await sendTelegramMessage(botToken, chatId, promptMsg, keyboard)
+        return new Response("ok", { headers: corsHeaders })
+      }
+
+      // Cancel registration
+      if (data === "reg_cancel") {
+        await answerCallbackQuery(botToken, query.id, "تم الإلغاء")
+        await clearUserSession(supabaseAdmin, tgUserId)
+        await sendTelegramMessage(botToken, chatId, "تم إلغاء عملية التسجيل. يمكنك البدء من جديد في أي وقت عبر الأمر /start.")
+        return new Response("ok", { headers: corsHeaders })
+      }
+
+      // Step 3 -> 4: Department Selected
+      if (data.startsWith("set_dept:")) {
+        const dept = data.replace("set_dept:", "")
+        await answerCallbackQuery(botToken, query.id)
+        const session = await getUserSession(supabaseAdmin, tgUserId)
+        if (!session || !session.fullName || !session.email) {
+          await sendTelegramMessage(botToken, chatId, "انتهت الجلسة أو بيانات التسجيل غير مكتملة. يرجى البدء مجدداً عبر /start.")
+          return new Response("ok", { headers: corsHeaders })
+        }
+        await saveUserSession(supabaseAdmin, tgUserId, { ...session, department: dept, step: "awaiting_role" })
+        const deptTitle = dept === "warehouse" ? "المخازن" : "المشتريات"
+        let roleButtons = []
+        if (dept === "warehouse") {
+          roleButtons = [
+            [{ text: "👤 موظف مخازن", callback_data: "set_role:warehouse_employee" }],
+            [{ text: "🛡️ مشرف مخازن", callback_data: "set_role:warehouse_admin" }],
+          ]
+        } else {
+          roleButtons = [
+            [{ text: "👤 موظف مشتريات", callback_data: "set_role:procurement_employee" }],
+            [{ text: "🛡️ مشرف مشتريات", callback_data: "set_role:procurement_admin" }],
+          ]
+        }
+        roleButtons.push([
+          { text: "🔙 تغيير القسم", callback_data: "back_to_dept" },
+          { text: "❌ إلغاء", callback_data: "reg_cancel" },
+        ])
+        const roleMsg = `💼 <b>الخطوة 4 من 4: الدور الوظيفي (${deptTitle})</b>\n\nاختر الدور الوظيفي المطلوب بالضغط على أحد الأزرار أدناه:`
+        await sendTelegramMessage(botToken, chatId, roleMsg, { inline_keyboard: roleButtons })
+        return new Response("ok", { headers: corsHeaders })
+      }
+
+      // Back to Department selection
+      if (data === "back_to_dept") {
+        await answerCallbackQuery(botToken, query.id)
+        const session = await getUserSession(supabaseAdmin, tgUserId)
+        if (!session) {
+          await sendTelegramMessage(botToken, chatId, "يرجى البدء من جديد عبر /start.")
+          return new Response("ok", { headers: corsHeaders })
+        }
+        await saveUserSession(supabaseAdmin, tgUserId, { ...session, step: "awaiting_dept" })
+        const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\nاختر القسم التابع له من الخيارات التالية 👇`
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: "📦 قسم المخازن", callback_data: "set_dept:warehouse" },
+              { text: "🛒 قسم المشتريات", callback_data: "set_dept:procurement" },
+            ],
+            [{ text: "❌ إلغاء", callback_data: "reg_cancel" }],
+          ],
+        }
+        await sendTelegramMessage(botToken, chatId, deptMsg, keyboard)
+        return new Response("ok", { headers: corsHeaders })
+      }
+
+      // Step 4 -> 5: Role Selected -> Confirmation Card
+      if (data.startsWith("set_role:")) {
+        const role = data.replace("set_role:", "")
+        await answerCallbackQuery(botToken, query.id)
+        const session = await getUserSession(supabaseAdmin, tgUserId)
+        if (!session || !session.fullName || !session.email || !session.department) {
+          await sendTelegramMessage(botToken, chatId, "البيانات غير مكتملة. يرجى البدء من جديد عبر /start.")
+          return new Response("ok", { headers: corsHeaders })
+        }
+        await saveUserSession(supabaseAdmin, tgUserId, { ...session, role, step: "confirm" })
+        const summaryMsg = `📋 <b>مراجعة وتأكيد بيانات طلب التسجيل:</b>\n\n` +
+          `• <b>الاسم الكامل:</b> ${session.fullName}\n` +
+          `• <b>البريد الإلكتروني:</b> ${session.email}\n` +
+          `• <b>القسم المختار:</b> ${DEPT_LABELS[session.department] || session.department}\n` +
+          `• <b>الدور المطلوب:</b> ${ROLE_LABELS[role] || role}\n\n` +
+          `هل البيانات صحيحة؟ اضغط على زر <b>تأكيد وإرسال الرمز</b> لإنشاء الطلب وإرسال رمز التحقق (OTP) إلى بريدك الإلكتروني 👇`
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: "✅ تأكيد وإرسال رمز التحقق", callback_data: "submit_registration" }],
+            [
+              { text: "🔄 البدء من جديد", callback_data: "register_start" },
+              { text: "❌ إلغاء", callback_data: "reg_cancel" },
+            ],
+          ],
+        }
+        await sendTelegramMessage(botToken, chatId, summaryMsg, keyboard)
+        return new Response("ok", { headers: corsHeaders })
+      }
+
+      // Final Step: Submit registration
+      if (data === "submit_registration") {
+        await answerCallbackQuery(botToken, query.id, "جارٍ معالجة الطلب...")
+        const session = await getUserSession(supabaseAdmin, tgUserId)
+        if (!session || !session.fullName || !session.email || !session.department || !session.role) {
+          await sendTelegramMessage(botToken, chatId, "البيانات غير مكتملة أو انتهت صلاحية الجلسة. يرجى البدء من جديد عبر /start.")
+          return new Response("ok", { headers: corsHeaders })
+        }
+        await clearUserSession(supabaseAdmin, tgUserId)
+        await executeRegistration({
+          supabaseAdmin,
+          botToken,
+          chatId,
+          tgUserId,
+          tgUsername: tgUser.username || "",
+          fullName: session.fullName,
+          email: session.email,
+          requestedDept: session.department,
+          requestedRole: session.role,
+          otpPepper,
+          resendApiKey,
+          emailFrom,
+        })
+        return new Response("ok", { headers: corsHeaders })
       }
 
       return new Response("ok", { headers: corsHeaders })
@@ -590,7 +922,67 @@ serve(async (req) => {
       return new Response("ok", { headers: corsHeaders })
     }
 
-    // ─── REGISTRATION INPUT PARSING ──────────────────────────────────────────
+    // ─── INTERACTIVE WIZARD STEP HANDLING FOR TEXT INPUT ─────────────────────
+    const activeSession = await getUserSession(supabaseAdmin, tgUserId)
+
+    // Step 1: Receiving Full Name
+    if (activeSession && activeSession.step === "awaiting_name" && !text.startsWith("/")) {
+      if (text.length < 3 || text.length > 100 || text.includes("@")) {
+        await sendTelegramMessage(
+          botToken,
+          chatId,
+          "يرجى كتابة اسم كامل صالح يتراوح طوله بين 3 و 100 حرف (بدون بريد إلكتروني أو رموز خاصة):"
+        )
+        return new Response("ok", { headers: corsHeaders })
+      }
+      await saveUserSession(supabaseAdmin, tgUserId, { ...activeSession, fullName: text, step: "awaiting_email" })
+      const nextMsg = `📧 <b>الخطوة 2 من 4: البريد الإلكتروني</b>\n\nأهلاً بك يا <b>${text}</b>! 👋\nيرجى كتابة بريدك الإلكتروني المؤسسي أو الشخصي (سنرسل إليه رمز التحقق OTP):`
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: "❌ إلغاء", callback_data: "reg_cancel" }],
+        ],
+      }
+      await sendTelegramMessage(botToken, chatId, nextMsg, keyboard)
+      return new Response("ok", { headers: corsHeaders })
+    }
+
+    // Step 2: Receiving Email
+    if (activeSession && activeSession.step === "awaiting_email" && !text.startsWith("/")) {
+      const cleanEmail = text.trim().toLowerCase()
+      if (!isValidEmail(cleanEmail)) {
+        await sendTelegramMessage(
+          botToken,
+          chatId,
+          "صيغة البريد الإلكتروني غير صالحة. يرجى إدخال بريد إلكتروني صحيح (مثال: name@example.com):"
+        )
+        return new Response("ok", { headers: corsHeaders })
+      }
+      await saveUserSession(supabaseAdmin, tgUserId, { ...activeSession, email: cleanEmail, step: "awaiting_dept" })
+      const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\nاختر القسم التابع له بالضغط على أحد الأزرار التالية 👇`
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: "📦 قسم المخازن", callback_data: "set_dept:warehouse" },
+            { text: "🛒 قسم المشتريات", callback_data: "set_dept:procurement" },
+          ],
+          [{ text: "❌ إلغاء", callback_data: "reg_cancel" }],
+        ],
+      }
+      await sendTelegramMessage(botToken, chatId, deptMsg, keyboard)
+      return new Response("ok", { headers: corsHeaders })
+    }
+
+    // If awaiting button press (department, role, or confirmation)
+    if (activeSession && (activeSession.step === "awaiting_dept" || activeSession.step === "awaiting_role" || activeSession.step === "confirm") && !text.startsWith("/")) {
+      await sendTelegramMessage(
+        botToken,
+        chatId,
+        "يرجى الاختيار بالضغط على أحد الأزرار الظاهرة في الرسالة أعلاه، أو كتابة /start لإعادة البدء من جديد."
+      )
+      return new Response("ok", { headers: corsHeaders })
+    }
+
+    // ─── LEGACY SINGLE-LINE REGISTRATION PARSING ──────────────────────────────
     // Format: الاسم الكامل | البريد الإلكتروني | القسم | الدور المطلوب
     if (text.includes("@") && (text.includes("مخازن") || text.includes("مشتريات") || text.includes("|") || text.includes(","))) {
       const parts = text.split(/[|,\n]/).map((p: string) => p.trim()).filter(Boolean)
@@ -609,15 +1001,6 @@ serve(async (req) => {
       // Input Validation: Strict Email Format
       if (!isValidEmail(email)) {
         await sendTelegramMessage(botToken, chatId, "صيغة البريد الإلكتروني غير صالحة. يرجى إدخال بريد إلكتروني صحيح.")
-        return new Response("ok", { headers: corsHeaders })
-      }
-
-      // Rate limit registration submissions: max 3 per hour per TG user and per email
-      const rateTg = await checkAndRecordRateLimit(supabaseAdmin, "register", String(tgUserId), 3, 3600)
-      const rateEmail = await checkAndRecordRateLimit(supabaseAdmin, "register", email, 3, 3600)
-
-      if (!rateTg.allowed || !rateEmail.allowed) {
-        await sendTelegramMessage(botToken, chatId, "تم تجاوز الحد الأقصى لطلبات التسجيل في الساعة الواحدة. يرجى الانتظار والمحاولة لاحقاً.")
         return new Response("ok", { headers: corsHeaders })
       }
 
@@ -642,84 +1025,20 @@ serve(async (req) => {
         requestedRole = isWarehouse ? "warehouse_employee" : "procurement_employee"
       }
 
-      // Duplicate Check with Parameterized Queries (NO string interpolation into PostgREST filter!)
-      const { data: userByEmail } = await supabaseAdmin
-        .from("app_users")
-        .select("id")
-        .eq("email", email)
-        .maybeSingle()
-
-      const { data: userByTg } = await supabaseAdmin
-        .from("app_users")
-        .select("id")
-        .eq("telegram_user_id", tgUserId)
-        .maybeSingle()
-
-      if (userByEmail || userByTg) {
-        // Generic response that does not leak specifics about other users
-        await sendTelegramMessage(botToken, chatId, "تعذر إنشاء الطلب: توجد بيانات مسجلة مسبقاً تطابق هذا الحساب. يرجى مراجعة إدارة النظام.")
-        return new Response("ok", { headers: corsHeaders })
-      }
-
-      // Check active pending registration requests
-      const { data: pendingByEmail } = await supabaseAdmin
-        .from("registration_requests")
-        .select("id")
-        .eq("email", email)
-        .eq("approval_status", "pending")
-        .maybeSingle()
-
-      const { data: pendingByTg } = await supabaseAdmin
-        .from("registration_requests")
-        .select("id")
-        .eq("telegram_user_id", tgUserId)
-        .eq("approval_status", "pending")
-        .maybeSingle()
-
-      if (pendingByEmail || pendingByTg) {
-        await sendTelegramMessage(botToken, chatId, "يوجد طلب تسجيل معلق قيد المعالجة بالفعل لهذا الحساب أو البريد. يمكنك متابعة حالة الطلب عبر الأمر /status.")
-        return new Response("ok", { headers: corsHeaders })
-      }
-
-      // Generate Uniform 6-digit OTP and Hash with server pepper
-      const otp = generateUniform6DigitOtp()
-      const tokenHash = await hashTokenWithPepper(otp, otpPepper)
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
-
-      // Send OTP via server-side Resend API (NEVER in Telegram message!)
-      const emailRes = await sendOtpEmailViaResend(resendApiKey, emailFrom, email, fullName, otp)
-
-      const emailSendStatus = emailRes.accepted ? "sent" : "failed"
-      const verificationStatus = emailRes.accepted ? "pending" : "delivery_failed"
-
-      // Insert registration request
-      const { error: insertErr } = await supabaseAdmin.from("registration_requests").insert({
-        full_name: fullName,
-        email: email,
-        telegram_user_id: tgUserId,
-        telegram_username: tgUser?.username || "",
-        requested_department: requestedDept,
-        requested_role: requestedRole,
-        verification_status: verificationStatus,
-        verification_token_hash: tokenHash,
-        verification_token_expires_at: expiresAt,
-        approval_status: "pending",
-        email_send_status: emailSendStatus,
-        email_sent_at: emailRes.accepted ? new Date().toISOString() : null,
+      await executeRegistration({
+        supabaseAdmin,
+        botToken,
+        chatId,
+        tgUserId,
+        tgUsername: tgUser?.username || "",
+        fullName,
+        email,
+        requestedDept,
+        requestedRole,
+        otpPepper,
+        resendApiKey,
+        emailFrom,
       })
-
-      if (insertErr) {
-        throw insertErr
-      }
-
-      if (!emailRes.accepted) {
-        const errorMsg = `تم استلام بياناتك بنجاح ولكن تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً بسبب عدم اكتمال تهيئة مزود البريد.\n\nالاسم: ${fullName}\nالبريد: ${email}\nالقسم: ${DEPT_LABELS[requestedDept]}\nالدور: ${ROLE_LABELS[requestedRole]}\n\nتم تسجيل طلبك بحالة (تعذر التسليم). يمكنك إعادة طلب إرسال الرمز لاحقاً عبر /resend.`
-        await sendTelegramMessage(botToken, chatId, errorMsg)
-      } else {
-        const confirmMsg = `تم استلام بياناتك بنجاح!\n\nالاسم: ${fullName}\nالبريد: ${email}\nالقسم: ${DEPT_LABELS[requestedDept]}\nالدور: ${ROLE_LABELS[requestedRole]}\n\nتم إرسال رمز التحقق إلى بريدك الإلكتروني (صالح لمدة 10 دقائق).\nيرجى فحص صندوق الوارد (أو مجلد الرسائل غير المرغوب فيها) ثم كتابة الرمز هنا عبر الأمر:\n<code>/verify الرمز</code>`
-        await sendTelegramMessage(botToken, chatId, confirmMsg)
-      }
-
       return new Response("ok", { headers: corsHeaders })
     }
 
