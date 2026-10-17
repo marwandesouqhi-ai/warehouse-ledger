@@ -23,6 +23,17 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 
+    // Security Restriction: verify-email is an internal server-side function only.
+    // Public web verification is strictly disabled per Part 1.4.
+    const authHeader = req.headers.get("Authorization") || ""
+    const expectedAuth = `Bearer ${supabaseServiceKey}`
+    if (!supabaseServiceKey || authHeader !== expectedAuth) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Internal function only." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
     const body = await req.json().catch(() => ({}))
     const email = body.email ? String(body.email).trim().toLowerCase() : ""
     const requestId = body.requestId ? String(body.requestId).trim() : ""

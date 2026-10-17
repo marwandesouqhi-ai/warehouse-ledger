@@ -9,35 +9,46 @@
 ---
 
 ## الجلسة الأولى (Session A): إغلاق الصلاحيات، التهيئة الأحادية، وتحصين الويب هوك
-- **الحالة:** مكتملة ومختبرة بنجاح (Completed & Verified Locally)
-- **العيوب التي تم التحقق منها ومعالجتها:**
-  1. `P0-1`: إلغاء صلاحيات تنفيذ الدوال الحساسة (`bootstrap_system_admin`, `approve_employee_registration`, `generate_employee_code`) عن `PUBLIC` و `anon` و `authenticated` وحصرها في `service_role`.
-  2. `P0-2`: إنشاء جدول القفل الأحادي `public.system_bootstrap_state`، وتطوير دالة تهيئة أحادية متينة تتحقق من `auth.users` والبريد المؤكد والاسم المعتمد دون أي قيم افتراضية في SQL، مع منع تكرار التهيئة وحماية الحساب من الاستيلاء، وتحديث ميتاداتا الحساب في Supabase Auth عبر دالة الحافة `admin-users`.
-  3. `P0-3`: تحويل ويب هوك تيليجرام ليعمل بنظام الإغلاق التلقائي (Fail-Closed) في حال غياب السر وإرجاع HTTP 500 مع رفض المعالجة تماماً، واستخدام خوارزمية مقارنة ثابتة التوقيت (Constant-Time String Comparison `timingSafeEqual`) لمنع هجمات التوقيت، وحظر الطلبات غير POST بـ HTTP 405.
-- **الملفات المنشأة:**
-  - `supabase/migrations/20261017130000_lockdown_privileged_functions_and_bootstrap.sql`
-  - `supabase/rollbacks/20261017130000_lockdown_privileged_functions_and_bootstrap.rollback.sql`
-  - `tests/unit/sessionASecurity.test.ts`
-- **الملفات المعدلة:**
-  - `supabase/functions/admin-users/index.ts`
-  - `supabase/functions/telegram-bot/index.ts`
-  - `.env.example`
-- **نتائج الاختبارات:**
-  - اجتياز اختبارات Session A العشرة (10/10) بنجاح.
-  - اجتياز كامل حزمة الاختبارات الآلية للمشروع: 35 ملف اختبار، 299 اختباراً ناجحاً بنسبة 100%.
-  - فحص الأنواع الصارم `npm run typecheck` اجتاز بنجاح (0 أخطاء).
-- **التعديلات المعلقة للمشرف:** الترحيل `20261017130000_lockdown_privileged_functions_and_bootstrap.sql` جاهز للتطبيق ومحمي بملف تراجع كامل.
+- **الحالة:** مكتملة ومختبرة ومثبتة في الالتزام `bd3da4b`.
+- **العيوب المعالجة:** `P0-1`, `P0-2`, `P0-3`.
 
 ---
 
 ## الجلسة الثانية (Session B): التحقق الفعلي من البريد الإلكتروني وتحصين البوت
-- **الحالة:** بانتظار إشارة البدء (Pending Owner Trigger)
-- **العيوب المستهدفة:** `P1-1`, `P2-1`.
+- **الحالة:** مكتملة ومختبرة بنجاح (Completed & Verified Locally)
+- **العيوب التي تم التحقق منها ومعالجتها:**
+  1. `P1-1` (التحقق الفعلي من البريد الإلكتروني):
+     - ربط إرسال رمز OTP الفعلي عبر خادم خارجي Resend API على مستوى الخادم (`sendOtpEmailViaResend`) باستخدام `RESEND_API_KEY` و `EMAIL_FROM`.
+     - منع ظهور رمز OTP نهائياً في أي رسالة صادرة لتطبيق تيليجرام أو جسم استجابة HTTP أو سجلات النظام.
+     - توليد رمز OTP موحد التوزيع بدون انحياز ترجيحي (Uniform rejection sampling) بطول 6 أرقام.
+     - تشفير الرمز المشفر عبر بصمة SHA-256 مع سر التشفير `OTP_PEPPER` في الخادم.
+     - قصر محاولات التحقق الخاطئة على 5 محاولات عبر دالة قاعدة بيانات ذرية (`record_verification_attempt`) تمنع ثغرات السباق والتخمين المتزامن.
+     - دعم مهلة إرسال (Cooldown 60s) وحد أقصى لإعادة الإرسال (3 طلبات/ساعة).
+     - إغلاق الوصول العام لدالة `verify-email` وحصرها في استدعاءات الخادم الداخلية `service_role`.
+  2. `P2-1` (تحصين بوت تيليجرام ومنع الحقن):
+     - منع هجمات حقن الفلاتر: إلغاء دمج المتغيرات النصية في PostgREST `.or(...)` والاعتماد على استعلامات استعلامية مشروطة ومفصولة `.eq()`.
+     - منع معالجة التحديثات المكررة (Update Deduplication) عبر جدول `telegram_processed_updates`.
+     - تحديد معدل الطلبات (Rate Limiting) عبر جدول `telegram_rate_events` مع ضبط الأحرف والمسافات لمنع التجاوز.
+     - حماية ملكية الطلبات للأمر `/status` و `/cancel` وفق معرف تيليجرام الموثق في التحديث فقط.
+     - تصحيح سلوك الأمر `/cancel`: وسم الطلب بـ `cancelled` دون حذف السجل الفعلي لحماية تاريخ النظام وسجلات المراجعة، ورفض إلغاء الطلبات المعتمدة مسبقاً.
+     - تحديث نص الترحيب للأمر `/start` ليتطابق نصياً وبدقة مع المواصفات الرسمية المطلوبة.
+- **الملفات المنشأة:**
+  - `supabase/migrations/20261017140000_telegram_bot_hardening_and_email_verification.sql`
+  - `supabase/rollbacks/20261017140000_telegram_bot_hardening_and_email_verification.rollback.sql`
+  - `tests/unit/sessionBSecurity.test.ts`
+- **الملفات المعدلة:**
+  - `supabase/functions/telegram-bot/index.ts`
+  - `supabase/functions/verify-email/index.ts`
+  - `.env.example`
+- **نتائج الاختبارات:**
+  - اجتياز اختبارات Session B العشرة (10/10) بنجاح.
+  - اجتياز كامل حزمة اختبارات المشروع (36 ملف اختبار، 309 اختبارات ناجحة بنسبة 100%).
+  - اجتياز فحص الأنواع `npm run typecheck` (0 أخطاء).
 
 ---
 
 ## الجلسة الثالثة (Session C): جسر تسجيل الدخول، الاعتماد، الأكواد الفريدة، وRLS
-- **الحالة:** مجدولة
+- **الحالة:** جاهزة للبدء (Ready for Session C)
 - **العيوب المستهدفة:** `P1-2`, `P1-3`, `P1-4`, `P1-5`.
 
 ---
