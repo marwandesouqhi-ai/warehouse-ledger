@@ -271,8 +271,11 @@ serve(async (req) => {
         .insert({ update_id: updateId })
 
       if (dedupErr) {
-        // Duplicate update received from Telegram retry; acknowledge immediately and process nothing
-        return new Response("ok (duplicate update ignored)", { headers: corsHeaders })
+        // Only ignore if it is an actual unique constraint violation (duplicate key: 23505)
+        if (dedupErr.code === "23505") {
+          return new Response("ok (duplicate update ignored)", { headers: corsHeaders })
+        }
+        console.warn("Deduplication table notice:", dedupErr.message)
       }
     }
 
