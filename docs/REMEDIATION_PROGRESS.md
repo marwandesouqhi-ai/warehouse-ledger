@@ -117,11 +117,15 @@
      - استكمال كافة سجلات التقدم لجميع الجلسات A, B, C, D بنجاح 100%.
 - **الملفات المنشأة:**
   - `docs/LOCAL_VERIFICATION_CHECKLIST.md`
+  - `tests/unit/endToEndIntegration.test.ts`
 - **الملفات المعدلة:**
   - `EMPLOYEE_REGISTRATION_SETUP.md`
   - `docs/REMEDIATION_PROGRESS.md`
+  - `supabase/functions/telegram-bot/index.ts`
+  - `src/pages/UsersPage.tsx`
+  - `.env.example`
 - **حالة الاختبارات والأنواع النهائية:**
-  - اختبارات Vitest: 37 ملف اختبار، 322 اختبار ناجح بنسبة 100% (322/322 Passed).
+  - اختبارات Vitest: 38 ملف اختبار، 342 اختبار ناجح بنسبة 100% (342/342 Passed).
   - فحص TypeScript: اجتياز كامل عبر `tsc --noEmit` و `tsc -b` (0 Errors).
   - بناء Vite: نجاح توليد حزمة `dist/` بنجاح (Code 0).
 

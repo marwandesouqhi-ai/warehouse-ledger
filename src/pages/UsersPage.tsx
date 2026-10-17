@@ -83,6 +83,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     // Check if current caller is marwan-desouky (protected System Admin)
     const isCallerProtected = isProtectedUsername(activeUserEmail) || isProtectedUsername(session?.user?.email)
 
+    const activeUserRole = ((session?.user?.app_metadata as any)?.role as string) || ((localSess?.user?.app_metadata as any)?.role as string) || ''
+    const isDepartmentAdmin = activeUserRole === 'admin'
+    const userDepartment = ((session?.user?.app_metadata as any)?.department as string) || ((localSess?.user?.app_metadata as any)?.department as string) || ''
+
     // Navigation Tab & Filter States
     const [mainTab, setMainTab] = useState<'employees' | 'requests'>('employees')
     const [deptFilter, setDeptFilter] = useState<string>('all')
@@ -92,6 +96,8 @@ export default function UsersPage({ session }: UsersPageProps) {
     // Registration Requests State
     const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([])
     const [requestStatusFilter, setRequestStatusFilter] = useState<string>('all')
+    const [requestDeptFilter, setRequestDeptFilter] = useState<string>('all')
+    const [requestRoleFilter, setRequestRoleFilter] = useState<string>('all')
     const [requestsLoading, setRequestsLoading] = useState(false)
     const [approvingReq, setApprovingReq] = useState<RegistrationRequest | null>(null)
     const [selectedApprovedRole, setSelectedApprovedRole] = useState<string>('')
@@ -680,13 +686,18 @@ export default function UsersPage({ session }: UsersPageProps) {
     const filteredRequests = useMemo(() => {
         return registrationRequests.filter((r) => {
             if (requestStatusFilter !== 'all' && r.approvalStatus !== requestStatusFilter) return false
+            if (requestDeptFilter !== 'all' && r.requestedDepartment !== requestDeptFilter) return false
+            if (requestRoleFilter !== 'all' && r.requestedRole !== requestRoleFilter) return false
+            if (!isSystemAdmin && isDepartmentAdmin && userDepartment && r.requestedDepartment !== userDepartment) {
+                return false
+            }
             return true
         })
-    }, [registrationRequests, requestStatusFilter])
+    }, [registrationRequests, requestStatusFilter, requestDeptFilter, requestRoleFilter, isSystemAdmin, isDepartmentAdmin, userDepartment])
 
     const activeUsersCount = visibleLocalUsers.filter((u) => u.status === 'active').length
 
-    if (!isSystemAdmin) {
+    if (!isSystemAdmin && !isDepartmentAdmin) {
         return (
             <section className="page-stack users-page">
                 <header className="page-intro">
@@ -696,7 +707,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <div>
                         <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>منطقة إدارة مقيدة</p>
                         <h2>المستخدمون والصلاحيات</h2>
-                        <p>خاص ومقتصر على مدير النظام (System Admin) لإدارة الحسابات وتغيير كلمات المرور.</p>
+                        <p>خاص ومقتصر على مدير النظام (System Admin) ومدراء الأقسام المصرح لهم.</p>
                     </div>
                 </header>
 
@@ -1301,7 +1312,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <span>مراجعة بيانات الموظفين المتقدمين، التحقق من البريد الإلكتروني، والاعتماد وتخصيص كود فريد</span>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                             <select
                                 value={requestStatusFilter}
                                 onChange={(e) => setRequestStatusFilter(e.target.value)}
@@ -1311,6 +1322,29 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
                                 <option value="approved">المعتمدة</option>
                                 <option value="rejected">المرفوضة</option>
+                                <option value="cancelled">الملغاة</option>
+                            </select>
+
+                            <select
+                                value={requestDeptFilter}
+                                onChange={(e) => setRequestDeptFilter(e.target.value)}
+                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                            >
+                                <option value="all">كل الأقسام</option>
+                                <option value="المخازن">المخازن</option>
+                                <option value="المشتريات">المشتريات</option>
+                            </select>
+
+                            <select
+                                value={requestRoleFilter}
+                                onChange={(e) => setRequestRoleFilter(e.target.value)}
+                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                            >
+                                <option value="all">كل الأدوار المطلوبة</option>
+                                <option value="warehouse_employee">موظف مخازن</option>
+                                <option value="warehouse_admin">مدير مخازن</option>
+                                <option value="procurement_employee">موظف مشتريات</option>
+                                <option value="procurement_admin">مدير مشتريات</option>
                             </select>
 
                             <button
@@ -1373,6 +1407,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <thead>
                                 <tr>
                                     <th>م</th>
+                                    <th>معرف الطلب (ID)</th>
                                     <th>اسم المتقدم</th>
                                     <th>البريد الإلكتروني</th>
                                     <th>التحقق (OTP)</th>
@@ -1387,7 +1422,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <tbody>
                                 {filteredRequests.length === 0 ? (
                                     <tr>
-                                        <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                                             {requestsLoading ? 'جارٍ تحميل طلبات التسجيل...' : 'لا توجد طلبات تسجيل مطابقة لهذا الفلتر حالياً.'}
                                         </td>
                                     </tr>
@@ -1395,6 +1430,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     filteredRequests.map((req, idx) => (
                                         <tr key={req.id}>
                                             <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
+                                            <td style={{ fontSize: '0.74rem', fontFamily: 'monospace', color: 'var(--muted)' }} title={req.id}>
+                                                {req.id.slice(0, 8)}...
+                                            </td>
                                             <td>
                                                 <strong style={{ color: 'var(--ink)' }}>{req.fullName}</strong>
                                             </td>

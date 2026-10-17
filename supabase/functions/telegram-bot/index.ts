@@ -334,24 +334,24 @@ serve(async (req) => {
         .maybeSingle()
 
       if (!request) {
-        await sendTelegramMessage(botToken, chatId, "لا يوجد طلب تسجيل مسجل لهذا الحساب. يمكنك تقديم طلب جديد عبر كتابة /start.")
+        await sendTelegramMessage(botToken, chatId, "لم يتم العثور على طلب تسجيل خاص بك.")
         return new Response("ok", { headers: corsHeaders })
       }
 
       if (request.approval_status === "approved") {
-        const msg = `تهانينا! تم اعتماد حسابك بنجاح.\n\nالرقم الوظيفي: <b>${request.employee_id}</b>\nالدور المعتمد: ${ROLE_LABELS[request.approved_role] || request.approved_role}\nالقسم: ${DEPT_LABELS[request.requested_department] || request.requested_department}\n\nيمكنك الآن تسجيل الدخول عبر واجهة النظام باستخدام الرقم الوظيفي أو اسم المستخدم.`
+        const msg = `تمت الموافقة على طلبك، ويمكنك استكمال تفعيل الحساب.\n\nالرقم الوظيفي: <b>${request.employee_id}</b>\nالدور المعتمد: ${ROLE_LABELS[request.approved_role] || request.approved_role}\nالقسم: ${DEPT_LABELS[request.requested_department] || request.requested_department}\n\nيمكنك الآن تسجيل الدخول عبر واجهة النظام باستخدام الرقم الوظيفي أو اسم المستخدم.`
         await sendTelegramMessage(botToken, chatId, msg)
       } else if (request.approval_status === "rejected") {
-        const msg = `تم رفض طلب التسجيل.\nسبب الرفض: ${request.rejection_reason || "لم يحدد"}\nيمكنك مراجعة إدارة النظام أو التقديم مرة أخرى عبر /start.`
-        await sendTelegramMessage(botToken, chatId, msg)
+        const reason = request.rejection_reason ? `\nسبب الرفض: ${request.rejection_reason}` : ""
+        await sendTelegramMessage(botToken, chatId, `تم رفض الطلب. يرجى مراجعة الإدارة.${reason}`)
       } else if (request.approval_status === "cancelled") {
-        await sendTelegramMessage(botToken, chatId, "تم إلغاء طلب التسجيل السابق. يمكنك تقديم طلب جديد في أي وقت عبر /start.")
+        await sendTelegramMessage(botToken, chatId, "تم إلغاء طلب التسجيل.")
       } else if (request.verification_status === "delivery_failed") {
-        await sendTelegramMessage(botToken, chatId, "تعذر إرسال رمز التحقق إلى بريدك الإلكتروني في المحاولة السابقة. يمكنك إعادة المحاولة عبر الأمر:\n/resend")
+        await sendTelegramMessage(botToken, chatId, "طلبك في انتظار التحقق من البريد الإلكتروني.\n(تعذر إرسال الرمز في المحاولة السابقة. يمكنك إعادة المحاولة عبر /resend)")
       } else if (request.verification_status !== "verified") {
-        await sendTelegramMessage(botToken, chatId, "طلبك قيد انتظار التحقق من البريد الإلكتروني.\nيرجى كتابة رمز التحقق المكون من 6 أرقام المرسل لبريدك عبر الأمر:\n<code>/verify الرمز</code>\nأو طلب رمز جديد عبر:\n<code>/resend</code>")
+        await sendTelegramMessage(botToken, chatId, "طلبك في انتظار التحقق من البريد الإلكتروني.\nيرجى كتابة رمز التحقق المكون من 6 أرقام المرسل لبريدك عبر الأمر:\n<code>/verify الرمز</code>\nأو طلب رمز جديد عبر:\n<code>/resend</code>")
       } else {
-        await sendTelegramMessage(botToken, chatId, "تم التحقق من بريدك الإلكتروني بنجاح! طلبك قيد المراجعة والاعتماد لدى إدارة النظام حالياً.")
+        await sendTelegramMessage(botToken, chatId, "تم التحقق من البريد الإلكتروني، وطلبك في انتظار موافقة الإدارة.")
       }
       return new Response("ok", { headers: corsHeaders })
     }
@@ -553,10 +553,35 @@ serve(async (req) => {
         p_telegram_user_id: tgUserId,
       })
 
+      // Optional administrator Telegram notification if TELEGRAM_ADMIN_CHAT_ID is configured
+      const adminChatId = Deno.env.get("TELEGRAM_ADMIN_CHAT_ID")
+      if (adminChatId) {
+        const { data: requestDetails } = await supabaseAdmin
+          .from("registration_requests")
+          .select("id, full_name, requested_department, requested_role")
+          .eq("id", request.id)
+          .maybeSingle()
+
+        const appBaseUrl = Deno.env.get("APP_BASE_URL") || ""
+        const dashboardLink = appBaseUrl ? `\n<a href="${appBaseUrl}/users">فتح لوحة الإدارة</a>` : ""
+        const adminMsg = `🔔 <b>طلب تسجيل موظف جديد بانتظار الاعتماد</b>\n\n` +
+          `• المعرّف: <code>${request.id}</code>\n` +
+          `• المتقدم: ${requestDetails?.full_name || "متقدم"}\n` +
+          `• القسم: ${requestDetails?.requested_department || ""}\n` +
+          `• الدور المطلوب: ${requestDetails?.requested_role || ""}\n` +
+          `• حالة التحقق: تم تأكيد البريد الإلكتروني بنجاح ✅` +
+          dashboardLink
+        try {
+          await sendTelegramMessage(botToken, Number(adminChatId), adminMsg)
+        } catch {
+          // preserve request, delivery failure to admin does not affect registration
+        }
+      }
+
       await sendTelegramMessage(
         botToken,
         chatId,
-        "تم التحقق من بريدك الإلكتروني بنجاح!\nتم إرسال طلبك إلى لوحة الإدارة للمراجعة والاعتماد.\nستتلقى إشعاراً هنا فور اعتماد حسابك وتخصيص رقمك الوظيفي."
+        "تم التحقق من البريد الإلكتروني، وطلبك في انتظار موافقة الإدارة.\nستتلقى إشعاراً هنا فور اعتماد حسابك وتخصيص رقمك الوظيفي."
       )
       return new Response("ok", { headers: corsHeaders })
     }
