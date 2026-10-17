@@ -65,27 +65,56 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
   }
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.length !== bBytes.length) {
+    return false
+  }
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i]
+  }
+  return diff === 0
+}
+
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
 
+  // Reject non-POST requests immediately
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? ""
-    const webhookSecret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? ""
+    const webhookSecret = (Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "").trim()
 
-    // 1. Validate Webhook Secret if configured
-    if (webhookSecret) {
-      const incomingSecret = req.headers.get("x-telegram-bot-api-secret-token")
-      if (incomingSecret !== webhookSecret) {
-        return new Response(JSON.stringify({ error: "Unauthorized webhook caller" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
-      }
+    // 1. Fail Closed: If webhook secret is not configured on the server, reject with 500 and process NOTHING
+    if (!webhookSecret) {
+      console.error("Configuration Error: TELEGRAM_WEBHOOK_SECRET is missing or empty. Rejecting request to prevent unauthenticated access.")
+      return new Response(JSON.stringify({ error: "Server Configuration Error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // 2. Validate incoming header with constant-time comparison
+    const incomingSecret = req.headers.get("x-telegram-bot-api-secret-token") || ""
+    if (!incomingSecret || !timingSafeEqual(incomingSecret, webhookSecret)) {
+      return new Response(JSON.stringify({ error: "Unauthorized webhook caller" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
     }
 
     const update = await req.json().catch(() => ({}))

@@ -77,7 +77,78 @@ serve(async (req) => {
       })
     }
 
-    // 2. Enforce System Admin privilege check strictly on caller's app_metadata (never trust user_metadata or usernames)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+    const action = body.action || "list_users"
+
+    // ─── ACTION: bootstrap_system_admin (One-Time Verified Bootstrap) ─────────
+    if (action === "bootstrap_system_admin") {
+      const expectedEmail = (Deno.env.get("BOOTSTRAP_ADMIN_EMAIL") || "marwandesouqhi@gmail.com").trim().toLowerCase()
+      const expectedUsername = (Deno.env.get("BOOTSTRAP_ADMIN_USERNAME") || "marwan-desouky").trim()
+
+      // 1. Authoritatively fetch caller from Auth admin API (never trust request body)
+      const { data: authUserData, error: authUserErr } = await supabaseAdmin.auth.admin.getUserById(caller.id)
+      const verifiedAuthUser = authUserData?.user
+
+      const isEmailVerified = Boolean(verifiedAuthUser?.email_confirmed_at)
+      const isEmailMatch = (verifiedAuthUser?.email || "").trim().toLowerCase() === expectedEmail
+
+      if (authUserErr || !verifiedAuthUser || !isEmailVerified || !isEmailMatch) {
+        // Record security denial in audit_logs
+        await supabaseAdmin.from("audit_logs").insert({
+          user_id: caller.id,
+          user_email: verifiedAuthUser?.email || caller.email || "unknown",
+          action: "محاولة تهيئة مدير نظام مرفوضة (Bootstrap Denied)",
+          entity_type: "security_violation",
+          entity_id: caller.id,
+          details: { outcome: "denied", reason: "identity_or_verification_mismatch" },
+        })
+
+        return new Response(JSON.stringify({
+          error: "غير مصرح لك: إجراء التهيئة الأولية مخصص حصرياً للمالك مع بريد مؤكد.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // 2. Call hardened database bootstrap function
+      const { data: bootRes, error: bootErr } = await supabaseAdmin.rpc("bootstrap_system_admin", {
+        p_email: expectedEmail,
+        p_username: expectedUsername,
+        p_auth_user_id: caller.id,
+      })
+
+      if (bootErr) {
+        throw bootErr
+      }
+
+      const allocatedEmployeeId = bootRes?.employee_id || "SYS-ADM-000001"
+
+      // 3. Server-managed Auth metadata update
+      await supabaseAdmin.auth.admin.updateUserById(caller.id, {
+        app_metadata: {
+          ...verifiedAuthUser.app_metadata,
+          role: "system_admin",
+          system_admin: true,
+          employee_id: allocatedEmployeeId,
+          department: "الإدارة العامة",
+          permissions: ["view_audit", "view_settings", "manage_records"],
+          status: "active",
+        },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: bootRes?.message || "تمت تهيئة وتأكيد حساب مدير النظام الرئيسي بنجاح.",
+        status: bootRes?.status,
+        employeeId: allocatedEmployeeId,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // 2. Enforce System Admin privilege check strictly on caller's app_metadata for all other actions
     const isSystemAdmin =
       caller.app_metadata?.system_admin === true ||
       caller.app_metadata?.role === "system_admin"
@@ -93,9 +164,6 @@ serve(async (req) => {
 
     const callerUsername = (caller.app_metadata?.username as string) || (caller.email?.replace(/@warehouse\.local$/, "") ?? "")
     const isCallerProtected = isProtectedUsername(callerUsername) || isProtectedUsername(caller.email)
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-    const action = body.action || "list_users"
 
     // ─── ACTION: list_users ──────────────────────────────────────────────────
     if (action === "list_users") {
@@ -865,39 +933,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: `تم تحديث حالة الحساب إلى ${status === "suspended" ? "معلّق" : "نشط"} بنجاح.`,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // ─── ACTION: bootstrap_system_admin ──────────────────────────────────────
-    if (action === "bootstrap_system_admin") {
-      const { data: bootRes, error: bootErr } = await supabaseAdmin.rpc("bootstrap_system_admin", {
-        p_email: "marwandesouqhi@gmail.com",
-        p_username: "marwan-desouky",
-        p_auth_user_id: caller.id,
-      })
-
-      if (bootErr) throw bootErr
-
-      // Sync caller's Auth app_metadata
-      await supabaseAdmin.auth.admin.updateUserById(caller.id, {
-        app_metadata: {
-          ...caller.app_metadata,
-          role: "system_admin",
-          system_admin: true,
-          employee_id: "SYS-ADM-000001",
-          department: "الإدارة العامة",
-          permissions: ["view_audit", "view_settings", "manage_records"],
-          status: "active",
-        },
-      })
-
-      return new Response(JSON.stringify({
-        success: true,
-        message: "تم تهيئة وتثبيت حساب مدير النظام الرئيسي بنجاح.",
-        details: bootRes,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
