@@ -57,6 +57,9 @@ import {
     approveRegistrationRequest,
     rejectRegistrationRequest,
     setUserAccountStatus,
+    getDepartmentDelegation,
+    setDepartmentDelegation,
+    sendPasswordRecovery,
 } from '../lib/registrationService'
 import type { RegistrationRequest } from '../lib/employeeIdentity'
 import { formatEmployeeId } from '../lib/employeeIdentity'
@@ -158,15 +161,52 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [selfPasswordSuccess, setSelfPasswordSuccess] = useState('')
     const [selfPasswordError, setSelfPasswordError] = useState('')
 
+    const [deptDelegationEnabled, setDeptDelegationEnabled] = useState(false)
+    const [delegationLoading, setDelegationLoading] = useState(false)
+
     async function loadRequests() {
         setRequestsLoading(true)
         try {
-            const reqs = await fetchRegistrationRequests()
+            const [reqs, delegRes] = await Promise.all([
+                fetchRegistrationRequests(),
+                getDepartmentDelegation(),
+            ])
             setRegistrationRequests(reqs)
+            if (delegRes && typeof delegRes.enabled === 'boolean') {
+                setDeptDelegationEnabled(delegRes.enabled)
+            }
         } catch (err) {
             console.warn('Failed to load requests:', err)
         } finally {
             setRequestsLoading(false)
+        }
+    }
+
+    async function handleToggleDelegation() {
+        if (!isSystemAdmin) return
+        setDelegationLoading(true)
+        try {
+            const nextVal = !deptDelegationEnabled
+            const res = await setDepartmentDelegation(nextVal)
+            if (res.success) {
+                setDeptDelegationEnabled(nextVal)
+                setActionFeedback({
+                    message: res.message,
+                    type: 'success',
+                })
+            } else {
+                setActionFeedback({
+                    message: res.error || 'تعذر تغيير إعداد التفويض.',
+                    type: 'error',
+                })
+            }
+        } catch (err) {
+            setActionFeedback({
+                message: err instanceof Error ? err.message : 'حدث خطأ أثناء تعديل التفويض.',
+                type: 'error',
+            })
+        } finally {
+            setDelegationLoading(false)
         }
     }
 
@@ -1175,6 +1215,24 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                             >
                                                                 <Edit2 size={15} />
                                                             </button>
+                                                            {user.email && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="action-icon-btn"
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            const res = await sendPasswordRecovery({ email: user.email, userId: user.id })
+                                                                            setActionFeedback({ message: res.message, type: res.success ? 'success' : 'error' })
+                                                                        } catch {
+                                                                            setActionFeedback({ message: 'تعذر إرسال رابط استعادة كلمة المرور', type: 'error' })
+                                                                        }
+                                                                    }}
+                                                                    title="إرسال رابط تعيين أو استعادة كلمة المرور للبريد الإلكتروني"
+                                                                    style={{ color: '#2563eb' }}
+                                                                >
+                                                                    <Send size={15} />
+                                                                </button>
+                                                            )}
                                                             {!isProtectedUsername(user.username) && (
                                                                 <button
                                                                     type="button"
@@ -1266,6 +1324,48 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 تحديث
                             </button>
                         </div>
+                    </div>
+
+                    {/* Delegation Control Banner */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 18px',
+                        background: 'var(--panel, rgba(255,255,255,0.03))',
+                        border: '1px solid var(--line)',
+                        borderRadius: '10px',
+                        marginBottom: '16px',
+                        gap: '12px',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <ShieldCheck size={20} color="var(--accent)" />
+                            <div>
+                                <strong style={{ fontSize: '0.9rem', display: 'block', color: 'var(--ink)' }}>
+                                    تفويض مراجعة واعتماد طلبات الموظفين لمدراء الأقسام
+                                </strong>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                    {deptDelegationEnabled
+                                        ? 'مفعّل: يحق لمدير القسم مراجعة واعتماد موظفي قسمه فقط وتخصيص أكوادهم.'
+                                        : 'معطّل (الافتراضي): اعتماد الموظفين مقتصر حصرياً على مدير النظام الرئيسي.'}
+                                </span>
+                            </div>
+                        </div>
+                        {isSystemAdmin && (
+                            <button
+                                type="button"
+                                className={deptDelegationEnabled ? 'secondary-btn' : 'primary-btn'}
+                                onClick={() => void handleToggleDelegation()}
+                                disabled={delegationLoading}
+                                style={{ height: '34px', padding: '0 14px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                            >
+                                {delegationLoading
+                                    ? 'جاري الحفظ...'
+                                    : deptDelegationEnabled
+                                        ? 'تعطيل تفويض الأقسام'
+                                        : 'تفعيل تفويض الأقسام'}
+                            </button>
+                        )}
                     </div>
 
                     <div className="table-scroll-container">

@@ -116,7 +116,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             // Mode: signIn
-            const cleanUser = username.trim().toLowerCase()
+            const cleanUser = username.trim()
             if (!cleanUser) {
                 throw new Error('يرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني.')
             }
@@ -124,93 +124,55 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 throw new Error('يرجى إدخال كلمة المرور.')
             }
 
-            // Check if account is suspended or disabled via app_users lookup
-            let resolvedEmail = ''
-            if (supabase) {
-                try {
-                    const { data: matchedProfile } = await supabase
-                        .from('app_users')
-                        .select('username, email, employee_id, status')
-                        .or(`username.ilike.${cleanUser},employee_id.ilike.${cleanUser},email.ilike.${cleanUser}`)
-                        .maybeSingle()
+            let signInData: any = null
+            let signInError: any = null
 
-                    if (matchedProfile) {
-                        if (matchedProfile.status === 'suspended' || matchedProfile.status === 'disabled') {
-                            throw new Error('تم تعليق هذا الحساب. يرجى مراجعة إدارة النظام.')
-                        }
-                        if (matchedProfile.status === 'pending_activation' || matchedProfile.status === 'pending') {
-                            throw new Error('الحساب قيد المراجعة والاعتماد. يرجى انتظار موافقة الإدارة.')
-                        }
-                        if (matchedProfile.email) {
-                            resolvedEmail = matchedProfile.email
-                        }
-                    }
-                } catch (statusErr) {
-                    if (statusErr instanceof Error && (statusErr.message.includes('تعليق') || statusErr.message.includes('المراجعة'))) {
-                        throw statusErr
-                    }
-                }
-            }
-
-            // Check specific alias for protected system admin
-            if (cleanUser === 'sys-adm-000001' || cleanUser === 'marwan-desouky' || cleanUser === 'marwandesouqhi@gmail.com') {
-                resolvedEmail = 'marwandesouqhi@gmail.com'
-            }
-
-            let targetEmail = resolvedEmail || toSyntheticEmail(cleanUser)
-            let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email: targetEmail,
-                password,
-            })
-
-            // If sign-in failed and user entered username or email alias, try alternate address
-            if (signInError && (cleanUser === 'marwan-desouky' || cleanUser === 'sys-adm-000001' || cleanUser === 'marwandesouqhi@gmail.com')) {
-                const alternateEmail = targetEmail === 'marwandesouqhi@gmail.com' ? 'marwan-desouky@warehouse.local' : 'marwandesouqhi@gmail.com'
-                const retry = await supabase.auth.signInWithPassword({
-                    email: alternateEmail,
+            // 1. If user entered a direct email address, attempt standard Supabase Auth sign-in first
+            if (cleanUser.includes('@')) {
+                const directRes = await supabase.auth.signInWithPassword({
+                    email: cleanUser.toLowerCase(),
                     password,
                 })
-                if (!retry.error) {
-                    signInData = retry.data
+                if (!directRes.error && directRes.data?.session) {
+                    signInData = directRes.data
                     signInError = null
+                } else {
+                    signInError = directRes.error
                 }
             }
 
-            // Transitional Login Bridge: For directory users and Unique-ID users migrating to Supabase Auth without lockout
-            if (signInError && supabase && isAuthTransitionalMode()) {
+            // 2. If direct sign-in was not used or failed (e.g. username or employee-id entered), invoke secure server-side login-bridge
+            if (!signInData && supabase) {
                 try {
                     const { data: bridgeData, error: bridgeError } = await supabase.functions.invoke('login-bridge', {
-                        body: { username: cleanUser, identifier: cleanUser, password },
+                        body: { identifier: cleanUser, password },
                     })
 
-                    if (!bridgeError && bridgeData?.bridged === true) {
-                        // Account was seamlessly provisioned into Supabase Auth -> Complete sign in
-                        const retryEmail = bridgeData?.email || targetEmail
-                        const retry = await supabase.auth.signInWithPassword({
-                            email: retryEmail,
-                            password,
-                        })
-                        if (!retry.error && retry.data) {
-                            signInData = retry.data
-                            signInError = null
-                        } else if (retry.error) {
-                            signInError = retry.error
-                        }
-                    } else if (bridgeError) {
+                    if (bridgeError) {
                         const status = (bridgeError as { status?: number; context?: { status?: number } }).status ||
                                        (bridgeError as { context?: { status?: number } }).context?.status
                         if (status === 429 || bridgeError.message?.includes('429')) {
                             throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
                         }
-                        if (bridgeError.message?.includes('تعطيل') || bridgeError.message?.includes('تعليق')) {
-                            throw new Error('تم تعليق هذا الحساب. يرجى مراجعة إدارة النظام.')
-                        }
+                        throw new Error(bridgeError.message || 'تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة.')
+                    }
+
+                    if (bridgeData?.session) {
+                        // Establish authoritative Supabase session
+                        const { data: sessData, error: sessErr } = await supabase.auth.setSession(bridgeData.session)
+                        if (sessErr) throw sessErr
+                        signInData = sessData
+                        signInError = null
+                    } else if (bridgeData?.error) {
+                        throw new Error(bridgeData.error)
+                    } else {
+                        throw new Error('تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة.')
                     }
                 } catch (bridgeCatch) {
-                    if (bridgeCatch instanceof Error && (bridgeCatch.message.includes('15 دقيقة') || bridgeCatch.message.includes('تعليق'))) {
+                    if (bridgeCatch instanceof Error) {
                         throw bridgeCatch
                     }
-                    // Fall through to standard error handling
+                    throw new Error('تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة.')
                 }
             }
 

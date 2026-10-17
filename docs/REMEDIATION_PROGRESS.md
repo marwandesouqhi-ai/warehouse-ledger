@@ -48,10 +48,60 @@
 ---
 
 ## الجلسة الثالثة (Session C): جسر تسجيل الدخول، الاعتماد، الأكواد الفريدة، وRLS
-- **الحالة:** جاهزة للبدء (Ready for Session C)
-- **العيوب المستهدفة:** `P1-2`, `P1-3`, `P1-4`, `P1-5`.
+- **الحالة:** مكتملة ومختبرة بنجاح (Completed & Verified Locally)
+- **العيوب التي تم التحقق منها ومعالجتها:**
+  1. `P1-2` (إعادة بناء وتأمين جسر تسجيل الدخول `login-bridge`):
+     - تحديد نوع المعرّف عبر قائمة بيضاء صارمة (`email`, `employee_id`, `username`) ترفض أي محاولة حقن SQL أو رموز مشبوهة.
+     - استبدال استعلامات `.or(...)` المعرضة للحقن باستعلامات استعلامية مشروطة ومفصولة بحسب المعرّف.
+     - منع تسجيل الدخول للحسابات غير النشطة (`suspended` أو `pending_activation`) دون تسريب حالة الحساب للمخترق.
+     - التحقق الفعلي من كلمة المرور عبر Supabase Auth حصرياً بواسطة `signInWithPassword` (باستخدام `SUPABASE_ANON_KEY`) وإرجاع جلسة موثقة حقيقية (`access_token`, `refresh_token`, `expires_in`, `user`).
+     - إرجاع خطأ عام وموحد (`GENERIC_LOGIN_ERROR`) عند أي إخفاق لمنع استنباط المستخدمين وأرقام الموظفين.
+     - حذف التحقق من كلمات المرور النصية القديمة المخزنة ومحاولات مزامنة كلمات المرور عبر `admin.updateUserById`.
+     - تحديث واجهة `AuthPage.tsx` لحذف أي استعلام لجدول `app_users` من المتصفح والاعتماد على الجسر وخادم التوثيق الرسمي.
+  2. `P1-3` و `P1-4` و `C.1` و `C.2` (مصفوفة تفويض الاعتماد وحوكمة الأقسام):
+     - إنشاء جدول إعدادات التفويض `registration_approval_settings` مع حقل `enable_department_delegation` بقيمة افتراضية `false` ومقيد بالكامل بـ RLS.
+     - تأمين جدول `registration_requests`: إلغاء صلاحيات INSERT و UPDATE و DELETE من جميع أدوار العملاء (`anon`, `authenticated`) وحصر الإدارة عبر الخادم ودوال RPC.
+     - إنشاء العرض الآمن `registration_requests_admin_view` الذي يستبعد أعمدة رموز OTP المشفرة لحماية الخصوصية.
+     - ترقية وتأمين دالة RPC `approve_employee_registration`:
+       - التحقق من هوية المراجع عبر `p_reviewer_auth_id` من قاعدة البيانات مباشرة.
+       - منع المراجع من اعتماد طلبه الذاتي منعاً باتاً.
+       - منع تعيين دور `system_admin` عبر طلبات التسجيل نهائياً.
+       - تطبيق مصفوفة التفويض: منع مدير القسم من الاعتماد إذا كان التفويض معطلاً، ومنعه من اعتماد طلبات خارج قسمه، ومنعه من تعيين دور `admin` أو `system_admin`.
+     - تحديث الدالة السحابية `admin-users`:
+       - دعم أدوار مدراء الأقسام (`admin`) وتحديد صلاحياتهم في استعراض واعتماد ورفض طلبات قسمهم فقط.
+       - إنشاء أو ربط حساب Supabase Auth بطريقة تكرارية آمنة (Idempotent) بدون قبول أي كلمات مرور من العميل، وتوليد رابط تعيين كلمة المرور الآمن (`generateLink(recovery)`).
+       - إضافة إجراء `set_department_delegation` محصور حصرياً بمدير النظام الرئيسي (`system_admin`).
+       - إضافة إجراء `get_department_delegation` للاستعلام عن حالة التفويض.
+       - إضافة إجراء `send_password_recovery` لإرسال رابط تعيين كلمة المرور عبر البريد الإلكتروني.
+  3. `C.3` و `C.4` (سجل الأكواد الفريدة ومكافحة التلاعب):
+     - إنشاء جدول السجل التراكمي `employee_code_registry` مع قفل مشدد بواسطة Trigger يمنع التعديل (UPDATE) والحذف (DELETE) نهائياً.
+     - تقديم التسلسلات الرقمية (`ALTER SEQUENCE ... RESTART WITH`) لتتجاوز أعلى رقم وظيفي مستخدم حالياً لمنع تكرار الأكواد.
+     - ترقية دالة `generate_employee_code`: خريطة بادئات ثابتة لكل دور، لا توجد خيارات افتراضية عامة، رفع استثناء عند الأدوار غير المعرفة أو استنفاد محاولات التصادم، وتسجيل الكود فوراً في السجل التراكمي.
+  4. `C.5` (تعليق الحسابات وحظر Supabase Auth):
+     - عند تعديل حالة المستخدم إلى `suspended` في `admin-users`، يتم تطبيق حظر طويل الأمد `ban_duration: '876000h'` في Supabase Auth لمنع إصدار أي توكنات جديدة وتحديث حالته في `app_metadata` و `app_users`.
+     - عند إعادة التنشيط إلى `active`، يتم إزالة الحظر `ban_duration: 'none'`.
+     - تحصين مدير النظام الرئيسي المحمي (`marwan-desouky`) ضد التعليق نهائياً.
+  5. مقترح السياسات لبيانات الأعمال (`supabase/pending/`):
+     - إعداد ملف مقترح الهجرة `20261017153000_enforce_active_status_on_business_tables.sql` وملف التراجع المقابل لتقييد الجداول التشغيلية بحالة `status = 'active'` للمستخدمين لمراجعته من قِبل مالك المشروع.
+- **الملفات المنشأة:**
+  - `supabase/migrations/20261017150000_approval_delegation_code_registry_and_rls.sql`
+  - `supabase/rollbacks/20261017150000_approval_delegation_code_registry_and_rls.rollback.sql`
+  - `supabase/pending/20261017153000_enforce_active_status_on_business_tables.sql`
+  - `supabase/rollbacks/20261017153000_enforce_active_status_on_business_tables.rollback.sql`
+  - `tests/unit/sessionCSecurity.test.ts`
+- **الملفات المعدلة:**
+  - `supabase/functions/login-bridge/index.ts`
+  - `supabase/functions/admin-users/index.ts`
+  - `src/pages/AuthPage.tsx`
+  - `src/pages/UsersPage.tsx`
+  - `src/lib/registrationService.ts`
+- **نتائج الاختبارات:**
+  - اجتياز اختبارات Session C الثلاثة عشر (13/13) بنجاح.
+  - اجتياز كامل حزمة اختبارات المشروع (37 ملف اختبار، 322 اختبار ناجح بنسبة 100%).
+  - اجتياز فحص الأنواع `npm run typecheck` (0 أخطاء).
 
 ---
 
 ## الجلسة الرابعة (Session D): الفحص النهائي والتوثيق والتقرير الشامل
-- **الحالة:** مجدولة
+- **الحالة:** جاهزة للبدء (Ready for Session D)
+

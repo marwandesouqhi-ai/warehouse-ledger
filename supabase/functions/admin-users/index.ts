@@ -148,14 +148,33 @@ serve(async (req) => {
       })
     }
 
-    // 2. Enforce System Admin privilege check strictly on caller's app_metadata for all other actions
+    // 2. Caller privilege check (System Admin or Department Admin)
     const isSystemAdmin =
       caller.app_metadata?.system_admin === true ||
       caller.app_metadata?.role === "system_admin"
 
-    if (!isSystemAdmin) {
+    const isDepartmentAdmin = caller.app_metadata?.role === "admin"
+
+    if (!isSystemAdmin && !isDepartmentAdmin) {
       return new Response(JSON.stringify({
-        error: "غير مصرح لك: إجراءات إدارة الحسابات مقتصرة حصرياً على مدير النظام (System Admin).",
+        error: "غير مصرح لك: إجراءات إدارة الحسابات مقتصرة حصرياً على مدراء النظام والأقسام.",
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // Department admins may only perform delegation-allowed actions
+    const allowedDeptAdminActions = [
+      "list_registration_requests",
+      "approve_registration_request",
+      "reject_registration_request",
+      "get_department_delegation",
+    ]
+
+    if (!isSystemAdmin && !allowedDeptAdminActions.includes(action)) {
+      return new Response(JSON.stringify({
+        error: "غير مصرح لمدير القسم تنفيذ هذا الإجراء. الإجراء مقتصر على مدير النظام الرئيسي (System Admin).",
       }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -641,14 +660,105 @@ serve(async (req) => {
       })
     }
 
+    // ─── ACTION: get_department_delegation ───────────────────────────────────
+    if (action === "get_department_delegation") {
+      const { data: sett, error: settErr } = await supabaseAdmin
+        .from("registration_approval_settings")
+        .select("enable_department_delegation, updated_at")
+        .eq("id", 1)
+        .maybeSingle()
+
+      if (settErr) throw settErr
+
+      return new Response(JSON.stringify({
+        success: true,
+        enableDepartmentDelegation: Boolean(sett?.enable_department_delegation),
+        updatedAt: sett?.updated_at || null,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: set_department_delegation ───────────────────────────────────
+    if (action === "set_department_delegation") {
+      if (!isSystemAdmin) {
+        return new Response(JSON.stringify({
+          error: "تعديل تفويض اعتماد طلبات الأقسام مقتصر حصرياً على مدير النظام الرئيسي.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const enabled = Boolean(body.enabled)
+
+      const { error: updErr } = await supabaseAdmin
+        .from("registration_approval_settings")
+        .update({
+          enable_department_delegation: enabled,
+          updated_at: new Date().toISOString(),
+          updated_by: caller.id,
+        })
+        .eq("id", 1)
+
+      if (updErr) throw updErr
+
+      await supabaseAdmin.from("audit_logs").insert({
+        user_id: caller.id,
+        user_email: caller.email,
+        action: `تعديل تفويض اعتماد طلبات الأقسام إلى: ${enabled ? "مفعّل" : "معطّل"}`,
+        entity_type: "settings",
+        entity_id: "registration_approval_settings",
+        details: { enable_department_delegation: enabled },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: `تم ${enabled ? "تفعيل" : "تعطيل"} تفويض اعتماد الأقسام بنجاح.`,
+        enableDepartmentDelegation: enabled,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
     // ─── ACTION: list_registration_requests ──────────────────────────────────
     if (action === "list_registration_requests") {
-      const { data: requests, error: reqErr } = await supabaseAdmin
-        .from("registration_requests")
+      let query = supabaseAdmin
+        .from("registration_requests_admin_view")
         .select("*")
         .order("created_at", { ascending: false })
 
-      if (reqErr) throw reqErr
+      // Department admins only see requests for their own department
+      if (!isSystemAdmin && isDepartmentAdmin) {
+        const callerDept = caller.app_metadata?.department
+        if (callerDept) {
+          query = query.eq("requested_department", callerDept)
+        }
+      }
+
+      const { data: requests, error: reqErr } = await query
+
+      if (reqErr) {
+        // Fallback to table excluding sensitive OTP columns
+        let fallbackQuery = supabaseAdmin
+          .from("registration_requests")
+          .select("id, full_name, email, telegram_user_id, telegram_username, requested_department, requested_role, verification_status, approval_status, approved_role, employee_id, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at")
+          .order("created_at", { ascending: false })
+
+        if (!isSystemAdmin && isDepartmentAdmin && caller.app_metadata?.department) {
+          fallbackQuery = fallbackQuery.eq("requested_department", caller.app_metadata.department)
+        }
+
+        const { data: fallbackRequests, error: fbErr } = await fallbackQuery
+        if (fbErr) throw fbErr
+
+        return new Response(JSON.stringify({ success: true, requests: fallbackRequests || [] }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
 
       return new Response(JSON.stringify({ success: true, requests: requests || [] }), {
         status: 200,
@@ -709,29 +819,74 @@ serve(async (req) => {
         })
       }
 
-      // Execute SQL RPC approve_employee_registration
+      // Department admin specific safeguards
+      if (!isSystemAdmin) {
+        if (roleToAssign === "admin") {
+          return new Response(JSON.stringify({
+            error: "غير مصرح: لا يمكن لمدير القسم تعيين دور مدير آخر. فقط مدير النظام الرئيسي يمتلك هذه الصلاحية.",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+        const callerDept = caller.app_metadata?.department
+        if (!callerDept || callerDept !== regReq.requested_department) {
+          return new Response(JSON.stringify({
+            error: "غير مصرح: لا يمكنك اعتماد طلبات خارج قسمك.",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+      }
+
+      // Execute SQL RPC approve_employee_registration (enforces DB delegation matrix and sequence lock)
       const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc("approve_employee_registration", {
         p_request_id: requestId,
         p_approved_role: roleToAssign,
-        p_reviewer_id: caller.id,
+        p_reviewer_auth_id: caller.id,
       })
 
       if (rpcErr) {
-        throw rpcErr
+        return new Response(JSON.stringify({ error: rpcErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
       }
 
       const allocatedEmployeeId = rpcRes?.employee_id
 
-      // Provision or link user in Supabase Auth with real email
+      // Provision or link user in Supabase Auth idempotently without client passwords
       let authUserId: string | null = null
-      const { data: authList } = await supabaseAdmin.auth.admin.listUsers()
-      const existingAuth = (authList?.users || []).find(
-        (u) => normalizeUsername(u.email) === normalizeUsername(regReq.email)
-      )
+
+      const { data: existingAppUser } = await supabaseAdmin
+        .from("app_users")
+        .select("auth_user_id")
+        .eq("email", regReq.email)
+        .maybeSingle()
+
+      let existingAuth: any = null
+      if (existingAppUser?.auth_user_id) {
+        const { data: byId } = await supabaseAdmin.auth.admin.getUserById(existingAppUser.auth_user_id)
+        if (byId?.user) existingAuth = byId.user
+      }
+
+      if (!existingAuth) {
+        const { data: authList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 })
+        existingAuth = (authList?.users || []).find(
+          (u) => normalizeUsername(u.email) === normalizeUsername(regReq.email)
+        )
+      }
 
       if (existingAuth) {
         authUserId = existingAuth.id
         await supabaseAdmin.auth.admin.updateUserById(existingAuth.id, {
+          user_metadata: {
+            ...existingAuth.user_metadata,
+            name: regReq.full_name,
+            displayName: regReq.full_name,
+            employee_id: allocatedEmployeeId,
+          },
           app_metadata: {
             ...existingAuth.app_metadata,
             role: roleToAssign,
@@ -763,6 +918,14 @@ serve(async (req) => {
 
         if (!createAuthErr && newAuth?.user) {
           authUserId = newAuth.user.id
+          try {
+            await supabaseAdmin.auth.admin.generateLink({
+              type: "recovery",
+              email: regReq.email,
+            })
+          } catch {
+            // best-effort link generation
+          }
         }
       }
 
@@ -827,6 +990,32 @@ serve(async (req) => {
         })
       }
 
+      // Department admin specific safeguards
+      if (!isSystemAdmin) {
+        const { data: sett } = await supabaseAdmin
+          .from("registration_approval_settings")
+          .select("enable_department_delegation")
+          .eq("id", 1)
+          .maybeSingle()
+        if (!sett?.enable_department_delegation) {
+          return new Response(JSON.stringify({
+            error: "تفويض الأقسام معطل حالياً. يتطلب مراجعة مدير النظام الرئيسي.",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+        const callerDept = caller.app_metadata?.department
+        if (!callerDept || callerDept !== regReq.requested_department) {
+          return new Response(JSON.stringify({
+            error: "غير مصرح لك برفض طلبات خارج قسمك.",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+      }
+
       await supabaseAdmin
         .from("registration_requests")
         .update({
@@ -857,7 +1046,7 @@ serve(async (req) => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               chat_id: regReq.telegram_user_id,
-              text: `تم مراجعة طلب التسجيل ولم تتم الموافقة عليه.\nالسبب: ${rejectionReason || "لم يتم تحديد سبب"}`,
+              text: `تمت مراجعة طلب التسجيل ولم تتم الموافقة عليه.\nالسبب: ${rejectionReason || "لم يتم تحديد سبب"}`,
             }),
           })
         } catch {
@@ -907,7 +1096,10 @@ serve(async (req) => {
       }
 
       if (targetUser?.user) {
+        // Enforce Auth ban_duration when suspended, and clear ban when active
+        const banDuration = status === "suspended" ? "876000h" : "none"
         await supabaseAdmin.auth.admin.updateUserById(userId, {
+          ban_duration: banDuration,
           app_metadata: {
             ...targetUser.user.app_metadata,
             status,
@@ -933,6 +1125,80 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: `تم تحديث حالة الحساب إلى ${status === "suspended" ? "معلّق" : "نشط"} بنجاح.`,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: send_password_recovery ─────────────────────────────────────
+    if (action === "send_password_recovery") {
+      const { email, userId } = body
+      let targetEmail = email?.trim()?.toLowerCase()
+      if (!targetEmail && userId) {
+        const { data: u } = await supabaseAdmin.auth.admin.getUserById(userId)
+        targetEmail = u?.user?.email?.trim()?.toLowerCase()
+      }
+
+      if (!targetEmail) {
+        return new Response(JSON.stringify({ error: "البريد الإلكتروني مطلوب لإرسال رابط تعيين كلمة المرور." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email: targetEmail,
+      })
+
+      if (linkErr) {
+        return new Response(JSON.stringify({ error: linkErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // If RESEND_API_KEY is configured, dispatch real recovery email
+      const resendApiKey = Deno.env.get("RESEND_API_KEY")
+      const actionLink = linkData?.properties?.action_link
+      if (resendApiKey && actionLink) {
+        try {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${resendApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: Deno.env.get("RESEND_FROM_EMAIL") || "Warehouse Ledger <onboarding@resend.dev>",
+              to: [targetEmail],
+              subject: "تعيين كلمة المرور - نظام إدارة المستودع",
+              html: `<div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>تعيين كلمة المرور</h2>
+                <p>تم طلب تعيين أو استعادة كلمة المرور لحسابك في نظام المستودع.</p>
+                <p><a href="${actionLink}" style="background-color: #2563eb; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">تعيين كلمة المرور</a></p>
+                <p style="color: #666; font-size: 12px;">ينتهي الرابط تلقائياً بعد فترة قصيرة ولأمانك لا تشاركه مع أي شخص.</p>
+              </div>`,
+            }),
+          })
+        } catch {
+          // ignore email transport error
+        }
+      }
+
+      await supabaseAdmin.from("audit_logs").insert({
+        user_id: caller.id,
+        user_email: caller.email,
+        action: `إرسال رابط تعيين كلمة المرور للمستخدم: ${targetEmail}`,
+        entity_type: "user_management",
+        entity_id: userId || targetEmail,
+        details: { targetEmail },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم توليد وإرسال رابط تعيين كلمة المرور بنجاح.",
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

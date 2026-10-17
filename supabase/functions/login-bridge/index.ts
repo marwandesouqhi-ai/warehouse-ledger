@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
+const GENERIC_LOGIN_ERROR = "تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة."
+
 function normalizeUsername(input: string | null | undefined): string {
   if (!input) return ""
   let normalized = String(input).trim().toLowerCase().normalize("NFKC")
@@ -19,40 +21,17 @@ function normalizeUsername(input: string | null | undefined): string {
   return normalized.replace(/[асеорхуіјѕԁԛԝαου]/g, (char) => homoglyphs[char] || char)
 }
 
-function isProtectedUsername(usernameOrEmail: string | null | undefined): boolean {
-  if (!usernameOrEmail) return false
-  const clean = normalizeUsername(usernameOrEmail)
-  const reserved = [
-    "marwan-desouky",
-    "marwan-desouky@warehouse.local",
-    "marwandesouqhi@gmail.com",
-  ]
-  for (const r of reserved) {
-    if (clean === normalizeUsername(r)) return true
-  }
-  if (clean.endsWith("@warehouse.local")) {
-    const prefix = clean.replace(/@warehouse\.local$/, "")
-    if (prefix === "marwan-desouky") return true
-  }
+const EMPLOYEE_ID_REGEX = /^[A-Z]{2,3}-[A-Z]{3}-\d{6}$/
+const USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,50}$/
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+
+function isValidIdentifier(identifier: string): boolean {
+  if (!identifier || identifier.length > 254) return false
+  const upper = identifier.toUpperCase().trim()
+  if (EMPLOYEE_ID_REGEX.test(upper)) return true
+  if (EMAIL_REGEX.test(identifier.trim())) return true
+  if (USERNAME_REGEX.test(identifier.trim())) return true
   return false
-}
-
-async function timingSafeEqualString(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder()
-  const aBuf = encoder.encode(a)
-  const bBuf = encoder.encode(b)
-
-  const aHash = await crypto.subtle.digest("SHA-256", aBuf)
-  const bHash = await crypto.subtle.digest("SHA-256", bBuf)
-
-  const aArray = new Uint8Array(aHash)
-  const bArray = new Uint8Array(bHash)
-
-  let diff = aArray.length ^ bArray.length
-  for (let i = 0; i < aArray.length; i++) {
-    diff |= aArray[i] ^ bArray[i]
-  }
-  return diff === 0
 }
 
 serve(async (req) => {
@@ -60,43 +39,53 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders })
   }
 
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 
     const body = await req.json().catch(() => ({}))
     const rawIdentifier = body.identifier || body.username
     const password = body.password
 
-    const cleanIdentifier = normalizeUsername(rawIdentifier)
-
-    if (!cleanIdentifier || !password || typeof password !== "string") {
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو الرقم الوظيفي وكلمة المرور مطلوبان." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // 1. Fixed System Admin marwan-desouky is strictly excluded from login-bridge
-    if (isProtectedUsername(cleanIdentifier)) {
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
+    // 1. Validate Identifier format with allowlist
+    if (!rawIdentifier || typeof rawIdentifier !== "string" || !password || typeof password !== "string") {
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
+    const cleanIdentifier = rawIdentifier.trim()
+    if (!isValidIdentifier(cleanIdentifier)) {
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    const normalizedIdentifier = normalizeUsername(cleanIdentifier)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 2. Rate limiting check via login_attempts table (Max 5 failed attempts in 15 mins)
+    // 2. Rate limiting check via login_attempts (Max 5 failed attempts in 15 mins)
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown-ip"
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-    const { count: failedAttemptsCount } = await supabaseAdmin
+
+    const { count: failedCount } = await supabaseAdmin
       .from("login_attempts")
       .select("id", { count: "exact", head: true })
-      .eq("username", cleanIdentifier)
+      .eq("username", normalizedIdentifier)
       .eq("success", false)
       .gte("attempted_at", fifteenMinutesAgo)
 
-    if (failedAttemptsCount && failedAttemptsCount >= 5) {
+    if (failedCount && failedCount >= 5) {
       return new Response(JSON.stringify({
         error: "تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.",
       }), {
@@ -105,158 +94,181 @@ serve(async (req) => {
       })
     }
 
-    // 3. Query mirror row from app_users by username, employee_id, or email
-    const { data: appUser, error: appUserErr } = await supabaseAdmin
+    // 3. Parameterized server-side lookup in app_users (No PostgREST filter injection!)
+    let appUser = null
+
+    // A. Search by username
+    const { data: userByUsername } = await supabaseAdmin
       .from("app_users")
-      .select("id, username, display_name, password, role, status, permissions, employee_id, email, department")
-      .or(`username.ilike.${cleanIdentifier},employee_id.ilike.${cleanIdentifier},email.ilike.${cleanIdentifier}`)
+      .select("id, username, role, status, auth_user_id, employee_id, email")
+      .eq("username", normalizedIdentifier)
       .maybeSingle()
 
-    if (appUserErr || !appUser) {
-      await supabaseAdmin.from("login_attempts").insert({
-        username: cleanIdentifier,
-        success: false,
-      })
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
+    if (userByUsername) {
+      appUser = userByUsername
     }
 
-    const cleanUsername = normalizeUsername(appUser.username)
-
-    if (isProtectedUsername(cleanUsername)) {
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // 4. Explicitly reject disabled or suspended accounts
-    if (appUser.status === "disabled" || appUser.status === "suspended") {
-      await supabaseAdmin.from("login_attempts").insert({
-        username: cleanIdentifier,
-        success: false,
-      })
-      return new Response(JSON.stringify({ error: "تم تعطيل هذا الحساب. يرجى مراجعة إدارة النظام." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // 5. Constant-time password verification against password stored in app_users
-    const passwordMatches = await timingSafeEqualString(password, appUser.password || "")
-    if (!passwordMatches) {
-      await supabaseAdmin.from("login_attempts").insert({
-        username: cleanIdentifier,
-        success: false,
-      })
-      return new Response(JSON.stringify({ error: "اسم المستخدم أو كلمة المرور غير صحيحة." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    const effectiveAuthEmail = appUser.email || `${cleanUsername}@warehouse.local`
-
-    // 6. Check if user already exists in Supabase Auth
-    const { data: authSearch } = await supabaseAdmin.auth.admin.listUsers()
-    const existingAuthUser = (authSearch?.users || []).find(
-      (u) => normalizeUsername(u.email) === normalizeUsername(effectiveAuthEmail) ||
-             normalizeUsername(u.email) === normalizeUsername(`${cleanUsername}@warehouse.local`)
-    )
-
-    if (existingAuthUser) {
-      // User exists in Auth, but client signIn failed: sync the updated password into Supabase Auth
-      await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
-        password: password,
-      })
-
-      await supabaseAdmin
+    // B. If not found, search by employee_id if identifier matches employee code format
+    if (!appUser && EMPLOYEE_ID_REGEX.test(cleanIdentifier.toUpperCase())) {
+      const { data: userByEmpId } = await supabaseAdmin
         .from("app_users")
-        .update({
-          auth_user_id: existingAuthUser.id,
-          status: "active",
-        })
-        .eq("id", appUser.id)
+        .select("id, username, role, status, auth_user_id, employee_id, email")
+        .eq("employee_id", cleanIdentifier.toUpperCase())
+        .maybeSingle()
 
+      if (userByEmpId) {
+        appUser = userByEmpId
+      }
+    }
+
+    // C. If not found, search by email if identifier matches email format
+    if (!appUser && EMAIL_REGEX.test(cleanIdentifier.toLowerCase())) {
+      const { data: userByEmail } = await supabaseAdmin
+        .from("app_users")
+        .select("id, username, role, status, auth_user_id, employee_id, email")
+        .eq("email", cleanIdentifier.toLowerCase())
+        .maybeSingle()
+
+      if (userByEmail) {
+        appUser = userByEmail
+      }
+    }
+
+    // If account not found: record failed attempt and return generic message
+    if (!appUser) {
       await supabaseAdmin.from("login_attempts").insert({
-        username: cleanUsername,
-        success: true,
+        username: normalizedIdentifier,
+        ip_address: clientIp,
+        success: false,
       })
-
-      return new Response(JSON.stringify({
-        success: true,
-        bridged: true,
-        email: existingAuthUser.email || effectiveAuthEmail,
-        employee_id: appUser.employee_id || null,
-      }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
-    // 6. Seamlessly provision Supabase Auth account with matching credentials
-    const permissionsArray = Array.isArray(appUser.permissions)
-      ? appUser.permissions
-      : typeof appUser.permissions === "string"
-        ? (() => { try { return JSON.parse(appUser.permissions) } catch { return [] } })()
-        : []
+    // 4. Require account to be active (Strictly reject suspended, pending, or disabled)
+    if (appUser.status !== "active") {
+      await supabaseAdmin.from("login_attempts").insert({
+        username: normalizedIdentifier,
+        ip_address: clientIp,
+        success: false,
+      })
+      // Return identical generic error to prevent account state enumeration
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
 
-    const { data: newAuthUser, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
-      email: effectiveAuthEmail,
+    // 5. Resolve Auth Identity using getUserById (Never listUsers)
+    let authUser = null
+    if (appUser.auth_user_id) {
+      const { data: authUserData, error: authUserErr } = await supabaseAdmin.auth.admin.getUserById(appUser.auth_user_id)
+      if (!authUserErr && authUserData?.user) {
+        authUser = authUserData.user
+      }
+    }
+
+    // If user has no auth_user_id linked yet: check if it's the intended system admin
+    if (!authUser && (normalizedIdentifier === "marwan-desouky" || appUser.email === "marwandesouqhi@gmail.com")) {
+      const { data: adminSearch } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10 })
+      const foundAdmin = (adminSearch?.users || []).find((u) => u.email?.toLowerCase() === "marwandesouqhi@gmail.com")
+      if (foundAdmin) {
+        authUser = foundAdmin
+        // Auto-link auth_user_id
+        await supabaseAdmin.from("app_users").update({ auth_user_id: foundAdmin.id }).eq("id", appUser.id)
+      }
+    }
+
+    if (!authUser || !authUser.email) {
+      await supabaseAdmin.from("login_attempts").insert({
+        username: normalizedIdentifier,
+        ip_address: clientIp,
+        success: false,
+      })
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // Check if account is banned in Supabase Auth
+    if (authUser.banned_until && new Date(authUser.banned_until).getTime() > Date.now()) {
+      await supabaseAdmin.from("login_attempts").insert({
+        username: normalizedIdentifier,
+        ip_address: clientIp,
+        success: false,
+      })
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // 6. Authenticate Password Through Supabase Auth Itself (using anon key client)
+    const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey)
+    const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({
+      email: authUser.email,
       password: password,
-      email_confirm: true,
-      user_metadata: {
-        username: cleanUsername,
-        displayName: appUser.display_name || cleanUsername,
-        name: appUser.display_name || cleanUsername,
-        employee_id: appUser.employee_id || null,
-        department: appUser.department || null,
-      },
-      app_metadata: {
-        username: cleanUsername,
-        role: appUser.role || "viewer",
-        system_admin: false,
-        permissions: permissionsArray,
-        must_change_password: true,
-        employee_id: appUser.employee_id || null,
-        department: appUser.department || null,
-      },
     })
 
-    if (createAuthErr || !newAuthUser?.user) {
-      throw new Error(createAuthErr?.message || "Failed to provision Supabase Auth user")
+    if (signInError || !signInData?.session) {
+      await supabaseAdmin.from("login_attempts").insert({
+        username: normalizedIdentifier,
+        ip_address: clientIp,
+        success: false,
+      })
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
     }
 
-    // 7. Link auth_user_id and ensure status is active in app_users
+    // 7. Verify returned user identity matches app_users linked identity
+    if (signInData.user.id !== authUser.id) {
+      return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // 8. Record successful login attempt
+    await supabaseAdmin.from("login_attempts").insert({
+      username: normalizedIdentifier,
+      ip_address: clientIp,
+      success: true,
+    })
+
+    // Update last_login_at in app_users
     await supabaseAdmin
       .from("app_users")
-      .update({
-        auth_user_id: newAuthUser.user.id,
-        status: "active",
-        must_change_password: true,
-      })
+      .update({ last_login_at: new Date().toISOString() })
       .eq("id", appUser.id)
 
-    // 8. Record success attempt in login_attempts
-    await supabaseAdmin.from("login_attempts").insert({
-      username: cleanUsername,
-      success: true,
-    })
-
+    // 9. Return official Supabase session to client (No sensitive profile/email leaked in unauthenticated response)
     return new Response(JSON.stringify({
       success: true,
-      bridged: true,
-      email: effectiveAuthEmail,
-      employee_id: appUser.employee_id || null,
+      session: {
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
+        expires_in: signInData.session.expires_in,
+        token_type: signInData.session.token_type,
+        user: {
+          id: signInData.user.id,
+          aud: signInData.user.aud,
+          email: signInData.user.email,
+          user_metadata: signInData.user.user_metadata,
+          app_metadata: signInData.user.app_metadata,
+        },
+      },
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "حدث خطأ غير متوقع"
-    return new Response(JSON.stringify({ error: message }), {
+    // Generic response for unexpected server errors
+    return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

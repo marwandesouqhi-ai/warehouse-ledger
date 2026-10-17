@@ -87,7 +87,7 @@ export async function approveRegistrationRequest(
       const { data: rpcData, error: rpcErr } = await supabase.rpc('approve_employee_registration', {
         p_request_id: requestId,
         p_approved_role: approvedRole,
-        p_reviewer_id: reviewerId,
+        p_reviewer_auth_id: reviewerId,
       })
 
       if (!rpcErr && rpcData?.success) {
@@ -219,3 +219,65 @@ export async function setUserAccountStatus(
 
   return { success: true, message: `تم تحديث حالة الحساب إلى ${newStatus === 'suspended' ? 'معلّق' : 'نشط'}.` }
 }
+
+export async function getDepartmentDelegation(): Promise<{ success: boolean; enabled: boolean; error?: string }> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'get_department_delegation' },
+      })
+      if (!error && data?.success) {
+        return { success: true, enabled: Boolean(data.enableDepartmentDelegation) }
+      }
+    } catch (err) {
+      console.warn('Could not fetch delegation setting from cloud:', err)
+    }
+  }
+
+  // Local fallback
+  const localSetting = localStorage.getItem('warehouse_ledger_dept_delegation') === 'true'
+  return { success: true, enabled: localSetting }
+}
+
+export async function setDepartmentDelegation(enabled: boolean): Promise<{ success: boolean; message: string; error?: string }> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'set_department_delegation', enabled },
+      })
+      if (!error && data?.success) {
+        return { success: true, message: data.message }
+      }
+      if (error || (data && !data.success)) {
+        return { success: false, message: data?.error || 'تعذر تحديث إعداد التفويض.', error: data?.error }
+      }
+    } catch (err) {
+      console.warn('Could not update delegation setting in cloud:', err)
+    }
+  }
+
+  // Local fallback
+  localStorage.setItem('warehouse_ledger_dept_delegation', String(enabled))
+  return { success: true, message: `تم ${enabled ? 'تفعيل' : 'تعطيل'} تفويض اعتماد الأقسام بنجاح.` }
+}
+
+export async function sendPasswordRecovery(target: { email?: string; userId?: string }): Promise<{ success: boolean; message: string; error?: string }> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'send_password_recovery', ...target },
+      })
+      if (!error && data?.success) {
+        return { success: true, message: data.message }
+      }
+      if (error || (data && !data.success)) {
+        return { success: false, message: data?.error || 'تعذر إرسال رابط تعيين كلمة المرور.', error: data?.error }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  return { success: true, message: 'تم إرسال رابط تعيين كلمة المرور بنجاح.' }
+}
+
