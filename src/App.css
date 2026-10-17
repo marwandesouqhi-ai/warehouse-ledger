@@ -3543,8 +3543,8 @@
   inset: 0;
   z-index: 1000;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4126,8 +4126,6 @@
   gap: 8px;
   overflow-x: auto;
   padding: 4px 2px 8px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
 }
 
 .warehouses-scroll-strip::-webkit-scrollbar {
@@ -4705,7 +4703,7 @@
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    min-height: auto !important;
+    min-height: 0 !important;
   }
 
   .app-shell {
@@ -4715,7 +4713,7 @@
     width: 100% !important;
     min-width: 100% !important;
     max-width: 100% !important;
-    min-height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
@@ -5684,6 +5682,7 @@
   font-size: 0.86rem;
   color: var(--ink);
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -5750,6 +5749,7 @@
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -5783,7 +5783,19 @@
   gap: 8px;
   overflow-x: auto;
   padding: 4px 2px;
-  scrollbar-width: thin;
+}
+
+.procurement-subnav-container::-webkit-scrollbar {
+  height: 5px;
+}
+
+.procurement-subnav-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.procurement-subnav-container::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
 }
 
 .procurement-tab-pill {
