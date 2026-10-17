@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 // Helper mirroring constant-time comparison in telegram-bot Edge Function
 function timingSafeEqual(a: string, b: string): boolean {
@@ -287,7 +287,9 @@ describe('Session A: P0-2 System Administrator One-Time Bootstrap Logic', () => 
 describe('Session A: P0-1 Privileged Database Functions Lockdown Verification', () => {
   it('confirms migration file revokes execute from PUBLIC, anon, and authenticated for all privileged functions', async () => {
     // Read migration content to assert explicit revocations exist
+    // @ts-ignore
     const fs = await import('fs')
+    // @ts-ignore
     const path = await import('path')
     const migrationPath = path.resolve('supabase/migrations/20261017130000_lockdown_privileged_functions_and_bootstrap.sql')
     const migrationContent = fs.readFileSync(migrationPath, 'utf8')

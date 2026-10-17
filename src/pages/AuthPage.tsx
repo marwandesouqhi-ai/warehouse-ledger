@@ -14,7 +14,7 @@ import {
 import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
 import { logAuditEvent } from '../lib/auditLogger'
-import { isSupabaseConfigured, toSyntheticEmail, isAuthTransitionalMode } from '../lib/authMode'
+import { isSupabaseConfigured } from '../lib/authMode'
 
 type AuthMode = 'signIn' | 'forgotPassword' | 'setNewPassword'
 
@@ -196,7 +196,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             // If user is required to change password on first login
             const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
             if (userAppMeta.must_change_password === true) {
-                setActiveUserEmail(signInData.user?.email || targetEmail)
+                setActiveUserEmail(signInData.user?.email || cleanUser)
                 setMode('setNewPassword')
                 setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (12 حرفاً على الأقل).')
                 return

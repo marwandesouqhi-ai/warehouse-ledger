@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // Helper mirroring login-bridge identifier categorization and validation
 function categorizeIdentifier(raw: string): { type: 'email' | 'employee_id' | 'username' | 'invalid'; value: string } {

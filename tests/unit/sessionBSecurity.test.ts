@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // Helper mirroring uniform 6-digit OTP generation with rejection sampling
 function generateUniform6DigitOtp(): string {
@@ -60,7 +60,7 @@ describe('Session B: P1-1 Real Email Verification & OTP Security Tests', () => {
   })
 
   it('handles unconfigured email provider safely: sets delivery_failed, does not reveal OTP, and prompts user', () => {
-    const resendApiKey = '' // Unconfigured
+    const resendApiKey: string = '' // Unconfigured
     const hasKey = Boolean(resendApiKey && resendApiKey.startsWith('re_'))
     expect(hasKey).toBe(false)
 
