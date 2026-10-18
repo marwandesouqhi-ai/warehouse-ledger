@@ -365,7 +365,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
     return (
         <main className="auth-shell" dir="rtl">
-            <section className="auth-panel">
+            <section className={`auth-panel ${mode === 'activateAccount' ? 'auth-panel-wide' : ''}`}>
                 <div className="auth-brand">
                     {settings?.logoDataUrl || settings?.logoUrl ? (
                         <img
@@ -383,7 +383,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 </div>
 
                 {!isConfigured && (
-                    <div className="inline-message error" style={{ marginBottom: '16px' }} role="alert">
+                    <div className="inline-message error mb-4" role="alert">
                         <ShieldAlert size={18} />
                         <div>
                             <strong>خدمة المصادقة السحابية غير مهيأة:</strong>
@@ -396,44 +396,42 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                 {mode === 'activateAccount' ? (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+                        <div className="auth-badge-icon">
                             <Sparkles size={20} />
                             <strong>تفعيل حساب موظف جديد</strong>
                         </div>
                         <h1>إنشاء حسابك وتفعيله</h1>
-                        <p>مرحباً بك ضمن فريق العمل! يُرجى اختيار اسم المستخدم وكلمة المرور الخاصة بك لإتمام تفعيل حسابك والبدء في استخدام النظام.</p>
+                        <p>مرحباً بك ضمن فريق العمل! يُرجى مراجعة بياناتك، ثم اختيار اسم المستخدم وكلمة المرور الخاصة بك لإتمام تفعيل حسابك والبدء في استخدام النظام.</p>
 
                         {isLoadingProfile && (
-                            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                            <div className="auth-loading-state">
                                 جارٍ التحقق من بيانات الدعوة والملف الوظيفي...
                             </div>
                         )}
 
                         {profileLoadError && (
-                            <div style={{ marginBottom: '16px' }}>
-                                <div className="inline-message error" role="alert" style={{ lineHeight: 1.6 }}>
-                                    <ShieldAlert size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <div className="mb-4">
+                                <div className="inline-message error" role="alert">
+                                    <ShieldAlert size={20} className="mt-1 shrink-0" />
                                     <div>
                                         <strong>تعذر التحقق من رابط الدعوة:</strong>
-                                        <p style={{ margin: '4px 0 8px 0', fontSize: '0.88rem' }}>{profileLoadError}</p>
-                                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                                        <p className="mt-1 mb-2 font-sm">{profileLoadError}</p>
+                                        <p className="modal-help-text">
                                             إذا كان الرابط منتهياً أو تم استخدامه سابقاً، يُرجى التواصل مع مدير النظام (System Admin) لإعادة إرسال الدعوة إلى بريدك الإلكتروني.
                                         </p>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                <div className="auth-btn-row">
                                     <button
                                         type="button"
-                                        className="primary-btn"
-                                        style={{ flex: 1 }}
+                                        className="primary-btn flex-1"
                                         onClick={() => loadInviteProfile()}
                                     >
                                         إعادة المحاولة
                                     </button>
                                     <button
                                         type="button"
-                                        className="secondary-btn"
-                                        style={{ flex: 1 }}
+                                        className="secondary-btn flex-1"
                                         onClick={() => { setMode('signIn'); setError(''); setNotice('') }}
                                     >
                                         <LogIn size={16} /> شاشة تسجيل الدخول
@@ -444,33 +442,26 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                         {inviteProfile && (
                             <>
-                                <div style={{
-                                    padding: '14px 16px',
-                                    borderRadius: '10px',
-                                    background: 'var(--bg)',
-                                    border: '1px solid var(--line)',
-                                    marginBottom: '16px',
-                                    fontSize: '0.86rem',
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', color: 'var(--accent)', fontWeight: 600 }}>
+                                <div className="auth-step-box">
+                                    <div className="auth-step-box-header">
                                         <UserCheck size={18} />
-                                        <span>البيانات الوظيفية المعتمدة (للقراءة فقط)</span>
+                                        <span>1. بياناتك الوظيفية المعتمدة (للقراءة فقط)</span>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px 14px' }}>
+                                    <div className="auth-step-grid">
                                         <div>
-                                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem', display: 'block' }}>الاسم الكامل:</span>
+                                            <span className="auth-step-label">الاسم الكامل:</span>
                                             <strong>{inviteProfile.fullName}</strong>
                                         </div>
                                         <div>
-                                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem', display: 'block' }}>البريد الإلكتروني:</span>
-                                            <strong style={{ direction: 'ltr', display: 'inline-block' }}>{inviteProfile.email}</strong>
+                                            <span className="auth-step-label">البريد الإلكتروني:</span>
+                                            <strong className="text-ltr auth-account-value">{inviteProfile.email}</strong>
                                         </div>
                                         <div>
-                                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem', display: 'block' }}>الرقم الوظيفي الموحد (Unique ID):</span>
-                                            <strong style={{ color: 'var(--accent)', letterSpacing: '0.5px' }}>{inviteProfile.employeeId}</strong>
+                                            <span className="auth-step-label">الرقم الوظيفي الموحد (Unique ID):</span>
+                                            <strong className="tabular-nums text-accent">{inviteProfile.employeeId}</strong>
                                         </div>
                                         <div>
-                                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem', display: 'block' }}>القسم والدور:</span>
+                                            <span className="auth-step-label">القسم والدور:</span>
                                             <span>
                                                 {inviteProfile.department === 'warehouse' ? 'المخازن' : inviteProfile.department === 'procurement' ? 'المشتريات' : inviteProfile.department}
                                                 {' — '}
@@ -482,7 +473,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                                 <form className="auth-form" onSubmit={handleSubmit}>
                                     <label>
-                                        اسم المستخدم المختار (Username)
+                                        2. اسم المستخدم المختار (Username)
                                         <input
                                             type="text"
                                             dir="ltr"
@@ -497,11 +488,11 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                         </span>
                                         {usernameValidation && (
                                             usernameValidation.valid ? (
-                                                <span style={{ color: 'var(--good, #10b981)', fontSize: '0.78rem', display: 'block', marginTop: '3px' }}>
+                                                <span className="auth-validation-ok">
                                                     ✓ اسم مستخدم متاح ومستوفٍ للشروط
                                                 </span>
                                             ) : (
-                                                <span style={{ color: 'var(--bad, #ef4444)', fontSize: '0.78rem', display: 'block', marginTop: '3px' }}>
+                                                <span className="auth-validation-err">
                                                     ✕ {usernameValidation.error}
                                                 </span>
                                             )
@@ -509,7 +500,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     </label>
 
                                     <label>
-                                        كلمة المرور الجديدة
+                                        3. كلمة المرور الجديدة
                                         <div className="password-input-wrap">
                                             <input
                                                 type={showPassword ? 'text' : 'password'}
@@ -531,7 +522,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             </button>
                                         </div>
                                         {passwordValidation && !passwordValidation.valid && (
-                                            <span style={{ color: 'var(--bad, #ef4444)', fontSize: '0.78rem', display: 'block', marginTop: '3px' }}>
+                                            <span className="auth-validation-err">
                                                 ✕ {passwordValidation.error}
                                             </span>
                                         )}
@@ -560,7 +551,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             </button>
                                         </div>
                                         {confirmPassword && password !== confirmPassword && (
-                                            <span style={{ color: 'var(--bad, #ef4444)', fontSize: '0.78rem', display: 'block', marginTop: '3px' }}>
+                                            <span className="auth-validation-err">
                                                 ✕ كلمتا المرور غير متطابقتين
                                             </span>
                                         )}
@@ -571,9 +562,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                                     <button
                                         type="submit"
-                                        className="primary-btn"
+                                        className="primary-btn mt-2"
                                         disabled={isSubmitting || !isConfigured || Boolean(profileLoadError) || (Boolean(usernameValidation) && !usernameValidation?.valid)}
-                                        style={{ marginTop: '8px' }}
                                     >
                                         <Sparkles size={17} />
                                         {isSubmitting ? 'جارٍ حفظ البيانات وتفعيل الحساب...' : 'تفعيل الحساب والدخول للنظام'}
@@ -584,7 +574,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     </>
                 ) : mode === 'setNewPassword' ? (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+                        <div className="auth-badge-icon">
                             <Sparkles size={20} />
                             <strong>تفعيل الحساب وتعيين كلمة المرور</strong>
                         </div>
@@ -592,21 +582,11 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         <p>يُرجى تعيين كلمة المرور الجديدة لحسابك (12 حرفاً على الأقل) لتتمكن من تسجيل الدخول مستقبلاً.</p>
 
                         {activeUserEmail && (
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                padding: '12px 14px',
-                                borderRadius: '8px',
-                                background: 'var(--bg)',
-                                border: '1px solid var(--accent)',
-                                fontSize: '0.88rem',
-                                margin: '4px 0 10px 0',
-                            }}>
+                            <div className="auth-account-badge">
                                 <ShieldCheck size={22} color="var(--accent)" />
-                                <div style={{ flex: 1 }}>
-                                    <span style={{ color: 'var(--muted)', fontSize: '0.76rem', display: 'block' }}>الحساب المخصص:</span>
-                                    <strong style={{ direction: 'ltr', display: 'inline-block' }}>{activeUserEmail}</strong>
+                                <div className="flex-1">
+                                    <span className="auth-account-label">الحساب المخصص:</span>
+                                    <strong className="auth-account-value">{activeUserEmail}</strong>
                                 </div>
                             </div>
                         )}
@@ -671,7 +651,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     </>
                 ) : mode === 'forgotPassword' ? (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+                        <div className="auth-badge-icon">
                             <KeyRound size={20} />
                             <strong>استعادة كلمة المرور</strong>
                         </div>
@@ -701,8 +681,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                             <button
                                 type="button"
-                                className="secondary-btn"
-                                style={{ width: '100%', marginTop: '6px' }}
+                                className="secondary-btn w-full mt-2"
                                 onClick={() => { setMode('signIn'); setError(''); setNotice('') }}
                             >
                                 <LogIn size={16} /> العودة لشاشة تسجيل الدخول
@@ -759,29 +738,17 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             </button>
                         </form>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '10px' }}>
+                        <div className="auth-forgot-row">
                             <button
                                 type="button"
-                                className="auth-switch"
-                                style={{ color: 'var(--muted)', fontSize: '0.84rem' }}
+                                className="auth-switch auth-forgot-btn"
                                 onClick={() => { setMode('forgotPassword'); setError(''); setNotice('') }}
                             >
                                 نسيت كلمة المرور؟
                             </button>
                         </div>
 
-                        <div style={{
-                            marginTop: '16px',
-                            padding: '10px 14px',
-                            borderRadius: '8px',
-                            background: 'var(--bg)',
-                            border: '1px solid var(--line)',
-                            fontSize: '0.82rem',
-                            color: 'var(--muted)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                        }}>
+                        <div className="auth-security-footer">
                             <ShieldCheck size={16} color="var(--accent)" />
                             <span>نظام المصادقة موحّد ومؤمّن بالكامل عبر جلسات Supabase Auth الموثقة.</span>
                         </div>
