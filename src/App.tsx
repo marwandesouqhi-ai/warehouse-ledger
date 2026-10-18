@@ -78,7 +78,6 @@ import {
 import {
   getLocalSession,
   clearLocalSession,
-  purgeDeletedAccount,
   syncUsersWithCloud,
 } from './lib/localUsers'
 import { usePwaInstall } from './lib/pwa'
@@ -248,12 +247,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(loadDarkMode)
   const [movements, setMovements] = useState<FixtureMovement[]>(loadMovements)
   const [session, setSession] = useState<Session | null>(() => {
-    purgeDeletedAccount('marwandesouqhi@gmail.com')
     const local = getLocalSession()
-    if (local?.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com') {
-      clearLocalSession()
-      return null
-    }
     return local as unknown as Session | null
   })
   const [authLoading, setAuthLoading] = useState(() => !getLocalSession() && Boolean(supabase))
@@ -261,7 +255,13 @@ function App() {
     if (typeof window === 'undefined') return false
     const hash = window.location.hash || ''
     if (hash.includes('error=')) return false
-    return hash.includes('type=invite') || hash.includes('type=recovery')
+    return hash.includes('type=recovery')
+  })
+  const [isInviteFlow, setIsInviteFlow] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const hash = window.location.hash || ''
+    if (hash.includes('error=')) return false
+    return hash.includes('type=invite')
   })
   const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(supabase ? 'loading' : 'local')
   const [syncError, setSyncError] = useState('')
@@ -537,16 +537,9 @@ function App() {
   }, [movements])
 
   useEffect(() => {
-    purgeDeletedAccount('marwandesouqhi@gmail.com')
-
     function handleLocalAuth() {
       const local = getLocalSession()
       if (local) {
-        if (local.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com') {
-          clearLocalSession()
-          setSession(null)
-          return
-        }
         setSession(local as unknown as Session)
         setAuthLoading(false)
       } else if (!supabase) {
@@ -563,20 +556,21 @@ function App() {
 
     let active = true
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (nextSession?.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com') {
-        void supabase?.auth.signOut()
-        purgeDeletedAccount('marwandesouqhi@gmail.com')
-        clearLocalSession()
-        setSession(null)
-        setAuthLoading(false)
-        return
-      }
+
+      const isActivation = window.location.hash.includes('type=invite') ||
+        (nextSession?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
 
       if (event === 'PASSWORD_RECOVERY') {
-        setIsSettingPassword(true)
+        if (isActivation) {
+          setIsInviteFlow(true)
+          setIsSettingPassword(false)
+        } else {
+          setIsSettingPassword(true)
+          setIsInviteFlow(false)
+        }
       }
-      if (window.location.hash.includes('type=invite') && !window.location.hash.includes('error=') && nextSession) {
-        setIsSettingPassword(true)
+      if (window.location.hash.includes('type=invite') && !window.location.hash.includes('error=')) {
+        setIsInviteFlow(true)
       }
       if (event === 'SIGNED_IN' && nextSession?.user) {
         void logAuditEvent({
@@ -598,14 +592,6 @@ function App() {
       if (!active) return
       if (error) setSyncError(error.message)
       if (data.session) {
-        if (data.session.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com') {
-          void supabase?.auth.signOut()
-          purgeDeletedAccount('marwandesouqhi@gmail.com')
-          clearLocalSession()
-          setSession(null)
-          setAuthLoading(false)
-          return
-        }
         setSession(data.session)
       } else {
         const local = getLocalSession()
@@ -964,7 +950,7 @@ function App() {
     }
     if (supabase && session) {
       try {
-        await deleteMovement(movement.id, session.user.id)
+        await deleteMovement(movement.id, session.user.id, movement)
         setMovements((current) => current.filter((m) => m.id !== movement.id))
         setSyncStatus('synced')
       } catch (error) {
@@ -1238,7 +1224,30 @@ function App() {
     return <main className="auth-shell" dir="rtl"><p>جارٍ التحقق من جلسة الدخول...</p></main>
   }
 
-  if (supabase && isSettingPassword && session) {
+  const isPendingActivation = (session?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
+
+  if (supabase && (isInviteFlow || isPendingActivation)) {
+    return (
+      <AuthPage
+        initialMode="activateAccount"
+        settings={settings}
+        onPasswordSet={() => {
+          setIsInviteFlow(false)
+          setIsSettingPassword(false)
+          if (window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+          void supabase?.auth.getSession().then(({ data }) => {
+            if (data?.session) {
+              setSession(data.session)
+            }
+          })
+        }}
+      />
+    )
+  }
+
+  if (supabase && isSettingPassword && !isInviteFlow) {
     return (
       <AuthPage
         initialMode="setNewPassword"
