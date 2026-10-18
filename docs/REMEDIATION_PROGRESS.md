@@ -124,8 +124,73 @@
   - `supabase/functions/telegram-bot/index.ts`
   - `src/pages/UsersPage.tsx`
   - `.env.example`
-- **حالة الاختبارات والأنواع النهائية:**
-  - اختبارات Vitest: 38 ملف اختبار، 342 اختبار ناجح بنسبة 100% (342/342 Passed).
-  - فحص TypeScript: اجتياز كامل عبر `tsc --noEmit` و `tsc -b` (0 Errors).
-  - بناء Vite: نجاح توليد حزمة `dist/` بنجاح (Code 0).
+---
+
+## الجلسة الخامسة (Session E): معالجة العيوب المتبقية والتحصين الشامل (F1–F8)
+- **الحالة:** مكتملة ومختبرة بنجاح بنسبة 100% (Completed & Verified Locally)
+- **العيوب التي تم التحقق منها ومعالجتها:**
+  1. `F1` (الهجرة التدميرية `20261017210000_reset_users_and_pin_admin.sql`):
+     - تأكيد احتواء الملف على أوامر حذف مدمرة لكافة مستخدمي `auth.users` و `public.app_users` وكلمة مرور صريحة لمدير النظام.
+     - رفض الملف نهائياً وحظره من `supabase/migrations/` ونقله إلى `supabase/pending/rejected/20261017210000_reset_users_and_pin_admin.sql.REJECTED` مع استبدال كلمة المرور بـ `<REMOVED>`.
+     - إنشاء وثيقة التوثيق `supabase/pending/rejected/README.md` التي توضح أسباب الرفض الصارمة.
+     - تحديث دليل `scripts/bootstrap-system-admin.md` لتوضيح المسار الآمن المعتمد (التهيئة الأحادية من الجلسة A + بريد استعادة كلمة المرور الرسمي من Supabase).
+     - إجراء مسح شامل لكافة الهجرات والسكربتات والوثائق لأوامر `DELETE FROM` و `TRUNCATE` و `DROP TABLE` و `CASCADE` وتوثيقها.
+  2. `F2` (كلمة مرور مدير النظام الصريحة في `supabase/functions/admin-users/index.ts`):
+     - التحقق من وجود القيمة الصريحة في المتغير `expectedAdminPassword` حول السطر 731 ضمن إجراء `reset_and_seed_system_admin`.
+     - حذف القيمة الصريحة وإلغاء المنطق التدميري بالكامل واستبدال الإجراء برد رفض صريح (`status: 400`) يمنع مساس بيانات المستخدمين ويوجه لاستخدام `bootstrap_system_admin` و `send_password_recovery`.
+     - إنشاء اختبار فحص ثابت `tests/unit/noHardcodedPasswords.test.ts` يتحقق آلياً من خلو كافة دوال Edge Functions من أي تعيين لكلمات مرور صريحة ومنع استدعاءات `createUser` أو `updateUserById` بكلمات مرور مكتوبة في الكود.
+     - تنبيه المالك لتدوير كلمة المرور المكشوفة في الالتزامات السابقة عبر بريد الاستعادة وتغييرها في أي خدمة تم إعادة استخدامها فيها.
+  3. `F3` (خطأ البناء في `src/pages/UsersPage.tsx` وتصحيح أرقام التوثيق):
+     - حل مشكلة الاستيراد غير المستخدم `deleteLocalUser` باستبدالها بـ `deleteUserPermanently` المستخدمة فعلياً في حذف الحسابات المحلية.
+     - حل توافق أنواع Node في اختبارات الفحص الأمني عبر إضافة مرجع الأنواع الصريح.
+     - إعادة قياس كافة الفحوصات وتصحيح الأرقام الرسمية بنجاح 100%.
+  4. `F4` (إزالة `listUsers()` من `supabase/functions/login-bridge/index.ts`):
+     - حذف مسار الالتفاف والبحث الاحتياطي عبر `listUsers({ page: 1, perPage: 10 })` نهائياً.
+     - قصر التحقق من هوية المصادقة حصرياً على `getUserById(appUser.auth_user_id)`.
+     - معالجة أي حساب غير مرتبط بـ `auth_user_id` كفشل دخول عام موحد (`GENERIC_LOGIN_ERROR`) لمنع استنباط الحسابات.
+     - تحديث اختبار `tests/unit/loginBridge.test.ts` ليؤكد خلو الدالة من استدعاء `listUsers` واعتمادها الحصري على `getUserById`.
+  5. `F5` (استعادة ملف `.env.example` وتحديث كافة المتغيرات):
+     - استعادة الملف بدون أوامر git تدميرية عبر `git show HEAD:.env.example`.
+     - مراجعة وتصفير كافة القيم لتبقى نصوص فارغة (`KEY=`) فقط دون أي قيم افتراضية سرية.
+     - تغطية شاملة لكافة المتغيرات المقروءة في الواجهة (`import.meta.env`) وفي دوال Deno (`Deno.env.get`) شاملاً مزودي البريد (Resend و Gmail SMTP) وبوت تيليجرام وسر `OTP_PEPPER`.
+  6. `F6` (مراجعة وتحصين معالج التيليجرام وجلسات المعالج):
+     - تحصين جدول `telegram_user_sessions`: سحب الصلاحيات من `anon` و `authenticated` وقصرها على `service_role` فقط مع تفعيل RLS.
+     - تأكيد خلو جلسات المعالج من أي رموز OTP أو توكنات أو نصوص بريد كاملة.
+     - إضافة آلية تنظيف دورية محددة زمنياً (Age-Bounded Pruning) للجلسات المتخلفة عن 24 ساعة.
+     - إنشاء المقترح لقاعدة البيانات البعيدة `supabase/pending/20261018130000_harden_telegram_user_sessions.sql` وملف التراجع المقابل.
+     - إنشاء حزمة اختبارات شاملة `tests/unit/telegramWizardSecurity.test.ts` (9 اختبارات ناجحة).
+  7. `F7` (ضوضاء نهايات الأسطر CRLF/LF):
+     - تشخيص السبب: تفعيل `core.autocrlf = true` في بيئة Windows مع غياب ملف `.gitattributes` موحد.
+     - تأكيد أن التغييرات الفعلية تقتصر على ملفات الميزات الأمنية فقط عند التجاهل عبر `git diff --ignore-cr-at-eol --stat`.
+     - اقتراح محتوى ملف `.gitattributes` لتوحيد نهايات الأسطر في التقرير النهائي لانتظار موافقة المالك.
+  8. `F8` (التحقق الصارم من سلامة البيانات التشغيلية):
+     - مراجعة كافة الهجرات المضافة في هذا الفرع والتأكد من أنها تراكمية 100% ولا تحذف أي بيانات تشغيلية.
+     - تأكيد بقاء الملف `supabase/pending/20261017153000_enforce_active_status_on_business_tables.sql` مقترحاً فقط في مجلد الانتظار.
+
+---
+
+## جدول سلامة البيانات للهجرات المضافة في الفرع (`fix/registration-security`)
+
+| ملف الهجرة | تراكمي (Additive)؟ | عمليات الحذف / الإسقاط (DELETE / DROP / TRUNCATE) | مساس مخطط المصادقة (`auth`) | الملاحظات والحالة الأمنية |
+| :--- | :---: | :--- | :---: | :--- |
+| `20261017120000_employee_registration_and_identity.sql` | **نعم** | لا يوجد أي حذف نهائياً | **لا** | آمن 100%، يضيف جداول وأعمدة طلبات التسجيل |
+| `20261017130000_lockdown_privileged_functions_and_bootstrap.sql` | **نعم** | `DROP FUNCTION` فقط لإعادة تعريف توقيع الدالة | قراءة فقط (`SELECT` للتحقق من تأكيد البريد) | آمن، يقفل دوال RPC وينشئ دالة التهيئة الأحادية دون مساس بالبيانات |
+| `20261017140000_telegram_bot_hardening_and_email_verification.sql` | **نعم** | `DELETE` محدد زمنياً لجداول تتبع تقنية فقط (أحداث المعدل والتحديثات) | **لا** | آمن ومسموح، تنظيف دوري محدد بـ 7 أيام و 24 ساعة لجداول البوت |
+| `20261017150000_approval_delegation_code_registry_and_rls.sql` | **نعم** | `DROP VIEW` فقط لتحديث العرض الآمن للطلبات | قراءة فقط (`SELECT` للتحقق من هوية المراجع) | آمن، يضيف سجل الأكواد ومصفوفة تفويض الأقسام وسياسات RLS |
+| `20261017160000_telegram_user_sessions.sql` | **نعم** | لا يوجد (إسقاط السياسة السابقة فقط) | **لا** | آمن، جدول مؤقت لجلسات المعالج مع RLS محصور بـ `service_role` |
+| `20261017210000_reset_users_and_pin_admin.sql` | **مرفوض (لا)** | **نعم (DELETE جماعي لـ auth.users و app_users)** | **نعم (كتابة وتعديل مباشر في auth.users)** | **تم رفضه وحظره ونقله إلى `pending/rejected` وتطهير كلمة المرور منه** |
+
+---
+
+## حالة الاختبارات والأنواع النهائية المحدثة والواقعية (Freshly Measured Results)
+- **اختبارات Vitest:** 40 ملف اختبار، 358 اختبار ناجح بنسبة 100% (40 passed, 358 passed, 0 failed).
+- **فحص TypeScript:** اجتياز كامل عبر `tsc -b` و `npm run typecheck` (0 errors).
+- **بناء Vite الإنتاجي:** نجاح كامل عبر `npm run build` (`tsc -b && vite build`) (Code 0).
+- **فحص التنسيق والجودة (Lint):** اجتياز عبر `npm run lint` (`oxlint .`) (0 errors, 42 warnings غير حرجة).
+- **تثبيت الحزم (`npm ci`):** تم تشغيل `npm ci` وأخفق بسبب قفل ملفات النظام في Windows على المجلد `node_modules/react-router-dom/dist` (`EPERM: operation not permitted, rmdir`)؛ تم استكمال التدقيق عبر `npm install` بنجاح (193 حزمة مدققة، 0 تغييرات في `package-lock.json`).
+- **المقترحات المعلّقة في `supabase/pending/`:**
+  - `20261013213000_harden_rls.sql` (مقترح معلق لسياسات RLS).
+  - `20261017153000_enforce_active_status_on_business_tables.sql` (مقترح معلق لحالة المستخدمين النشطين).
+  - `20261018130000_harden_telegram_user_sessions.sql` (مقترح معلق لتحصين جلسات التيليجرام وتنظيفها).
+
 

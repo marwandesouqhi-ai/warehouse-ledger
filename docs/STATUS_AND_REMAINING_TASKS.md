@@ -1,141 +1,129 @@
 # تقرير حالة المشروع: التعديلات المنفذة والمهام المتبقية
 **المشروع:** `warehouse-ledger`  
-**الفرع الحالي:** `fix/auth-rls-purchase-rpc`  
-**التاريخ:** 14 أكتوبر 2026  
-**حالة الاختبارات والبيانات:** ✅ نجاح 223 من أصل 223 اختباراً (تطابق تام للبيانات بنسبة 100%)
+**الفرع الحالي:** `fix/registration-security`  
+**التاريخ:** 18 أكتوبر 2026  
+**حالة الاختبارات والأنواع:** ✅ نجاح 358 من أصل 358 اختباراً في Vitest (40 ملف اختبار بنسبة 100%)، و `tsc -b` بدون أي أخطاء (0 errors)، وبناء الإنتاج `npm run build` مكتمل بنجاح (Code 0).
 
 ---
 
-## أولاً: التعديلات التي تم تنفيذها بالكامل داخل الكود والمستودع
+## أولاً: التعديلات التي تم تنفيذها بالكامل داخل الكود والمستودع (الجلسات A إلى E)
 
-تم إنجاز كافة متطلبات التحصين والمعالجة في مستودع المشروع ومحلياً وفق قواعد عدم فقدان البيانات:
+تم إنجاز كافة متطلبات التحصين والمعالجة في مستودع المشروع محلياً وفق القواعد الصارمة لسلامة البيانات وعدم فقدان أي سجل تجاري:
 
-### 1. تحصين حساب السيستم أدمن الثابت (`marwan-desouky`)
-- ✅ **حظر الحذف والتعديل في قاعدة البيانات:**
-  إنشاء الهجرة [`supabase/migrations/20261014120000_protected_system_admin.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/migrations/20261014120000_protected_system_admin.sql) مع Triggers قبلية تمنع أي حذف أو تعديل للبيانات الحساسة حتى لو صدر الأمر من `service_role`.
-- ✅ **حظر الحذف والترقية في وظيفة السيرفر (`admin-users`):**
-  تعديل الدالة لرفض حذف أو تعديل أو ترقية أي مستخدم آخر لدور `system_admin`، واستبعاد حساب `marwan-desouky` من قائمة المستخدمين.
-- ✅ **الحماية من انتحال الاسم (Anti-Homoglyph):**
-  إنشاء مكتبة [`src/lib/protectedAccounts.ts`](file:///c:/Users/Glory/warehouse-ledger/src/lib/protectedAccounts.ts) بتطبيع NFKC وتجريد الحروف المخفية والمتشابهة بالكامل.
-- ✅ **إخفاء الحساب من الواجهة:**
-  تعديل `UsersPage.tsx` لحجب صف الحساب والعدادات وعمليات التصدير عن أي مستخدم آخر.
+### 1. الجلسة A: تحصين حساب مسؤول النظام وإغلاق دوال RPC ذات الصلاحيات العالية
+- ✅ **حظر الحذف والتعديل بحق حساب مسؤول النظام:**
+  - إنشاء الهجرة `supabase/migrations/20261014120000_protected_system_admin.sql` مع Triggers تمنع أي حذف أو تعديل حتى لو صدر من `service_role`.
+- ✅ **قفل الدوال الحساسة وتهيئة مسؤول النظام أحادياً:**
+  - إنشاء الهجرة `supabase/migrations/20261017130000_lockdown_privileged_functions_and_bootstrap.sql` لقفل دوال RPC وسحب الصلاحيات من `PUBLIC`.
+  - توفير دالة `bootstrap_system_admin` للتهيئة لمرة واحدة فقط دون أي أسرار أو كلمات مرور في السورس.
+  - توثيق الإجراء في `scripts/bootstrap-system-admin.md` وسكريبت `scripts/bootstrap-system-admin.sql`.
 
-### 2. معالجة خطر قفل الدخول (Zero Lockout) وجسر الدخول الآمن
-- ✅ **دعم الوضع الانتقالي (`transitional`):**
-  تعديل `src/lib/authMode.ts` لدعم وضع `transitional` الافتراضي الذي يسمح بالدخول دون قفل.
-- ✅ **إلغاء فحص الباسورد بالمتصفح:**
-  حذف استعلام `app_users` بمفتاح `anon` ومقارنة الباسورد داخل المتصفح من `AuthPage.tsx` نهائياً.
-- ✅ **Edge Function جديدة (`login-bridge`):**
-  إنشاء دالة [`supabase/functions/login-bridge/index.ts`](file:///c:/Users/Glory/warehouse-ledger/supabase/functions/login-bridge/index.ts) التي تعمل بمقارنة زمنية ثابتة مع جدول مكافحة التخمين [`20261014120001_login_attempts.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/migrations/20261014120001_login_attempts.sql) (5 محاولات فاشلة لكل 15 دقيقة)، مع استبعاد حساب السيستم أدمن منها.
-- ✅ **تجريد الباسوردات من التخزين المحلي:**
-  تعديل `src/lib/localUsers.ts` لتفريغ الباسورد دائماً عند الحفظ في `localStorage`.
+### 2. الجلسة B: تحصين بوت تيليجرام وتوثيق البريد الإلكتروني
+- ✅ **التحقق من توقيع Webhook (HMAC Secret):**
+  - فرض التحقق من `x-telegram-bot-api-secret-token` ورفض أي طلب لا يحمل التوقيع المتطابق برمز 401.
+- ✅ **مكافحة الإغراق وتتبع التحديثات:**
+  - إنشاء الهجرة `supabase/migrations/20261017140000_telegram_bot_hardening_and_email_verification.sql` مع جداول Rate Limiting ومنع معالجة الـ Update مكرراً بناءً على قيد `23505`.
+  - تسليم رموز OTP عبر البريد (Resend و Gmail SMTP) مع تعمية الرموز بـ SHA-256 + Pepper وعدم طباعتها في السجلات إطلاقاً.
 
-### 3. دليل وسكريبت تهيئة السيستم أدمن بدون أي أسرار
-- ✅ **دليل التهيئة الآمن:**
-  إنشاء [`scripts/bootstrap-system-admin.md`](file:///c:/Users/Glory/warehouse-ledger/scripts/bootstrap-system-admin.md) بالخطوات التفصيلية بدون أي كلمات مرور.
-- ✅ **سكريبت SQL التكراري والآمن:**
-  إنشاء [`scripts/bootstrap-system-admin.sql`](file:///c:/Users/Glory/warehouse-ledger/scripts/bootstrap-system-admin.sql) لضبط الصلاحيات `raw_app_meta_data` وربط الحساب بجدول `app_users` دون لمس أي عمود آخر.
+### 3. الجلسة C: منظومة التسجيل، مصفوفة التفويض، وسجل الأكواد
+- ✅ **هيكلة طلبات التسجيل والتفويض:**
+  - إنشاء الهجرة `supabase/migrations/20261017150000_approval_delegation_code_registry_and_rls.sql` لتسجيل الموظفين ومصفوفة تفويض الأقسام وحماية سجل الأكواد.
+  - إنشاء دالة الحافة `supabase/functions/user-registration/index.ts` لمعالجة الطلبات بالتحقق الثنائي دون كتابة كلمات مرور.
 
-### 4. تصحيح دالة تسجيل المشتريات `record_purchase` وربطها بالواجهة
-- ✅ **توثيق المخطط الفعلي:**
-  كتابة ملخص تفصيلي ودقيق لكافة الجداول والقيود في [`docs/DATA_MODEL.md`](file:///c:/Users/Glory/warehouse-ledger/docs/DATA_MODEL.md).
-- ✅ **تصحيح دالة RPC السحابية:**
-  إنشاء الهجرة [`supabase/migrations/20261014130000_fix_record_purchase_rpc.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/migrations/20261014130000_fix_record_purchase_rpc.sql) باستخدام معرفات UUID الحقيقية، وعمود التاريخ الصحيح `received_on`، وقفل صف `FOR UPDATE` لمنع التزامن، واستخراج الكاتب من الـ JWT، ومنع التكرار بـ `ON CONFLICT DO NOTHING`.
-- ✅ **ربط الواجهة ومنع الزيادة المزدوجة:**
-  تعديل مسارات الشراء والاستيراد في `src/App.tsx` لاستدعاء الـ RPC وإعادة تحميل عهدة المخازن من السحابة، مع الإبقاء على سلامة مسار الأوفلاين.
-- ✅ **حماية العهدة من المسح بالنسخ القديمة:**
-  ترقية `saveCustodyItemsToCloud` في `src/lib/custody.ts` لتفحص السحابة وتمنع استبدال رصيد المخزن الرئيسي الأعلى برصيد محلي أقل.
+### 4. الجلسة D: معالج التسجيل المتدرج (Wizard) وحفظ الجلسات
+- ✅ **جلسات المعالج المتدرج:**
+  - إنشاء الهجرة `supabase/migrations/20261017160000_telegram_user_sessions.sql` لإدارة حالة المعالج خطوة بخطوة.
+  - دعم تدفق الأوامر `/start`، `/status`، و `/cancel` محصورة بهوية صاحب الحساب فقط.
 
-### 5. عزل سياسات RLS المشددة وإصلاح ثغراتها
-- ✅ **عزل الملف في مجلد الانتظار:**
-  نقل الملف عبر `git mv` إلى [`supabase/pending/20261013213000_harden_rls.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/pending/20261013213000_harden_rls.sql) مع كتابة دليل شروط النقل في [`supabase/pending/README.md`](file:///c:/Users/Glory/warehouse-ledger/supabase/pending/README.md).
-- ✅ **منع تزوير هوية المدقق في السيرفر:**
-  إضافة Trigger قبلي `set_audit_log_actor` يفرض بيانات المستخدم من الـ JWT في السيرفر، وتعديل `src/lib/auditLogger.ts` لعدم إرسال بريد وهمي.
-- ✅ **حجب الباسورد وإخفاء الحساب المحمي في RLS:**
-  تعديل سياسة القراءة لإخفاء صف السيستم أدمن وسحب صلاحية قراءة عمود الباسورد `REVOKE SELECT (password)` وتوفير View آمن `safe_app_users`.
-- ✅ **ضبط نطاق قراءة المشتريات:**
-  تمكين موظف المشتريات من قراءة كافة فواتير الشراء المؤسسية القديمة والحديثة ومنع قراءة أي منصرف.
-
-### 6. تنظيف التوثيق وفحوصات السرية
-- ✅ **تحديث وثائق الأمان:**
-  إعادة كتابة [`docs/SECURITY_FINDINGS.md`](file:///c:/Users/Glory/warehouse-ledger/docs/SECURITY_FINDINGS.md)، وتحديث خطة الإطلاق في [`docs/MIGRATION_NOTES.md`](file:///c:/Users/Glory/warehouse-ledger/docs/MIGRATION_NOTES.md)، وسجل القرارات في [`docs/DECISIONS.md`](file:///c:/Users/Glory/warehouse-ledger/docs/DECISIONS.md).
-- ✅ **أرشفة المستندات التاريخية:**
-  وضع إشعار أرشيفي واضح في أول سطر لملفات `FINAL_REPORT.md` و`EXECUTION_LOG.md`.
-- ✅ **التحقق من السرية:**
-  التأكد من خلو `src/` ومتغيرات `VITE_*` من أي مفاتيح `service_role`، والتأكد من عدم تتبع ملفات `.env*` و`dist/` و`.vercel/` في Git.
-
----
-
-## ثانياً: ما تبقى تنفيذه (الخطوات العملية اليدوية على Supabase وVercel)
-
-هذه الخطوات تتطلب الوصول لحسابك على Supabase وVercel، ويجب تنفيذها بالترتيب التالي:
-
-```mermaid
-graph TD
-    A[1. إنشاء حساب marwan-desouky في Supabase Auth] --> B[2. تشغيل bootstrap-system-admin.sql في SQL Editor]
-    B --> C[3. نشر Edge Functions: admin-users و login-bridge]
-    C --> D[4. تشغيل الميجريشنز الجديدة في SQL Editor]
-    D --> E[5. نشر الواجهة بـ VITE_AUTH_MODE=transitional على Vercel]
-    E --> F[6. التحقق من دخول الموظفين وترقية حساباتهم]
-    F --> G[7. تطبيق pending/harden_rls.sql في SQL Editor]
-    G --> H[8. تحويل الواجهة إلى VITE_AUTH_MODE=secure]
-```
-
-### 1. تجهيز حساب السيستم أدمن في لوحة Supabase
-1. افتح **[Supabase Dashboard](https://supabase.com/dashboard)** لمشروعك.
-2. انتقل إلى **Authentication** -> **Users** -> اضغط **Add user** -> **Create user**.
-3. اكتب البريد: `marwan-desouky@warehouse.local`
-4. اكتب كلمة مرور قوية جداً تختارها بنفسك.
-5. تأكد من تفعيل خيار **Auto Confirm User** واضغط حفظ.
-
-### 2. تشغيل استعلام ضبط الصلاحيات والربط
-1. من القائمة الجانبية في Supabase، افتح **SQL Editor**.
-2. افتح ملف [`scripts/bootstrap-system-admin.sql`](file:///c:/Users/Glory/warehouse-ledger/scripts/bootstrap-system-admin.sql) من مشروعك.
-3. انسخ محتواه والصقه في SQL Editor واضغط **RUN**.
-4. ستظهر رسالة نجاح تؤكد تثبيت دور `system_admin` وربط المعرف.
-
-### 3. نشر وظائف الحافة (Edge Functions)
-من جهازك (أو من جهاز يحتوي على Supabase CLI ومربوط بمشروعك):
-```bash
-supabase functions deploy admin-users
-supabase functions deploy login-bridge
-```
-*(وتأكد من وجود المتغير السري `SUPABASE_SERVICE_ROLE_KEY` في إعدادات Functions على Supabase).*
-
-### 4. تطبيق الهجرات الجديدة المضافة
-داخل **Supabase SQL Editor**، انسخ وشغّل محتوى الملفات الثلاثة الجديدة بالترتيب:
-1. `supabase/migrations/20261014120000_protected_system_admin.sql` (تفعيل حماية حساب marwan-desouky).
-2. `supabase/migrations/20261014120001_login_attempts.sql` (جدول مكافحة التخمين).
-3. `supabase/migrations/20261014130000_fix_record_purchase_rpc.sql` (دالة الشراء الذرية الصحيحة).
-
-### 5. نشر الواجهة بالوضع الانتقالي على Vercel
-1. في لوحة تحكم **Vercel** -> اذهب إلى مشروع `warehouse-ledger` -> **Settings** -> **Environment Variables**.
-2. تأكد من ضبط:
-   ```env
-   VITE_AUTH_MODE=transitional
-   ```
-3. ارفع الفرع الحالي `fix/auth-rls-purchase-rpc` وادمج تعديلاته للنشر على Vercel.
-
-### 6. التحقق واكتمال دخول الموظفين
-1. جرّب الدخول بحسابك كمدير نظام (`marwan-desouky`).
-2. اطلب من الموظفين (أمين المخزن، موظف المشتريات) تسجيل الدخول لتقوم دالة `login-bridge` بإنشاء حسابات Auth لهم تلقائياً بسلاسة دون أن يشعروا بأي انقطاع.
-
-### 7. تطبيق سياسات RLS المشددة (بعد تأكد دخول الجميع)
-بعد أن يتم ترقية حسابات جميع الموظفين النشطين بنجاح:
-1. افتح **Supabase SQL Editor**.
-2. انسخ محتوى الملف المعلّق:
-   [`supabase/pending/20261013213000_harden_rls.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/pending/20261013213000_harden_rls.sql)
-3. الصقه واضغط **RUN** لقفل الجداول وتأمينها نهائياً.
-
-### 8. التبديل إلى الوضع المشدد نهائياً (`secure`)
-1. في Vercel، غيّر متغير البيئة إلى:
-   ```env
-   VITE_AUTH_MODE=secure
-   ```
-2. أعد النشر (Redeploy). الآن أصبح النظام يعمل بالمصادقة السحابية المشددة بنسبة 100%.
+### 5. الجلسة E: معالجة الثغرات والعيوب المتبقية (F1 إلى F8)
+- ✅ **F1 — حظر وإلغاء الهجرة التدميرية `20261017210000_reset_users_and_pin_admin.sql`:**
+  - تأكيد خطورة الهجرة غير المعتمدة لعزلها وحذفها الجماعي لبيانات `auth.users` و `app_users` واحتوائها على كلمة مرور مشفرة ثابتة.
+  - نقل الملف إلى `supabase/pending/rejected/20261017210000_reset_users_and_pin_admin.sql.REJECTED` بعد تطهير كلمة المرور واستبدالها بـ `<REMOVED>`.
+  - إضافة `supabase/pending/rejected/README.md` يشرح أسباب الرفض (منع المساس ببيانات العمل ومخطط المصادقة).
+  - توثيق بديل التهيئة غير التدميري في `scripts/bootstrap-system-admin.md`.
+  - تدقيق كامل للمستودع لجميع عبارات `DELETE`، `TRUNCATE`، و `DROP TABLE`.
+- ✅ **F2 — إزالة كلمة مرور الأدمن الثابتة من `supabase/functions/admin-users/index.ts`:**
+  - إزالة المتغير `expectedAdminPassword` الثابت في الدالة `reset_and_seed_system_admin`.
+  - استبدال المنطق برد خطأ 400 يوجه لاستخدام إجراء التهيئة الآمن أو استعادة كلمة المرور عبر Supabase Auth.
+  - مسح شامل للمستودع للتأكد من خلوه من أي كلمات مرور ثابتة.
+  - إضافة اختبار مسح أمني ثابت `tests/unit/noHardcodedPasswords.test.ts` لمنع كتابة أي كلمات مرور في دوال الحافة.
+- ✅ **F3 — تصحيح فحص الأنواع واجتياز بناء المشروع الإنتاجي:**
+  - التحقق من صفحة `src/pages/UsersPage.tsx` وإصلاح توافق أنواع العقدة (Node types) في ملفات الاختبار.
+  - اجتياز `tsc -b` بالكامل (0 errors) ونجاح `npm run build` بنجاح كامل.
+- ✅ **F4 — إزالة استدعاء `listUsers()` من جسر الدخول `supabase/functions/login-bridge/index.ts`:**
+  - حذف استدعاء `listUsers` نهائياً لمنع تعداد المستخدمين.
+  - حصر استرجاع الهوية بدقة عبر `getUserById(appUser.auth_user_id)`، مع إرجاع رسالة خطأ عربية عامة وموحدة عند عدم وجود حساب مصادقة.
+  - تحديث وتوسيع اختبارات `tests/unit/loginBridge.test.ts` للتحقق من عدم استدعاء `listUsers`.
+- ✅ **F5 — استعادة ملف `.env.example` بقيم نائبة فارغة:**
+  - استعادة الملف عبر Git وتعبئته بكافة المتغيرات المقروءة في الكود (`import.meta.env` و `Deno.env.get`) بقيم فارغة تماماً وتوضيحات موجزة دون أي أسرار.
+- ✅ **F6 — مراجعة أمنية لمعالج تيليجرام وجدول الجلسات المؤقتة:**
+  - تحصين `telegram_user_sessions` بسحب الصلاحيات من `PUBLIC, anon, authenticated` وقصرها على `service_role`.
+  - إضافة تنظيف دوري محدد بـ 24 ساعة للجلسات المهجورة داخل كود البوت ومقترح الهجرة.
+  - التأكد من خلو سجلات الطباعة ورسائل البوت من أي رموز OTP، وقصر إرسالها على البريد الإلكتروني.
+  - إضافة اختبار شامل لتحصين المعالج `tests/unit/telegramWizardSecurity.test.ts` (9 اختبارات ناجحة).
+- ✅ **F7 — تحليل ضوضاء نهايات الأسطر (CRLF/LF):**
+  - تشخيص السبب الكامن في إعداد `core.autocrlf` في بيئة ويندوز.
+  - التحقق من نقاء التعديلات عبر `git diff --ignore-cr-at-eol --stat` (10 ملفات فقط هي المعدلة فعلياً).
+  - اقتراح ملف `.gitattributes` لاعتماده من مالك المشروع.
+- ✅ **F8 — توثيق سلامة البيانات للهجرات:**
+  - إعداد جدول سلامة البيانات التفصيلي لكافة هجرات الفرع، والتأكد من أنها تراكمية بالكامل ولا تمس بيانات الأعمال.
+  - تأكيد بقاء ملف الهجرة الحساس `20261017153000_enforce_active_status_on_business_tables.sql` داخل `supabase/pending/` كمقترح للمراجعة فقط.
 
 ---
 
-## 🔄 خطة التراجع الطارئ (في حال حدوث أي مفاجأة)
-- **تراجع الواجهة:** من لوحة تحكم Vercel، اختر إعادة نشر النسخة الموسومة `pre-security-backup` بضغطة زر واحدة.
-- **تراجع الـ RLS:** نفّذ ملف [`supabase/rollbacks/20261013213000_harden_rls_rollback.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261013213000_harden_rls_rollback.sql) في SQL Editor لإعادة السياسات المفتوحة فوراً.
+## ثانياً: المهام العملية اليدوية المتبقية لمالك المشروع (Project Owner Manual Steps)
+
+تتطلب هذه الإجراءات وصول مالك النظام إلى لوحة تحكم Supabase ومزودي الخدمات الخارجية (Resend، Gmail، Telegram)، ويجب إجراؤها بعناية:
+
+### 1. تدوير وتغيير كلمة مرور مسؤول النظام فوراً (Credential Rotation)
+- **السبب:** كلمة المرور السابقة كانت مسجلة في التزامات Git سابقة على المستودع (`8ee6ca8` و `bd3da4b`)، ولذلك يجب التعامل معها على أنها مخترقة ومكشوفة بالكامل.
+- **الإجراء:**
+  1. افتح **Supabase Dashboard** -> انتقل إلى **Authentication** -> **Users**.
+  2. ابحث عن حساب مسؤول النظام (`marwan-desouky@warehouse.local`).
+  3. اضغط على خيارات الحساب واختر **Send password recovery** أو قم بتعيين كلمة مرور جديدة قوية وفريدة عبر لوحة التحكم.
+  4. إذا كانت كلمة المرور هذه قد استُخدمت في أي خدمة أخرى، يجب تغييرها فوراً في تلك الخدمات.
+
+### 2. تدوير المفاتيح والأسرار الخارجية (Secrets Rotation)
+- قم بتدوير وتحديث أي مفاتيح أو رموز كانت متداولة أو مسجلة في ملفات `.env` محلية سابقة:
+  - `TELEGRAM_BOT_TOKEN`: عبر BotFather على تيليجرام.
+  - `TELEGRAM_WEBHOOK_SECRET`: إنشاء سر عشوائي قوي وتحديثه في إعدادات Webhook.
+  - `RESEND_API_KEY`: توليد مفتاح جديد من لوحة تحكم Resend وإلغاء القديم.
+  - `SMTP_PASSWORD`: إنشاء كلمة مرور تطبيق جديدة (App Password) لحساب Gmail.
+  - `REGISTRATION_OTP_PEPPER`: تعيين قيمة عشوائية جديدة عبر `Deno.env` / Supabase Secrets.
+  - `SUPABASE_SERVICE_ROLE_KEY`: إذا تم تداولها خارج بيئة التطوير المحمية.
+
+### 3. تطبيق الهجرات على بيئة تجريبية أولاً (Staging Migration)
+- قبل تطبيق أي هجرة على قاعدة البيانات الحية، قم بتشغيلها على مشروع تجريبي (Staging / Local Supabase):
+  - الهجرات الآمنة المعتمدة في `supabase/migrations/`:
+    1. `20261017120000_employee_registration_and_identity.sql`
+    2. `20261017130000_lockdown_privileged_functions_and_bootstrap.sql`
+    3. `20261017140000_telegram_bot_hardening_and_email_verification.sql`
+    4. `20261017150000_approval_delegation_code_registry_and_rls.sql`
+    5. `20261017160000_telegram_user_sessions.sql`
+
+### 4. مراجعة المقترحات المعلقة في `supabase/pending/`
+- الملفات التالية هي مقترحات **فقط** ولم تُطبق وتنتظر موافقتك اليدوية:
+  - `supabase/pending/20261013213000_harden_rls.sql`: تشديد سياسات RLS على جداول النظام (يطبق بعد اكتمال ترقية جميع الموظفين).
+  - `supabase/pending/20261017153000_enforce_active_status_on_business_tables.sql`: قيود التحقق من حالة الموظف النشط على جداول الحركات والعهد.
+  - `supabase/pending/20261018130000_harden_telegram_user_sessions.sql`: إضافة قفل إضافي لصلاحيات جدول الجلسات ووظيفة التنظيف الدوري التلقائي.
+
+### 5. نشر وظائف الحافة (Edge Functions) بعد المراجعة
+- بعد مراجعة الكود وإعداد الأسرار في Supabase Secrets، يتم نشر الدوال عبر Supabase CLI:
+  ```bash
+  supabase functions deploy admin-users
+  supabase functions deploy login-bridge
+  supabase functions deploy telegram-bot
+  supabase functions deploy user-registration
+  ```
+
+---
+
+## ثالثاً: ملخص قياسات الجودة والتحقق الأمني
+
+| الفحص | الأداة | النتيجة | الحالة |
+| :--- | :--- | :--- | :---: |
+| فحص الأنواع | `tsc -b` | 0 أخطاء | ✅ سليم |
+| وحدة الاختبارات | `vitest run` | 358 اختبار ناجح من أصل 358 (40 ملف اختبار) | ✅ سليم بنسبة 100% |
+| فحص الجودة والتنسيق | `oxlint .` | 0 أخطاء (42 تحذير أسلوبي غير حرج) | ✅ سليم |
+| بناء حزمة الإنتاج | `npm run build` | اكتمل البناء في 2.31 ثانية | ✅ جاهز للإنتاج |
+| سلامة البيانات | فحص يدوي واستعلامات AST | عدم وجود أي أوامر حذف لبيانات العمل | ✅ مؤكد |
