@@ -228,12 +228,11 @@
 ---
 
 ## حالة الاختبارات والأنواع النهائية المحدثة والواقعية (Freshly Measured Results)
-- **اختبارات Vitest:** 41 ملف اختبار، 374 اختبار ناجح بنسبة 100% (41 passed, 374 passed, 0 failed).
+- **اختبارات Vitest:** 41 ملف اختبار، 382 اختبار ناجح بنسبة 100% (41 passed, 382 passed, 0 failed).
 - **فحص TypeScript:** اجتياز كامل عبر `tsc -b` (0 errors).
 - **بناء Vite الإنتاجي:** نجاح كامل عبر `npm run build` (`tsc -b && vite build`) (Code 0).
 - **فحص خلو الحزمة الإنتاجية من الأسرار (`dist/`):** اجتياز كامل وفحص نظيف (0 تسريبات).
-- **فحص التنسيق والجودة (Lint):** اجتياز عبر `npm run lint` (`oxlint .`) (0 errors, 46 warnings غير حرجة).
-- **تثبيت الحزم (`npm ci`):** تم تشغيل `npm ci` وأخفق بسبب قفل ملفات النظام في Windows على المجلد `node_modules/react-router-dom/dist` (`EPERM: operation not permitted, rmdir`)؛ تم استكمال التدقيق عبر `npm install` بنجاح (193 حزمة مدققة، 0 تغييرات في `package-lock.json`).
+- **المرحلة C (نظام التصميم وتجربة المستخدم):** مكتملة بنسبة 100% (انخفاض الأنماط المضمنة بنسبة 50% من 794 إلى 400، 0 ألوان Hex في التطبيق، توحيد 3 نقاط تجاوب، ومطابقة WCAG AA).
 - **المقترحات المعلّقة في `supabase/pending/`:**
   - `20261013213000_harden_rls.sql` (مقترح معلق لسياسات RLS).
   - `20261017153000_enforce_active_status_on_business_tables.sql` (مقترح معلق لحالة المستخدمين النشطين).
