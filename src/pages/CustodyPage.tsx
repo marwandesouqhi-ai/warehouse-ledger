@@ -2634,24 +2634,11 @@ function ImportCustodyModal({
           </button>
         </div>
 
-        <div className="modal-body-scroll" style={{ padding: '20px 24px' }}>
+        <div className="modal-body-scroll modal-body-padded">
           {/* 1. Template Download & Instructions Strip */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              padding: '12px 16px',
-              background: 'var(--bg)',
-              borderRadius: '10px',
-              border: '1px solid var(--line)',
-              marginBottom: '16px',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ fontSize: '0.86rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <div className="modal-banner-strip">
+            <div className="modal-banner-text">
+              <Sparkles size={16} className="text-accent shrink-0" />
               <span>
                 يدعم رفع الشيت مباشرة بكافة بياناته الـ 13 (الكود، اسم الصنف، التصنيف، أمين العهدة، الكمية، الوحدة، سعر الوحدة، النوع، الحالة، المكان، تاريخ القيد، السيريال، والملاحظات).
               </span>
@@ -2669,20 +2656,13 @@ function ImportCustodyModal({
           </div>
 
           {/* 2. Destination Warehouse & Import Mode */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+          <div className="form-grid-2col mb-3">
+            <label className="form-label-block">
               المخزن المراد إضافة العهدة إليه:
               <select
                 value={targetWarehouseId}
                 onChange={(e) => handleWarehouseChange(e.target.value)}
-                style={{
-                  padding: '9px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--surface)',
-                  color: 'var(--ink)',
-                  fontSize: '0.9rem',
-                }}
+                className="form-input-themed"
               >
                 {WAREHOUSES.map((wh) => (
                   <option key={wh.id} value={wh.id}>
@@ -2692,24 +2672,13 @@ function ImportCustodyModal({
               </select>
             </label>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>طريقة الاستيراد والتحديث:</span>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(8, 127, 104, 0.25)',
-                  background: 'rgba(8, 127, 104, 0.05)',
-                  minHeight: '44px',
-                }}
-              >
-                <CheckCircle2 size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <div className="form-label-block">
+              <span>طريقة الاستيراد والتحديث:</span>
+              <div className="import-mode-pill">
+                <CheckCircle2 size={18} className="text-accent shrink-0" />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--accent)' }}>دمج وتحديث آمن (تلقائي)</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                  <div className="text-accent font-bold font-sm">دمج وتحديث آمن (تلقائي)</div>
+                  <div className="text-muted font-xs">
                     إضافة أصناف جديدة وتحديث المطابق بالكود دون مسح أو فقد أي بيانات قديمة.
                   </div>
                 </div>
@@ -2791,14 +2760,14 @@ function ImportCustodyModal({
           )}
 
           {warnings.length > 0 && (
-            <div className="inline-message info" style={{ marginTop: '14px' }}>
+            <div className="inline-message info mt-3">
               <AlertTriangle size={16} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div className="flex flex-col gap-1">
                 {warnings.slice(0, 3).map((w, idx) => (
                   <span key={idx}>{w}</span>
                 ))}
                 {warnings.length > 3 && (
-                  <span style={{ fontSize: '0.76rem' }}>...و {warnings.length - 3} تنبيهات أخرى تم التعامل معها وتنسيقها تلقائياً.</span>
+                  <span className="font-xs">...و {warnings.length - 3} تنبيهات أخرى تم التعامل معها وتنسيقها تلقائياً.</span>
                 )}
               </div>
             </div>
@@ -2810,23 +2779,23 @@ function ImportCustodyModal({
               <div className="custody-import-meta-bar">
                 <div className="custody-import-meta-card">
                   <span className="custody-import-meta-label">عدد الأصناف المقروءة</span>
-                  <span className="custody-import-meta-val" style={{ color: 'var(--accent)' }}>
+                  <span className="custody-import-meta-val text-accent">
                     {parsedRows.length} صنف
                   </span>
                 </div>
                 <div className="custody-import-meta-card">
                   <span className="custody-import-meta-label">إجمالي الوحدات والأجهزة</span>
-                  <span className="custody-import-meta-val">{totalQuantity}</span>
+                  <span className="custody-import-meta-val tabular-nums">{totalQuantity}</span>
                 </div>
                 <div className="custody-import-meta-card">
                   <span className="custody-import-meta-label">إجمالي القيمة التقديرية</span>
-                  <span className="custody-import-meta-val" style={{ color: '#0e7c86' }}>
+                  <span className="custody-import-meta-val text-accent">
                     {formatCurrency(totalEstimatedValue, currency)}
                   </span>
                 </div>
                 <div className="custody-import-meta-card">
                   <span className="custody-import-meta-label">المخزن المستهدف</span>
-                  <span className="custody-import-meta-val" style={{ fontSize: '1rem' }}>
+                  <span className="custody-import-meta-val text-base">
                     {targetWh.name}
                   </span>
                 </div>
@@ -2842,16 +2811,10 @@ function ImportCustodyModal({
                 </div>
                 <button
                   type="button"
-                  className="primary-btn"
+                  className="primary-btn px-6 py-2"
                   onClick={handleSubmit}
                   disabled={parsedRows.length === 0 || isParsing}
                   id="btn-confirm-custody-import-top"
-                  style={{
-                    padding: '10px 24px',
-                    fontSize: '0.94rem',
-                    fontWeight: 700,
-                    boxShadow: '0 4px 14px rgba(8, 127, 104, 0.28)',
-                  }}
                 >
                   <CheckCircle2 size={18} />
                   <span>اعتماد وحفظ الاستيراد في النظام الآن ({parsedRows.length} صنف)</span>
@@ -2859,17 +2822,17 @@ function ImportCustodyModal({
               </div>
 
               {/* 6. Live Preview Table */}
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--ink)' }}>
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-sm font-semibold text-ink">
                     معاينة البيانات المستخرجة (أول {Math.min(10, parsedRows.length)} أصناف):
                   </span>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--accent)', fontWeight: 600 }}>
+                  <span className="font-xs text-accent font-semibold">
                     💡 إجمالي القيمة محسوب تلقائياً في النظام (الكمية × سعر القطعة) دون الحاجة لإدخال الإجمالي بالشيت.
                   </span>
                 </div>
 
-                <div className="custody-import-preview-wrapper">
+                <div className="custody-import-preview-wrapper table-responsive">
                   <table className="custody-import-preview-table">
                     <thead>
                       <tr>
@@ -2895,13 +2858,13 @@ function ImportCustodyModal({
                         <tr key={row.id || idx}>
                           <td>{idx + 1}</td>
                           <td><code>{row.code}</code></td>
-                          <td style={{ fontWeight: 600 }}>{row.name}</td>
+                          <td className="font-semibold">{row.name}</td>
                           <td>{row.category}</td>
                           <td>{row.custodian || '—'}</td>
-                          <td style={{ fontWeight: 700 }}>{row.quantity}</td>
+                          <td className="font-bold tabular-nums">{row.quantity}</td>
                           <td>{row.unit}</td>
                           <td>{row.unitPrice ? formatCurrency(row.unitPrice, currency) : '—'}</td>
-                          <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{formatCurrency(row.value, currency)}</td>
+                          <td className="text-accent font-bold tabular-nums">{formatCurrency(row.value, currency)}</td>
                           <td>{row.custodyType}</td>
                           <td>
                             {row.condition === 'excellent' && 'ممتازة'}
@@ -2912,7 +2875,7 @@ function ImportCustodyModal({
                           <td>{row.roomLocation || '—'}</td>
                           <td>{row.acquisitionDate || '—'}</td>
                           <td>{row.serialNumber || '—'}</td>
-                          <td style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.notes || '—'}</td>
+                          <td className="truncate-cell">{row.notes || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2920,7 +2883,7 @@ function ImportCustodyModal({
                 </div>
 
                 {parsedRows.length > 10 && (
-                  <div style={{ textAlign: 'center', padding: '8px', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  <div className="text-center p-2 font-xs text-muted">
                     يتم عرض أول 10 أصناف فقط في المعاينة من إجمالي {parsedRows.length} صنف.
                   </div>
                 )}
@@ -2931,21 +2894,15 @@ function ImportCustodyModal({
 
         {/* Modal Footer Actions */}
         <div className="modal-footer">
-          <button type="button" className="secondary-btn" onClick={onClose} style={{ padding: '9px 18px' }}>
+          <button type="button" className="secondary-btn" onClick={onClose}>
             إلغاء
           </button>
           <button
             type="button"
-            className="primary-btn"
+            className="primary-btn px-6 py-2"
             onClick={handleSubmit}
             disabled={parsedRows.length === 0 || isParsing}
             id="btn-confirm-custody-import"
-            style={{
-              padding: '10px 24px',
-              fontSize: '0.94rem',
-              fontWeight: 700,
-              boxShadow: '0 4px 14px rgba(8, 127, 104, 0.28)',
-            }}
           >
             <CheckCircle2 size={18} />
             <span>
@@ -3102,21 +3059,21 @@ function NewDisbursementModal({
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body-scroll" style={{ padding: '20px 24px', display: 'grid', gap: '16px' }}>
+          <div className="modal-body-scroll modal-body-padded">
             {errorMsg && (
-              <div className="inline-message error" role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertTriangle size={18} />
+              <div className="inline-message error" role="alert">
+                <AlertTriangle size={18} className="shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+            <div className="form-grid-2col">
+              <label className="form-label-block">
                 المخزن المصدر:
                 <select
                   value={sourceWarehouseId}
                   onChange={(e) => setSourceWarehouseId(e.target.value)}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 >
                   {WAREHOUSES.map((w) => (
                     <option key={w.id} value={w.id}>
@@ -3126,13 +3083,13 @@ function NewDisbursementModal({
                 </select>
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 الصنف المراد صرفه:
                 {sourceItems.length > 0 ? (
                   <select
                     value={selectedItemName}
                     onChange={(e) => setSelectedItemName(e.target.value)}
-                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    className="form-input-themed"
                   >
                     {sourceItems.map((it) => (
                       <option key={it.id} value={it.name}>
@@ -3146,23 +3103,23 @@ function NewDisbursementModal({
                     value={selectedItemName}
                     onChange={(e) => setSelectedItemName(e.target.value)}
                     placeholder="اسم الصنف المراد صرفه..."
-                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    className="form-input-themed"
                   />
                 )}
               </label>
             </div>
 
             {currentItem && (
-              <div style={{ background: 'rgba(14, 124, 134, 0.08)', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.86rem' }}>
-                <span style={{ color: 'var(--ink)' }}>الرصيد المتوفر في {sourceWh.shortName}: <strong>{availableQty} {currentItem.unit}</strong></span>
-                <span style={{ color: 'var(--muted)' }}>سعر الوحدة المقدر: {formatCurrency(currentItem.unitPrice || 0, currency)}</span>
+              <div className="custody-balance-badge">
+                <span>الرصيد المتوفر في {sourceWh.shortName}: <strong>{availableQty} {currentItem.unit}</strong></span>
+                <span className="text-muted">سعر الوحدة المقدر: {formatCurrency(currentItem.unitPrice || 0, currency)}</span>
               </div>
             )}
 
-            <div style={{ display: 'grid', gap: '8px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>نوع الوجهة المستلمة:</span>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.88rem' }}>
+            <div className="form-label-block">
+              <span>نوع الوجهة المستلمة:</span>
+              <div className="radio-group-row">
+                <label className="radio-label-inline">
                   <input
                     type="radio"
                     name="destType"
@@ -3171,7 +3128,7 @@ function NewDisbursementModal({
                   />
                   <span>مخزن فرعي / كلية</span>
                 </label>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <label className="radio-label-inline">
                   <input
                     type="radio"
                     name="destType"
@@ -3184,12 +3141,12 @@ function NewDisbursementModal({
             </div>
 
             {destType === 'warehouse' ? (
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 المخزن المستلم (الكلية):
                 <select
                   value={destWarehouseId}
                   onChange={(e) => setDestWarehouseId(e.target.value)}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 >
                   {WAREHOUSES.filter((w) => w.id !== sourceWarehouseId).map((w) => (
                     <option key={w.id} value={w.id}>{w.name}</option>
@@ -3197,21 +3154,21 @@ function NewDisbursementModal({
                 </select>
               </label>
             ) : (
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 اسم أمين العهدة / الموظف المستلم:
                 <input
                   type="text"
                   value={custodianName}
                   onChange={(e) => setCustodianName(e.target.value)}
                   placeholder="مثال: د. أحمد مصطفى / معمل الحاسب..."
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                   required
                 />
               </label>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+            <div className="form-grid-3col">
+              <label className="form-label-block">
                 الكمية المنصرفة:
                 <input
                   type="number"
@@ -3219,12 +3176,12 @@ function NewDisbursementModal({
                   max={availableQty > 0 ? availableQty : undefined}
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                   required
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 سعر الوحدة ({currency}):
                 <input
                   type="number"
@@ -3232,52 +3189,52 @@ function NewDisbursementModal({
                   step="0.01"
                   value={unitPrice}
                   onChange={(e) => setUnitPrice(Number(e.target.value))}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 تاريخ الصرف:
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                   required
                 />
               </label>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+            <div className="form-grid-2col">
+              <label className="form-label-block">
                 رقم إذن الصرف / المستند:
                 <input
                   type="text"
                   value={permitNo}
                   onChange={(e) => setPermitNo(e.target.value)}
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+              <label className="form-label-block">
                 الغرض / ملاحظات الصرف:
                 <input
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="مثال: تجهيز معمل الذكاء الاصطناعي للعام الجديد..."
-                  style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
             </div>
 
-            <div style={{ background: 'var(--bg)', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 600 }}>
+            <div className="modal-summary-box">
               <span>إجمالي قيمة إذن الصرف:</span>
-              <span style={{ color: 'var(--accent)', fontSize: '1.05rem' }}>{formatCurrency(quantity * unitPrice, currency)}</span>
+              <span className="text-accent text-base font-bold">{formatCurrency(quantity * unitPrice, currency)}</span>
             </div>
           </div>
 
-          <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '16px 24px', borderTop: '1px solid var(--line)' }}>
+          <div className="modal-footer">
             <button type="button" className="secondary-btn" onClick={onClose} disabled={isSubmitting}>
               إلغاء
             </button>

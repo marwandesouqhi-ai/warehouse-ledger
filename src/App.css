@@ -6488,9 +6488,99 @@
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-sm);
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--ink);
+  font-size: var(--text-sm);
 }
+
+.modal-body-padded {
+  padding: var(--sp-4) var(--sp-5);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.modal-banner-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.modal-banner-text {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+
+.form-grid-3col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.custody-balance-badge {
+  background: rgba(14, 124, 134, 0.08);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+}
+
+.modal-summary-box {
+  background: var(--bg);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.radio-group-row {
+  display: flex;
+  gap: var(--sp-4);
+}
+
+.radio-label-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.import-mode-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(8, 127, 104, 0.25);
+  background: rgba(8, 127, 104, 0.05);
+  min-height: 44px;
+}
+
+.col-w-8 { width: 8%; }
+.col-w-10 { width: 10%; }
+.col-w-13 { width: 13%; }
+.col-w-16 { width: 16%; }
 
 .users-tag-pill-danger {
   background: var(--bad) !important;
