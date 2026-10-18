@@ -314,57 +314,57 @@ export default function PurchasesPage({
       <ProcurementSubNav activeTab="invoices" />
 
       {/* KPI Cards */}
-      <div className="purchases-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginTop: '14px', marginBottom: '20px' }}>
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(14, 124, 134, 0.07)', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent)' }}>
+      <div className="purchases-kpis">
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-accent">
             <Receipt size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>إجمالي الفواتير</span>
+            <span className="purchases-kpi-label">إجمالي الفواتير</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {summary.count.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>حركة توريد مسجلة</span>
+          <span className="purchases-kpi-sub">حركة توريد مسجلة</span>
         </div>
 
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.07)', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#059669' }}>
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-ok">
             <Package size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>إجمالي الكميات الموردة</span>
+            <span className="purchases-kpi-label">إجمالي الكميات الموردة</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {summary.totalQty.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>قطعة / وحدة موردة</span>
+          <span className="purchases-kpi-sub">قطعة / وحدة موردة</span>
         </div>
 
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.07)', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#2563eb' }}>
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-info">
             <CircleDollarSign size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>إجمالي قيمة المشتريات</span>
+            <span className="purchases-kpi-label">إجمالي قيمة المشتريات</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {formatCurrency(summary.totalValue, currency)}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>القيمة الإجمالية للتوريدات</span>
+          <span className="purchases-kpi-sub">القيمة الإجمالية للتوريدات</span>
         </div>
 
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.07)', border: '1px solid rgba(139, 92, 246, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#7c3aed' }}>
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-accent">
             <Building2 size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>الموردون والشركات</span>
+            <span className="purchases-kpi-label">الموردون والشركات</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {summary.supplierCount.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>جهة توريد معتمدة</span>
+          <span className="purchases-kpi-sub">جهة توريد معتمدة</span>
         </div>
       </div>
 
 
 
       {activeTab === 'add' ? (
-        <div className="movements-add-section" style={{ marginTop: '16px' }}>
-          <div className="section-head movement-heading" style={{ marginBottom: '16px' }}>
+        <div className="movements-add-section mt-4">
+          <div className="section-head movement-heading mb-4">
             <div>
               <h2><PackagePlus size={19} /> تسجيل فاتورة شراء جديدة</h2>
               <span>تسجيل التوريد المباشر إلى المخزن الرئيسي وتحديث رصيد العهدة آلياً</span>
@@ -380,17 +380,17 @@ export default function PurchasesPage({
             </div>
           </div>
 
-          <form className="movement-form card-surface" onSubmit={handleAddPurchaseSubmit} style={{ padding: '24px', borderRadius: '12px' }}>
-            <div className="movement-type-banner inward" style={{ marginBottom: '18px' }}>
+          <form className="movement-form card-surface" onSubmit={handleAddPurchaseSubmit}>
+            <div className="movement-type-banner inward mb-4">
               <div className="banner-icon"><PackagePlus size={18} /></div>
               <div>
                 <strong>توريد مشتريات إلى المخزن الرئيسي:</strong> يتم تسجيل فاتورة التوريد وإضافة الكمية فورياً إلى عهدة «المخزن الرئيسي».
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: 'span 2' }}>
-                اسم الصنف / الجهاز / الأصل <span style={{ color: 'var(--accent)' }}>*</span>
+            <div className="form-grid-2col">
+              <label className="form-label-block">
+                اسم الصنف / الجهاز / الأصل <span className="text-accent">*</span>
                 <input
                   type="text"
                   value={formItem}
@@ -398,42 +398,42 @@ export default function PurchasesPage({
                   placeholder="مثال: جهاز حاسب آلي مكتبي Core i7، شاشات عرض ذكية"
                   required
                   autoFocus
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
-                تاريخ التوريد <span style={{ color: 'var(--accent)' }}>*</span>
+              <label className="form-label-block">
+                تاريخ التوريد <span className="text-accent">*</span>
                 <input
                   type="date"
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
                   required
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
+              <label className="form-label-block">
                 رقم فاتورة الشراء / أمر التوريد
                 <input
                   type="text"
                   value={formInv}
                   onChange={(e) => setFormInv(e.target.value)}
                   placeholder="مثال: INV-2026-081"
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
+              <label className="form-label-block">
                 المورد / الشركة الموردة
-                <div style={{ position: 'relative' }}>
+                <div className="relative">
                   <input
                     type="text"
                     list="registered-suppliers-list"
                     value={formFrom}
                     onChange={(e) => setFormFrom(e.target.value)}
                     placeholder="اختر مورداً مسجلاً أو اكتب اسماً جديداً..."
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                    className="form-input-themed w-full"
                   />
                   <datalist id="registered-suppliers-list">
                     {suppliersList.map((s) => (
@@ -444,14 +444,14 @@ export default function PurchasesPage({
                   </datalist>
                 </div>
                 {selectedSupplierObj?.status === 'suspended' && (
-                  <span style={{ fontSize: '0.78rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className="font-xs text-bad flex items-center gap-1">
                     ⚠️ تنبيه: هذا المورد موقوف حالياً في سجل الموردين. يمكنك المتابعة إذا كانت الفاتورة تاريخية.
                   </span>
                 )}
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
-                الكمية الموردة (الوحدات) <span style={{ color: 'var(--accent)' }}>*</span>
+              <label className="form-label-block">
+                الكمية الموردة (الوحدات) <span className="text-accent">*</span>
                 <input
                   type="number"
                   min="0.001"
@@ -460,12 +460,12 @@ export default function PurchasesPage({
                   onChange={(e) => setFormQin(e.target.value)}
                   placeholder="مثال: 50"
                   required
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem' }}>
-                سعر الوحدة <span style={{ color: 'var(--accent)' }}>*</span>
+              <label className="form-label-block">
+                سعر الوحدة <span className="text-accent">*</span>
                 <input
                   type="number"
                   min="0"
@@ -474,41 +474,40 @@ export default function PurchasesPage({
                   onChange={(e) => setFormPrice(e.target.value)}
                   placeholder="سعر القطعة الواحدة"
                   required
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                  className="form-input-themed"
                 />
               </label>
 
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'rgba(14, 124, 134, 0.05)', padding: '10px 14px', borderRadius: '8px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>إجمالي قيمة الفاتورة المحسوب:</span>
-                <strong style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>
+              <div className="purchases-calc-badge">
+                <span className="font-xs text-muted">إجمالي قيمة الفاتورة المحسوب:</span>
+                <strong className="text-accent text-xl">
                   {formatCurrency((Number(formQin) || 0) * (Number(formPrice) || 0), currency)}
                 </strong>
               </div>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: 'span 2' }}>
+              <label className="form-label-block">
                 ملاحظات الفاتورة أو شروط التسليم
                 <textarea
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   rows={2}
                   placeholder="أي ملاحظات أو بيانات إضافية حول التوريد أو الضمان..."
-                  style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)', resize: 'vertical' }}
+                  className="form-input-themed"
                 />
               </label>
             </div>
 
             {formError && (
-              <div className="inline-message error" style={{ marginTop: '16px' }}>
+              <div className="inline-message error mt-4">
                 {formError}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+            <div className="flex gap-3 mt-4">
               <button
                 type="submit"
-                className="primary-btn"
+                className="primary-btn px-6 py-2"
                 disabled={isSubmitting}
-                style={{ padding: '10px 24px' }}
               >
                 <Plus size={16} /> {isSubmitting ? 'جارٍ التسجيل والحفظ...' : 'حفظ فاتورة الشراء وتوريد الأصناف'}
               </button>
@@ -524,7 +523,7 @@ export default function PurchasesPage({
         </div>
       ) : (
         <>
-          <div className="section-head movement-heading" style={{ marginTop: '16px' }}>
+          <div className="section-head movement-heading mt-4">
             <div>
               <h2><ShoppingCart size={19} /> سجل المشتريات والتوريدات</h2>
               <span>
@@ -546,8 +545,8 @@ export default function PurchasesPage({
           </div>
 
           {addSuccessMessage && (
-            <div className="inline-message success" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="inline-message success purchases-alert-banner">
+              <div className="flex items-center gap-2">
                 <CheckCircle2 size={18} />
                 <span>{addSuccessMessage}</span>
               </div>
@@ -559,7 +558,6 @@ export default function PurchasesPage({
                     setAddSuccessMessage('')
                     setActiveTab('add')
                   }}
-                  style={{ fontSize: '0.82rem', padding: '4px 12px' }}
                 >
                   <Plus size={14} /> إضافة فاتورة أخرى
                 </button>
@@ -569,50 +567,31 @@ export default function PurchasesPage({
 
           {/* Filters Toolbar */}
           <div className="movements-filter-toolbar">
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: '220px' }}>
-              <Search size={15} style={{ position: 'absolute', right: '10px', color: 'var(--muted)', pointerEvents: 'none' }} />
+            <div className="purchases-search-wrap">
+              <Search size={15} className="purchases-search-icon" />
               <input
                 type="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث باسم الصنف، المورد، رقم الفاتورة..."
-                style={{
-                  width: '100%',
-                  padding: '7px 32px 7px 28px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg)',
-                  color: 'var(--ink)',
-                  fontSize: '0.85rem',
-                }}
+                className="purchases-search-input"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
-                  style={{
-                    position: 'absolute',
-                    left: '8px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--muted)',
-                    padding: '2px',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
+                  className="purchases-search-clear"
                   title="مسح البحث"
+                  aria-label="مسح البحث"
                 >
                   <X size={13} />
                 </button>
               )}
             </div>
 
-
-
             {/* Staff filter dropdown */}
-            <div className="staff-filter-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <UserCheck size={15} style={{ opacity: 0.6 }} />
+            <div className="staff-filter-group flex items-center gap-2">
+              <UserCheck size={15} className="purchases-filter-icon" />
               <select
                 className="sort-select"
                 value={staffFilter}
@@ -627,7 +606,7 @@ export default function PurchasesPage({
             </div>
 
             <div className="sort-group">
-              <ArrowUpDown size={15} style={{ opacity: 0.6 }} />
+              <ArrowUpDown size={15} className="purchases-filter-icon" />
               <select
                 className="sort-select"
                 value={sortOption}
@@ -707,10 +686,10 @@ export default function PurchasesPage({
 
                     return (
                       <tr key={movement.id || index}>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{serialNum}</td>
+                        <td className="purchases-serial-cell">{serialNum}</td>
                         <td>{movement.date || '—'}</td>
                         <td>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--ink)' }}>
+                          <span className="purchases-inv-badge">
                             {movement.inv || '—'}
                           </span>
                         </td>
@@ -719,16 +698,16 @@ export default function PurchasesPage({
                           {movement.notes && <small className="cell-sub">{movement.notes}</small>}
                         </td>
                         <td>
-                          <strong style={{ color: 'var(--accent)' }}>{movement.from || '—'}</strong>
+                          <strong className="purchases-supplier-col">{movement.from || '—'}</strong>
                         </td>
                         <td><span className="qty-in-tag">+{movement.qin}</span></td>
                         <td>{formatCurrency(derived.unit_price ?? (Number(movement.price) || 0), currency)}</td>
                         <td>
-                          <strong style={{ color: 'var(--ink)' }}>{formatCurrency(totalInvoice, currency)}</strong>
+                          <strong className="purchases-total-col">{formatCurrency(totalInvoice, currency)}</strong>
                         </td>
 
                         <td>
-                          <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                          <span className="purchases-user-cell">
                             {movement.createdBy || '—'}
                           </span>
                         </td>
@@ -793,7 +772,7 @@ export default function PurchasesPage({
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 >
-                  التالي <ArrowRight size={14} style={{ transform: 'rotate(180deg)' }} />
+                  التالي <ArrowRight size={14} className="icon-flip-rtl" />
                 </button>
               </div>
             </div>

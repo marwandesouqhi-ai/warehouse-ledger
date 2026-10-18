@@ -6582,6 +6582,133 @@
 .col-w-13 { width: 13%; }
 .col-w-16 { width: 16%; }
 
+.purchases-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.purchases-kpi-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+}
+
+.purchases-kpi-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.purchases-kpi-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.purchases-kpi-val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  margin-top: var(--sp-2);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.purchases-kpi-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.purchases-calc-badge {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(14, 124, 134, 0.05);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+}
+
+.purchases-alert-banner {
+  margin-bottom: var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.purchases-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+}
+
+.purchases-search-icon {
+  position: absolute;
+  inset-inline-end: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.purchases-search-input {
+  width: 100%;
+  padding: 7px 32px 7px 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.purchases-search-clear {
+  position: absolute;
+  inset-inline-start: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.purchases-filter-icon {
+  opacity: 0.6;
+}
+
+.purchases-serial-cell {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.purchases-inv-badge {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.purchases-supplier-col {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.purchases-total-col {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.purchases-user-cell {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.icon-flip-rtl {
+  transform: rotate(180deg);
+}
+
 .users-tag-pill-danger {
   background: var(--bad) !important;
   color: #fff !important;
