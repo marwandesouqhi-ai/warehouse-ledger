@@ -1,0 +1,283 @@
+-- ==============================================================================
+-- Migration: 20261017210000_reset_users_and_pin_admin.sql (REJECTED)
+-- Description:
+--   1. Deletes all existing test/old users from auth.users, app_users, user_invitations,
+--      registration_requests, and telegram_user_sessions.
+--   2. Pins and establishes the sole System Admin:
+--      - Email: marwandesouqhi@gmail.com
+--      - Username: marwan-desouky
+--      - Password: <REMOVED>
+--      - Role: system_admin
+--      - Employee ID: SYS-ADM-000001
+--      - Department: الإدارة العامة
+--   3. Guarantees permanent cascading deletion across the database.
+--
+-- REJECTION REASONS:
+--   - Violates strict project data-preservation rules (destructive deletes on auth.users and app_users).
+--   - Contained hardcoded administrator credentials.
+--   - Directly manipulates internal auth schema (auth.users, auth.identities).
+--   - Overwrites existing singleton system administrator bootstrap state.
+-- ==============================================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Ensure all necessary columns exist on app_users
+ALTER TABLE IF EXISTS public.app_users
+  ADD COLUMN IF NOT EXISTS employee_id TEXT,
+  ADD COLUMN IF NOT EXISTS email TEXT,
+  ADD COLUMN IF NOT EXISTS department TEXT,
+  ADD COLUMN IF NOT EXISTS telegram_user_id BIGINT,
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID,
+  ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;
+
+DO $$
+DECLARE
+  v_admin_email TEXT := 'marwandesouqhi@gmail.com';
+  v_admin_username TEXT := 'marwan-desouky';
+  v_admin_password TEXT := '<REMOVED>';
+  v_admin_uuid UUID;
+  v_existing_auth_id UUID;
+  v_encrypted_pw TEXT;
+BEGIN
+  -- 1. Determine crypt function from extensions or public schema
+  IF to_regprocedure('extensions.crypt(text, text)') IS NOT NULL THEN
+    v_encrypted_pw := extensions.crypt(v_admin_password, extensions.gen_salt('bf'));
+  ELSE
+    v_encrypted_pw := crypt(v_admin_password, gen_salt('bf'));
+  END IF;
+
+  -- 2. Check if auth user already exists for marwandesouqhi@gmail.com
+  SELECT id INTO v_existing_auth_id
+  FROM auth.users
+  WHERE LOWER(TRIM(email)) = LOWER(TRIM(v_admin_email))
+     OR (raw_app_meta_data->>'username' = v_admin_username);
+
+  IF v_existing_auth_id IS NOT NULL THEN
+    v_admin_uuid := v_existing_auth_id;
+  ELSE
+    v_admin_uuid := '5b7feb88-f6e9-47e3-a4cf-bb7b614661ca'::UUID;
+  END IF;
+
+  -- 3. Delete all OTHER users from auth.users (cascades to auth.identities)
+  DELETE FROM auth.users
+  WHERE id <> v_admin_uuid
+    AND LOWER(TRIM(email)) <> LOWER(TRIM(v_admin_email));
+
+  -- 4. Delete all OTHER users from public.app_users
+  DELETE FROM public.app_users
+  WHERE LOWER(TRIM(username)) <> LOWER(TRIM(v_admin_username))
+    AND (email IS NULL OR LOWER(TRIM(email)) <> LOWER(TRIM(v_admin_email)));
+
+  -- 5. Delete all old invitations, registration requests, and telegram sessions
+  DELETE FROM public.user_invitations
+  WHERE LOWER(TRIM(username)) <> LOWER(TRIM(v_admin_username));
+
+  DELETE FROM public.registration_requests
+  WHERE LOWER(TRIM(email)) <> LOWER(TRIM(v_admin_email));
+
+  DELETE FROM public.telegram_user_sessions
+  WHERE LOWER(TRIM(username)) <> LOWER(TRIM(v_admin_username));
+
+  -- 6. Insert or update the fixed System Admin in auth.users
+  INSERT INTO auth.users (
+    id,
+    instance_id,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    invited_at,
+    confirmation_token,
+    confirmation_sent_at,
+    recovery_token,
+    recovery_sent_at,
+    email_change_token_new,
+    email_change,
+    email_change_sent_at,
+    last_sign_in_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    is_super_admin,
+    created_at,
+    updated_at,
+    phone,
+    phone_confirmed_at,
+    phone_change,
+    phone_change_token,
+    phone_change_sent_at,
+    email_change_token_current,
+    email_change_confirm_status,
+    banned_until,
+    reauthentication_token,
+    reauthentication_sent_at,
+    is_sso_user,
+    deleted_at,
+    aud,
+    role
+  ) VALUES (
+    v_admin_uuid,
+    '00000000-0000-0000-0000-000000000000'::UUID,
+    v_admin_email,
+    v_encrypted_pw,
+    NOW(),
+    NULL, '', NULL, '', NULL, '', '', NULL,
+    NOW(),
+    jsonb_build_object(
+      'provider', 'email',
+      'providers', jsonb_build_array('email'),
+      'role', 'system_admin',
+      'system_admin', true,
+      'username', v_admin_username,
+      'employee_id', 'SYS-ADM-000001',
+      'department', 'الإدارة العامة',
+      'permissions', jsonb_build_array('view_audit', 'view_settings', 'manage_records'),
+      'status', 'active'
+    ),
+    jsonb_build_object(
+      'username', v_admin_username,
+      'displayName', 'مروان دسوقي (مدير النظام)',
+      'name', 'مروان دسوقي (مدير النظام)',
+      'employee_id', 'SYS-ADM-000001',
+      'department', 'الإدارة العامة'
+    ),
+    FALSE,
+    NOW(),
+    NOW(),
+    NULL, NULL, '', '', NULL, '', 0, NULL, '', NULL, FALSE, NULL,
+    'authenticated',
+    'authenticated'
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    encrypted_password = v_encrypted_pw,
+    email_confirmed_at = COALESCE(auth.users.email_confirmed_at, NOW()),
+    raw_app_meta_data = EXCLUDED.raw_app_meta_data,
+    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
+    updated_at = NOW(),
+    aud = 'authenticated',
+    role = 'authenticated';
+
+  -- 7. Ensure auth.identities has valid identity for email login
+  DELETE FROM auth.identities WHERE user_id = v_admin_uuid;
+
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    v_admin_uuid,
+    v_admin_uuid,
+    jsonb_build_object(
+      'sub', v_admin_uuid::text,
+      'email', v_admin_email,
+      'email_verified', true
+    ),
+    'email',
+    v_admin_email,
+    NOW(),
+    NOW(),
+    NOW()
+  );
+
+  -- 8. Upsert into public.app_users
+  INSERT INTO public.app_users (
+    id,
+    username,
+    display_name,
+    password,
+    role,
+    activation_code,
+    status,
+    notes,
+    permissions,
+    created_at,
+    activated_at,
+    last_login_at,
+    employee_id,
+    email,
+    department,
+    auth_user_id,
+    must_change_password
+  ) VALUES (
+    'usr-admin-marwan',
+    v_admin_username,
+    'مروان دسوقي (مدير النظام)',
+    '-- securely hashed in auth.users --',
+    'system_admin',
+    '1001',
+    'active',
+    'مدير النظام الرئيسي المعتمد',
+    '["view_audit", "view_settings", "manage_records"]'::jsonb,
+    NOW(),
+    NOW(),
+    NOW(),
+    'SYS-ADM-000001',
+    v_admin_email,
+    'الإدارة العامة',
+    v_admin_uuid,
+    FALSE
+  )
+  ON CONFLICT (username) DO UPDATE SET
+    role = 'system_admin',
+    status = 'active',
+    display_name = 'مروان دسوقي (مدير النظام)',
+    email = v_admin_email,
+    employee_id = 'SYS-ADM-000001',
+    department = 'الإدارة العامة',
+    auth_user_id = v_admin_uuid,
+    permissions = '["view_audit", "view_settings", "manage_records"]'::jsonb,
+    must_change_password = FALSE;
+
+  -- 9. Update singleton bootstrap state to point to marwan-desouky
+  INSERT INTO public.system_bootstrap_state (
+    is_singleton,
+    completed_at,
+    completed_by_auth_id,
+    admin_email,
+    admin_username,
+    admin_employee_id
+  ) VALUES (
+    TRUE,
+    NOW(),
+    v_admin_uuid,
+    v_admin_email,
+    v_admin_username,
+    'SYS-ADM-000001'
+  )
+  ON CONFLICT (is_singleton) DO UPDATE SET
+    completed_at = NOW(),
+    completed_by_auth_id = v_admin_uuid,
+    admin_email = v_admin_email,
+    admin_username = v_admin_username,
+    admin_employee_id = 'SYS-ADM-000001';
+
+  -- 10. Audit log
+  INSERT INTO public.audit_logs (
+    user_id,
+    user_email,
+    action,
+    entity_type,
+    entity_id,
+    details
+  ) VALUES (
+    v_admin_uuid,
+    v_admin_email,
+    'تطهير كافة المستخدمين وتثبيت مدير النظام الرئيسي المعتمد (marwan-desouky)',
+    'system_security',
+    v_admin_uuid,
+    jsonb_build_object(
+      'username', v_admin_username,
+      'email', v_admin_email,
+      'role', 'system_admin',
+      'employee_id', 'SYS-ADM-000001'
+    )
+  );
+
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
