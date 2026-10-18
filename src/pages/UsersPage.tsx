@@ -973,7 +973,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         </div>
                         <button
                             type="button"
-                            className="secondary-btn users-icon-action-btn"
+                            className="secondary-btn users-action-btn"
                             onClick={() => setMainTab('employees')}
                         >
                             العودة لدليل الموظفين
@@ -1165,7 +1165,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={deptFilter}
                                     onChange={(e) => setDeptFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب القسم"
                                 >
                                     <option value="all">كل الأقسام</option>
@@ -1177,7 +1177,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={roleFilter}
                                     onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب الصلاحية"
                                 >
                                     <option value="all">كل الصلاحيات</option>
@@ -1189,7 +1189,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب حالة الحساب"
                                 >
                                     <option value="all">كل الحالات</option>
@@ -1410,7 +1410,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={requestStatusFilter}
                                     onChange={(e) => setRequestStatusFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب حالة الطلب"
                                 >
                                     <option value="all">كل الحالات ({registrationRequests.length})</option>
@@ -1423,7 +1423,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={requestDeptFilter}
                                     onChange={(e) => setRequestDeptFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب القسم"
                                 >
                                     <option value="all">كل الأقسام</option>
@@ -1434,7 +1434,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={requestRoleFilter}
                                     onChange={(e) => setRequestRoleFilter(e.target.value)}
-                                    className="user-field-input"
+                                    className="user-field-input users-filter-select"
                                     aria-label="تصفية حسب الدور المطلوب"
                                 >
                                     <option value="all">كل الأدوار المطلوبة</option>
@@ -1446,7 +1446,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                 <button
                                     type="button"
-                                    className="secondary-btn users-icon-action-btn"
+                                    className="secondary-btn users-action-btn"
                                     onClick={() => void loadRequests()}
                                     disabled={requestsLoading}
                                     aria-label="تحديث قائمة الطلبات"
@@ -1458,7 +1458,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 {isSystemAdmin && (
                                     <button
                                         type="button"
-                                        className="secondary-btn users-icon-action-btn"
+                                        className="secondary-btn users-action-btn"
                                         onClick={() => void handleOpenConsistencyReport()}
                                         title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
                                         aria-label="تقرير مطابقة وتكامل الهويات الوظيفية"
@@ -1489,7 +1489,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         {isSystemAdmin && (
                             <button
                                 type="button"
-                                className={deptDelegationEnabled ? 'secondary-btn users-icon-action-btn' : 'primary-btn users-icon-action-btn'}
+                                className={deptDelegationEnabled ? 'secondary-btn users-action-btn' : 'primary-btn users-action-btn'}
                                 onClick={() => void handleToggleDelegation()}
                                 disabled={delegationLoading}
                             >

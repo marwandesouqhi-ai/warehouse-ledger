@@ -14,7 +14,10 @@
   /* Brand primary */
   --accent: #0e7c86;
   --accent-hover: #0a656e;
+  --accent-700: #0a656e;
   --accent-wash: #e9f5f6;
+  --accent-subtle: #e9f5f6;
+  --text-on-accent: #ffffff;
   --focus-ring: rgba(14, 124, 134, 0.25);
 
   /* Radius scale (exactly 4 values + 50%) */
@@ -27,23 +30,36 @@
   --text-xs: 0.75rem;
   --text-sm: 0.85rem;
   --text-base: 1rem;
+  --text-md: 1.125rem;
   --text-lg: 1.25rem;
   --text-xl: 1.6rem;
   --text-2xl: 2rem;
   --lh-body: 1.65;
+  --leading-normal: 1.5;
 
   /* Spacing scale */
   --space-1: 4px;
   --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 28px;
+  --space-6: 36px;
+
+  /* Spacing aliases for component systems */
+  --sp-1: var(--space-1);
+  --sp-2: var(--space-2);
+  --sp-3: var(--space-3);
+  --sp-4: var(--space-4);
+  --sp-5: var(--space-5);
+  --sp-6: var(--space-6);
 
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.07);
   --shadow-lg: 0 10px 28px rgba(15, 23, 42, 0.1);
+  --shadow: var(--shadow-sm);
+  --shadow-soft: 0 2px 10px rgba(15, 23, 42, 0.05);
+  --shadow-strong: var(--shadow-md);
 
   /* Z-index scale */
   --z-elevated: 10;
@@ -54,6 +70,7 @@
 
   /* Semantic status colors (WCAG AA compliant) */
   --ok: #047857;
+  --good: #047857;
   --ok-bg: #ecfdf5;
   --ok-border: #a7f3d0;
 
@@ -71,6 +88,20 @@
 
   --muted-bg: #f1f5f9;
   --muted-border: #e2e8f0;
+
+  /* Badge tokens */
+  --badge-success-bg: var(--ok-bg);
+  --badge-success-text: var(--ok);
+  --badge-success-border: var(--ok-border);
+  --badge-info-bg: var(--info-bg);
+  --badge-info-text: var(--info);
+  --badge-info-border: var(--info-border);
+  --badge-warning-bg: var(--warn-bg);
+  --badge-warning-text: var(--warn);
+  --badge-warning-border: var(--warn-border);
+  --badge-danger-bg: var(--bad-bg);
+  --badge-danger-text: var(--bad);
+  --badge-danger-border: var(--bad-border);
 
   /* Chart series colors (color-blind safe palette) */
   --chart-1: #0f766e;
@@ -102,14 +133,21 @@
 
   --accent: #56b99e;
   --accent-hover: #48a68d;
+  --accent-700: #48a68d;
   --accent-wash: #173229;
+  --accent-subtle: #173229;
+  --text-on-accent: #ffffff;
   --focus-ring: rgba(86, 185, 158, 0.35);
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.5);
+  --shadow: var(--shadow-sm);
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-strong: var(--shadow-md);
 
   --ok: #34d399;
+  --good: #34d399;
   --ok-bg: rgba(6, 78, 59, 0.35);
   --ok-border: rgba(52, 211, 153, 0.3);
 
@@ -127,6 +165,19 @@
 
   --muted-bg: #1e293b;
   --muted-border: #334155;
+
+  --badge-success-bg: var(--ok-bg);
+  --badge-success-text: var(--ok);
+  --badge-success-border: var(--ok-border);
+  --badge-info-bg: var(--info-bg);
+  --badge-info-text: var(--info);
+  --badge-info-border: var(--info-border);
+  --badge-warning-bg: var(--warn-bg);
+  --badge-warning-text: var(--warn);
+  --badge-warning-border: var(--warn-border);
+  --badge-danger-bg: var(--bad-bg);
+  --badge-danger-text: var(--bad);
+  --badge-danger-border: var(--bad-border);
 
   --chart-1: #2dd4bf;
   --chart-2: #60a5fa;
