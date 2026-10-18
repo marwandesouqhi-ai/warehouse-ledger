@@ -73,7 +73,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
         {/* Modal Controls Header (Hidden in Print) */}
         <div className="modal-header no-print">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(8, 127, 104, 0.12)', color: 'var(--accent)' }}>
+            <div className="modal-title-icon" style={{ background: 'var(--badge-success-bg)', color: 'var(--accent)' }}>
               <FileCheck2 size={20} />
             </div>
             <div>
@@ -193,7 +193,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                       fontSize: '0.78rem',
                       border: selected ? '1px solid var(--accent)' : '1px solid var(--line)',
                       background: selected ? 'var(--accent)' : 'var(--surface)',
-                      color: selected ? '#fff' : 'var(--ink)',
+                      color: selected ? 'var(--text-on-accent)' : 'var(--ink)',
                       cursor: 'pointer',
                     }}
                   >

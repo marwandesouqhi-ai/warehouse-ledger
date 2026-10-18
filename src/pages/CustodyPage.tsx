@@ -678,7 +678,7 @@ export default function CustodyPage({
                 textDecoration: 'none',
               }}
             >
-              <BarChart3 size={15} style={{ color: '#0e7c86' }} />
+              <BarChart3 size={15} style={{ color: 'var(--chart-1)' }} />
               <span>لوحة التحليلات العامة بالداشبورد</span>
             </NavLink>
           </div>
@@ -835,7 +835,7 @@ export default function CustodyPage({
                     void exportComprehensiveCustodyWorkbook(items, currency, settings.organization)
                   }}
                 >
-                  <Building2 size={16} style={{ color: '#0e7c86' }} />
+                  <Building2 size={16} style={{ color: 'var(--chart-1)' }} />
                   <div>
                     <div style={{ fontWeight: 600 }}>سجل الجرد الموحد لكافة الكليات</div>
                     <small style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>ملف Excel شامل متعدد الصفحات لكافة المخازن الـ 8</small>
@@ -1458,7 +1458,7 @@ export default function CustodyPage({
                       <td>{idx + 1}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{m.date || m.issue || '—'}</td>
                       <td style={{ fontWeight: 600 }}>{m.item}</td>
-                      <td style={{ fontWeight: 700, color: '#e11d48' }}>{qty}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--bad)' }}>{qty}</td>
                       <td>{formatCurrency(price, currency)}</td>
                       <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{formatCurrency(total, currency)}</td>
                       <td>
@@ -1546,7 +1546,7 @@ export default function CustodyPage({
           <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-wrap">
-                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+                <div className="modal-title-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
                   <Trash2 size={18} />
                 </div>
                 <div>
@@ -2372,7 +2372,7 @@ function SupplyFromMainModal({
       <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
+            <div className="modal-title-icon" style={{ background: 'var(--badge-success-bg)', color: 'var(--good)' }}>
               <ArrowLeftRight size={18} />
             </div>
             <div>
@@ -2621,7 +2621,7 @@ function ImportCustodyModal({
       <div className="modal-dialog modal-dialog-import" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(8, 127, 104, 0.1)', color: '#087f68' }}>
+            <div className="modal-title-icon" style={{ background: 'var(--badge-success-bg)', color: 'var(--accent)' }}>
               <FileUp size={18} />
             </div>
             <div>

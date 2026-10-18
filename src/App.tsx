@@ -207,11 +207,11 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
   return (
     <section className="page-stack">
       <header className="page-intro">
-        <div className="page-intro-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)' }}>
+        <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
           <ShieldAlert size={22} />
         </div>
         <div>
-          <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>صلاحية مقيدة</p>
+          <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية مقيدة</p>
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
@@ -222,8 +222,8 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
           width: '64px',
           height: '64px',
           borderRadius: '16px',
-          background: 'rgba(239, 68, 68, 0.1)',
-          color: 'var(--bad, #ef4444)',
+          background: 'var(--badge-danger-bg)',
+          color: 'var(--bad)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1527,7 +1527,7 @@ function App() {
                         onClick={() => setDashboardAnalyticsTab('all')}
                         style={{
                           background: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'all' ? '#fff' : 'var(--ink)',
+                          color: dashboardAnalyticsTab === 'all' ? 'var(--text-on-accent)' : 'var(--ink)',
                           borderColor: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--line)',
                           fontWeight: 600,
                           fontSize: '0.84rem',
@@ -1547,7 +1547,7 @@ function App() {
                         onClick={() => setDashboardAnalyticsTab('procurement')}
                         style={{
                           background: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'procurement' ? '#fff' : 'var(--ink)',
+                          color: dashboardAnalyticsTab === 'procurement' ? 'var(--text-on-accent)' : 'var(--ink)',
                           borderColor: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--line)',
                           fontWeight: 600,
                           fontSize: '0.84rem',
@@ -1567,7 +1567,7 @@ function App() {
                         onClick={() => setDashboardAnalyticsTab('movements')}
                         style={{
                           background: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'movements' ? '#fff' : 'var(--ink)',
+                          color: dashboardAnalyticsTab === 'movements' ? 'var(--text-on-accent)' : 'var(--ink)',
                           borderColor: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--line)',
                           fontWeight: 600,
                           fontSize: '0.84rem',
@@ -1587,7 +1587,7 @@ function App() {
                         onClick={() => setDashboardAnalyticsTab('custody')}
                         style={{
                           background: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'custody' ? '#fff' : 'var(--ink)',
+                          color: dashboardAnalyticsTab === 'custody' ? 'var(--text-on-accent)' : 'var(--ink)',
                           borderColor: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--line)',
                           fontWeight: 600,
                           fontSize: '0.84rem',
@@ -2221,7 +2221,7 @@ function App() {
             <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div className="modal-title-wrap">
-                  <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+                  <div className="modal-title-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
                     <Trash2 size={18} />
                   </div>
                   <div>

@@ -45,28 +45,18 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
         return (
             <section className="page-stack import-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)' }}>
+                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>صلاحية وصول مقيدة</p>
+                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية وصول مقيدة</p>
                         <h2>استيراد حركات المخزن من Excel</h2>
                         <p>خاص ومقتصر على المحررين ومديري النظام لإضافة وتحديث بيانات المخزن.</p>
                     </div>
                 </header>
 
-                <div className="card-surface" style={{ textAlign: 'center', padding: '48px 24px', maxWidth: '600px', margin: '30px auto', borderRadius: '14px' }}>
-                    <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '16px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--bad, #ef4444)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 18px',
-                    }}>
+                <div className="card-surface audit-restricted-card">
+                    <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
                     <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>

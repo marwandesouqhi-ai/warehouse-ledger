@@ -65,7 +65,7 @@ export default function ProcurementSubNav({ activeTab }: ProcurementSubNavProps)
                   boxSizing: 'border-box',
                   transition: 'all 0.2s ease',
                   background: active ? 'var(--accent)' : 'var(--surface)',
-                  color: active ? '#ffffff' : 'var(--ink)',
+                  color: active ? 'var(--text-on-accent)' : 'var(--ink)',
                   border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
                   boxShadow: active ? '0 4px 12px rgba(8, 127, 104, 0.25)' : 'none',
                 }
