@@ -120,34 +120,24 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         return (
             <section className="page-stack audit-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)' }}>
+                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>منطقة مراقبة مقيدة</p>
+                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>منطقة مراقبة مقيدة</p>
                         <h2>سجل العمليات والتدقيق (Audit Log)</h2>
                         <p>خاص ومقتصر على إدارة النظام لحماية سرية وأمان العمليات.</p>
                     </div>
                 </header>
 
-                <div className="card-surface" style={{ textAlign: 'center', padding: '48px 24px', maxWidth: '600px', margin: '30px auto', borderRadius: '14px' }}>
-                    <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '16px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--bad, #ef4444)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 18px',
-                    }}>
+                <div className="card-surface audit-restricted-card">
+                    <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: 'var(--text-lg)', color: 'var(--ink)' }}>
                         صلاحية وصول مقيدة لمدير النظام فقط
                     </h3>
-                    <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+                    <p style={{ color: 'var(--muted)', fontSize: 'var(--text-sm)', lineHeight: '1.6', margin: '0 0 24px 0' }}>
                         عذراً، سجل المراقبة والتدقيق مخصص حصرياً لحسابات <strong>مدير النظام (System Administrator)</strong> للاطلاع على العمليات والأنشطة الإدارية. لا يملك حسابك الحالي الصلاحيات الكافية لاستعراض هذا السجل.
                     </p>
                     <Link to="/" className="primary-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -195,10 +185,10 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                 </div>
             </div>
 
-            <div className="card-surface audit-table-wrapper" style={{ padding: '20px', borderRadius: '10px' }}>
+            <div className="card-surface audit-table-wrapper" style={{ padding: '20px', borderRadius: 'var(--r-md)' }}>
                 <div className="section-head" style={{ marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
-                        <div className="toolbar-search" style={{ minWidth: '240px', flex: '1 1 240px' }}>
+                    <div className="audit-toolbar">
+                        <div className="toolbar-search audit-search-box">
                             <Search size={16} />
                             <input
                                 type="search"
@@ -211,15 +201,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setSearchTerm('')}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        color: 'var(--muted)',
-                                        padding: '2px',
-                                        display: 'flex',
-                                        alignItems: 'center'
-                                    }}
+                                    className="audit-clear-btn"
                                     title="مسح البحث"
                                 >
                                     <X size={14} />
@@ -230,14 +212,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                         <select
                             value={filterType}
                             onChange={(event) => setFilterType(event.target.value)}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: '8px',
-                                border: '1px solid var(--line)',
-                                background: 'var(--bg)',
-                                color: 'var(--ink)',
-                                fontSize: '0.9rem',
-                            }}
+                            className="audit-type-select"
                         >
                             <option value="all">كل العمليات</option>
                             <option value="movement">حركات المخزن</option>
@@ -273,16 +248,16 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                         <p>سيبدأ تسجيل العمليات تلقائياً فور تنفيذ أي إجراء في النظام.</p>
                     </div>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                    <div className="table-responsive">
+                        <table className="audit-table">
                             <thead>
-                                <tr style={{ borderBottom: '2px solid var(--line)', color: 'var(--muted)', fontSize: '0.85rem' }}>
-                                    <th style={{ padding: '10px 12px' }}>الوقت والتاريخ</th>
-                                    <th style={{ padding: '10px 12px' }}>المستخدم</th>
-                                    <th style={{ padding: '10px 12px' }}>العملية</th>
-                                    <th style={{ padding: '10px 12px' }}>عنوان IP الجهاز</th>
-                                    <th style={{ padding: '10px 12px' }}>الجهاز</th>
-                                    <th style={{ padding: '10px 12px' }}>التفاصيل</th>
+                                <tr>
+                                    <th>الوقت والتاريخ</th>
+                                    <th>المستخدم</th>
+                                    <th>العملية</th>
+                                    <th>عنوان IP الجهاز</th>
+                                    <th>الجهاز</th>
+                                    <th>التفاصيل</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -293,26 +268,26 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                         log.user_email.includes('admin')
 
                                     return (
-                                        <tr key={log.id} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.88rem' }}>
-                                            <td style={{ padding: '12px', whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                                        <tr key={log.id}>
+                                            <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                                                     <Clock size={13} />
                                                     {formatTime(log.created_at)}
                                                 </span>
                                             </td>
 
-                                            <td style={{ padding: '12px' }}>
+                                            <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <User size={15} color="var(--accent)" />
                                                     <strong>{log.user_email || 'غير مسجل'}</strong>
                                                     {isAdmin && (
                                                         <span
                                                             style={{
-                                                                fontSize: '0.72rem',
+                                                                fontSize: 'var(--text-xs)',
                                                                 background: 'var(--accent-wash)',
                                                                 color: 'var(--accent)',
                                                                 padding: '2px 6px',
-                                                                borderRadius: '4px',
+                                                                borderRadius: 'var(--r-pill)',
                                                                 fontWeight: 600,
                                                             }}
                                                         >
@@ -322,50 +297,32 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                                 </div>
                                             </td>
 
-                                            <td style={{ padding: '12px' }}>
+                                            <td>
                                                 <span
                                                     className={`quality-item ${tone}`}
-                                                    style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 600 }}
+                                                    style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 'var(--r-sm)', fontSize: 'var(--text-xs)', fontWeight: 600 }}
                                                 >
                                                     {log.action}
                                                 </span>
                                             </td>
 
-                                            <td style={{ padding: '12px', direction: 'ltr', textAlign: 'right' }}>
-                                                <span
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        fontFamily: 'monospace',
-                                                        fontSize: '0.85rem',
-                                                        background: 'var(--bg)',
-                                                        padding: '3px 7px',
-                                                        borderRadius: '5px',
-                                                        border: '1px solid var(--line)',
-                                                    }}
-                                                >
+                                            <td style={{ direction: 'ltr', textAlign: 'right' }}>
+                                                <span className="audit-ip-tag">
                                                     <Globe size={13} color="var(--accent)" />
                                                     {log.ip_address || '—'}
                                                 </span>
                                             </td>
 
-                                            <td style={{ padding: '12px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                                            <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                                                     <Laptop size={14} />
                                                     {formatDevice(log.user_agent)}
                                                 </span>
                                             </td>
 
-                                            <td style={{ padding: '12px', maxWidth: '300px' }}>
+                                            <td style={{ maxWidth: '300px' }}>
                                                 <div
-                                                    style={{
-                                                        fontSize: '0.82rem',
-                                                        color: 'var(--ink)',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
-                                                    }}
+                                                    className="audit-details-text"
                                                     title={JSON.stringify(log.details)}
                                                 >
                                                     {log.details && Object.keys(log.details).length > 0 ? (

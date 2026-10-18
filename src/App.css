@@ -7845,6 +7845,98 @@
   color: var(--badge-danger-text);
 }
 
+/* Audit Log Page Classes */
+.audit-restricted-card {
+  text-align: center;
+  padding: 48px 24px;
+  max-width: 600px;
+  margin: 30px auto;
+  border-radius: var(--r-lg);
+}
+
+.audit-restricted-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-md);
+  background: var(--badge-danger-bg);
+  color: var(--bad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+}
+
+.audit-toolbar {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.audit-search-box {
+  min-width: 240px;
+  flex: 1 1 240px;
+}
+
+.audit-clear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.audit-type-select {
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+}
+
+.audit-table th {
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.audit-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+
+.audit-ip-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: monospace;
+  font-size: var(--text-xs);
+  background: var(--bg);
+  padding: 3px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+}
+
+.audit-details-text {
+  font-size: var(--text-xs);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 
 
