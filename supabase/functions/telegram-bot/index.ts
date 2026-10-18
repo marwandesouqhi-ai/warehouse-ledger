@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import nodemailer from "npm:nodemailer"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,18 +96,28 @@ interface EmailSendResult {
   error?: string
 }
 
-async function sendOtpEmailViaResend(
-  resendApiKey: string,
-  emailFrom: string,
+// ─── External Email Sending Integration (Gmail SMTP & Resend API) ─────────────
+interface EmailSendResult {
+  success: boolean
+  accepted: boolean
+  error?: string
+}
+
+interface EmailProviderConfig {
+  resendApiKey?: string
+  emailFrom?: string
+  smtpUser?: string
+  smtpPass?: string
+  smtpHost?: string
+  smtpPort?: number
+}
+
+async function sendOtpEmail(
+  config: EmailProviderConfig,
   toEmail: string,
   recipientName: string,
   otpCode: string
 ): Promise<EmailSendResult> {
-  if (!resendApiKey || !resendApiKey.startsWith("re_")) {
-    return { success: false, accepted: false, error: "RESEND_API_KEY is not configured or invalid." }
-  }
-
-  const fromAddress = emailFrom || "Warehouse Ledger <noreply@resend.dev>"
   const subject = "رمز التحقق من البريد الإلكتروني - حركة المخزن"
   const html = `
     <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
@@ -130,31 +141,72 @@ async function sendOtpEmailViaResend(
     </div>
   `
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+  // 1. Try Gmail / Custom SMTP if configured
+  if (config.smtpUser && config.smtpPass) {
+    try {
+      const port = config.smtpPort || 465
+      const transporter = nodemailer.createTransport({
+        host: config.smtpHost || "smtp.gmail.com",
+        port,
+        secure: port === 465,
+        auth: {
+          user: config.smtpUser,
+          pass: config.smtpPass,
+        },
+      })
+
+      const fromAddress = config.emailFrom || `Warehouse Ledger <${config.smtpUser}>`
+      await transporter.sendMail({
         from: fromAddress,
-        to: [toEmail],
+        to: toEmail,
         subject,
         html,
-      }),
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      return { success: false, accepted: false, error: `Resend HTTP ${res.status}: ${errText}` }
+      })
+      return { success: true, accepted: true }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("SMTP send error:", msg)
+      if (!config.resendApiKey) {
+        return { success: false, accepted: false, error: `SMTP Error: ${msg}` }
+      }
     }
+  }
 
-    const data = await res.json().catch(() => ({}))
-    return { success: true, accepted: Boolean(data.id) }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { success: false, accepted: false, error: msg }
+  // 2. Try Resend API if configured
+  if (config.resendApiKey && config.resendApiKey.startsWith("re_")) {
+    const fromAddress = config.emailFrom || "Warehouse Ledger <onboarding@resend.dev>"
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject,
+          html,
+        }),
+      })
+
+      if (!res.ok) {
+        const errText = await res.text()
+        return { success: false, accepted: false, error: `Resend HTTP ${res.status}: ${errText}` }
+      }
+
+      const data = await res.json().catch(() => ({}))
+      return { success: true, accepted: Boolean(data.id) }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { success: false, accepted: false, error: msg }
+    }
+  }
+
+  return {
+    success: false,
+    accepted: false,
+    error: "لم يتم تهيئة مزود البريد في الخادم (يرجى ضبط SMTP_USER و SMTP_PASS لـ Gmail، أو RESEND_API_KEY).",
   }
 }
 
@@ -270,6 +322,13 @@ async function getUserSession(supabaseAdmin: any, tgUserId: number): Promise<Use
 async function saveUserSession(supabaseAdmin: any, tgUserId: number, session: UserSession): Promise<void> {
   memorySessions.set(tgUserId, session)
   try {
+    // Age-bounded cleanup: prune abandoned sessions older than 24 hours
+    const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    await supabaseAdmin
+      .from("telegram_user_sessions")
+      .delete()
+      .lt("updated_at", staleThreshold)
+
     await supabaseAdmin
       .from("telegram_user_sessions")
       .upsert({
@@ -310,8 +369,7 @@ async function executeRegistration(params: {
   requestedDept: string
   requestedRole: string
   otpPepper: string
-  resendApiKey: string
-  emailFrom: string
+  emailConfig: EmailProviderConfig
 }) {
   const {
     supabaseAdmin,
@@ -324,8 +382,7 @@ async function executeRegistration(params: {
     requestedDept,
     requestedRole,
     otpPepper,
-    resendApiKey,
-    emailFrom,
+    emailConfig,
   } = params
 
   // 1. Rate limit registration submissions: max 3 per hour per TG user and per email
@@ -380,8 +437,8 @@ async function executeRegistration(params: {
   const tokenHash = await hashTokenWithPepper(otp, otpPepper)
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
 
-  // 5. Send OTP via server-side Resend API (NEVER in Telegram message!)
-  const emailRes = await sendOtpEmailViaResend(resendApiKey, emailFrom, email, fullName, otp)
+  // 5. Send OTP via Gmail SMTP or Resend API (NEVER in Telegram message!)
+  const emailRes = await sendOtpEmail(emailConfig, email, fullName, otp)
 
   const emailSendStatus = emailRes.accepted ? "sent" : "failed"
   const verificationStatus = emailRes.accepted ? "pending" : "delivery_failed"
@@ -426,7 +483,7 @@ async function executeRegistration(params: {
 }
 
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -445,8 +502,15 @@ serve(async (req) => {
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? ""
     const webhookSecret = (Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "").trim()
     const otpPepper = Deno.env.get("OTP_PEPPER") ?? ""
-    const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? ""
-    const emailFrom = Deno.env.get("EMAIL_FROM") ?? ""
+
+    const emailConfig: EmailProviderConfig = {
+      resendApiKey: (Deno.env.get("RESEND_API_KEY") ?? "").trim(),
+      emailFrom: (Deno.env.get("EMAIL_FROM") || Deno.env.get("RESEND_FROM_EMAIL") || "").trim(),
+      smtpUser: (Deno.env.get("SMTP_USER") || Deno.env.get("GMAIL_USER") || "").trim(),
+      smtpPass: (Deno.env.get("SMTP_PASS") || Deno.env.get("GMAIL_APP_PASSWORD") || "").trim(),
+      smtpHost: (Deno.env.get("SMTP_HOST") || "smtp.gmail.com").trim(),
+      smtpPort: Number(Deno.env.get("SMTP_PORT")) || 465,
+    }
 
     // 1. Fail Closed: If webhook secret is not configured, reject with 500 and process NOTHING
     if (!webhookSecret) {
@@ -623,8 +687,7 @@ serve(async (req) => {
           requestedDept: session.department,
           requestedRole: session.role,
           otpPepper,
-          resendApiKey,
-          emailFrom,
+          emailConfig,
         })
         return new Response("ok", { headers: corsHeaders })
       }
@@ -768,8 +831,8 @@ serve(async (req) => {
       const newHash = await hashTokenWithPepper(newOtp, otpPepper)
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
-      // Attempt send via Resend
-      const emailRes = await sendOtpEmailViaResend(resendApiKey, emailFrom, request.email, request.full_name, newOtp)
+      // Attempt send via Gmail SMTP or Resend
+      const emailRes = await sendOtpEmail(emailConfig, request.email, request.full_name, newOtp)
 
       const sendStatus = emailRes.accepted ? "sent" : "failed"
       const verStatus = emailRes.accepted ? "pending" : "delivery_failed"
@@ -1036,8 +1099,7 @@ serve(async (req) => {
         requestedDept,
         requestedRole,
         otpPepper,
-        resendApiKey,
-        emailFrom,
+        emailConfig,
       })
       return new Response("ok", { headers: corsHeaders })
     }
