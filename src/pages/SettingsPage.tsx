@@ -348,28 +348,18 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         return (
             <section className="page-stack settings-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)' }}>
+                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>صلاحية وصول مقيدة</p>
+                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية وصول مقيدة</p>
                         <h2>إعدادات المؤسسة</h2>
                         <p>خاص ومقتصر على مدير النظام (System Admin).</p>
                     </div>
                 </header>
 
-                <div className="card-surface" style={{ textAlign: 'center', padding: '48px 24px', maxWidth: '600px', margin: '30px auto', borderRadius: '14px' }}>
-                    <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '16px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--bad, #ef4444)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 18px',
-                    }}>
+                <div className="card-surface audit-restricted-card">
+                    <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
                     <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>
@@ -405,12 +395,12 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                         alignItems: 'center',
                         gap: '10px',
                         padding: '12px 16px',
-                        background: 'rgba(16, 185, 129, 0.12)',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
-                        borderRadius: '10px',
-                        color: 'var(--good, #059669)',
+                        background: 'var(--badge-success-bg)',
+                        border: '1px solid var(--badge-success-border, var(--line))',
+                        borderRadius: 'var(--r-sm)',
+                        color: 'var(--good)',
                         fontWeight: 600,
-                        fontSize: '0.92rem',
+                        fontSize: 'var(--text-sm)',
                     }}
                 >
                     <CheckCircle2 size={18} />
@@ -497,9 +487,9 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                     gap: '6px',
                                     fontSize: '0.8rem',
                                     padding: '4px 10px',
-                                    borderRadius: '6px',
-                                    background: 'rgba(16, 185, 129, 0.1)',
-                                    color: 'var(--good, #059669)',
+                                    borderRadius: 'var(--r-sm)',
+                                    background: 'var(--badge-success-bg)',
+                                    color: 'var(--good)',
                                     fontWeight: 600,
                                 }}
                             >
@@ -846,8 +836,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                             <div className="restore-preview-card">
                                                 <div className="restore-preview-head">
                                                     <div>
-                                                        <strong style={{ fontSize: '0.92rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <FileCheck size={16} style={{ color: 'var(--good, #059669)' }} />
+                                                        <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <FileCheck size={16} style={{ color: 'var(--good)' }} />
                                                             ملف صالح: {restoreFile?.name}
                                                         </strong>
                                                         <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
