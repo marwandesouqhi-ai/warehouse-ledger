@@ -117,31 +117,30 @@ export default function ReportsPage({
   return (
     <section className="reports-module content-area">
       {/* 1. Header Card */}
-      <div className="card-surface" style={{ padding: '24px 28px', marginBottom: '20px', borderRadius: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div className="card-surface reports-header-card">
+        <div className="reports-header-layout">
           <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '4px 12px', background: 'rgba(14, 124, 134, 0.08)', borderRadius: '20px', color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
+            <div className="reports-badge-pill">
               <FileSpreadsheet size={15} />
               <span>المركز الموحد للتقارير والمستندات الرسمية</span>
             </div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0 0 6px 0', color: 'var(--ink)' }}>
+            <h2 className="reports-main-title">
               تقارير وأذون وسجلات المخازن الحكومية
             </h2>
-            <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.92rem', maxWidth: '750px', lineHeight: 1.6 }}>
+            <p className="reports-header-desc">
               منصة مركزية لإصدار أذون الصرف الرسمية المعتمدة، طباعة محاضر الجرد السنوية لكافة كليات المؤسسة، وتصدير الدفاتر الإلكترونية (Excel) المطابقة للوائح والقوانين المخزنية.
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="reports-header-actions">
             <button
               type="button"
-              className="primary-btn"
+              className="primary-btn reports-primary-btn"
               onClick={() => {
                 setPermitInitialItems([])
                 setIsPermitModalOpen(true)
               }}
               id="btn-reports-new-permit"
-              style={{ padding: '10px 18px', fontSize: '0.9rem', fontWeight: 700 }}
             >
               <FileCheck2 size={17} />
               <span>إصدار إذن صرف رسمي</span>
@@ -149,13 +148,12 @@ export default function ReportsPage({
 
             <button
               type="button"
-              className="secondary-btn"
+              className="secondary-btn reports-secondary-btn"
               onClick={() => void exportComprehensiveCustodyWorkbook(items, currency, settings.organization)}
               id="btn-reports-master-excel"
               title="تحميل ملف Excel موحد شامل يحتوي على كشوف كافة الكليات الـ 8"
-              style={{ padding: '10px 18px', fontSize: '0.9rem', fontWeight: 600 }}
             >
-              <Building2 size={17} style={{ color: '#0e7c86' }} />
+              <Building2 size={17} className="text-accent" />
               <span>سجل الجرد الموحد (Excel)</span>
             </button>
           </div>
@@ -163,24 +161,23 @@ export default function ReportsPage({
       </div>
 
       {/* 2. Primary 4 Report Category Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div className="reports-category-grid">
         {/* Card 1: Official Permit */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="card-surface reports-cat-card">
           <div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(8, 127, 104, 0.12)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+            <div className="reports-cat-icon accent">
               <FileCheck2 size={22} />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--ink)' }}>
+            <h3 className="reports-cat-title">
               أذون الصرف ومحاضر الاستلام
             </h3>
-            <p style={{ fontSize: '0.84rem', color: 'var(--muted)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            <p className="reports-cat-desc">
               نماذج صرف وإضافة رسمية معتمدة بالترويسة الحكومية، إقرار الاستلام، والتوقيعات الأربعة وخاتم شعار الجمهورية.
             </p>
           </div>
           <button
             type="button"
-            className="secondary-btn"
-            style={{ width: '100%', justifyContent: 'center', fontWeight: 600 }}
+            className="secondary-btn reports-cat-btn"
             onClick={() => {
               setPermitInitialItems([])
               setIsPermitModalOpen(true)
@@ -191,22 +188,21 @@ export default function ReportsPage({
         </div>
 
         {/* Card 2: Master Comprehensive Excel */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="card-surface reports-cat-card">
           <div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(14, 124, 134, 0.12)', color: '#0e7c86', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+            <div className="reports-cat-icon teal">
               <Building2 size={22} />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--ink)' }}>
+            <h3 className="reports-cat-title">
               سجل الجرد الموحد (8 كليات)
             </h3>
-            <p style={{ fontSize: '0.84rem', color: 'var(--muted)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            <p className="reports-cat-desc">
               دفتر إلكتروني رسمي متعدد الصفحات (Multi-sheet Excel Workbook) لكافة المخازن مع أسعار الوحدات والإجماليات العامة.
             </p>
           </div>
           <button
             type="button"
-            className="secondary-btn"
-            style={{ width: '100%', justifyContent: 'center', fontWeight: 600 }}
+            className="secondary-btn reports-cat-btn"
             onClick={() => void exportComprehensiveCustodyWorkbook(items, currency, settings.organization)}
           >
             <Download size={15} /> تحميل السجل الموحد (Excel)
@@ -214,22 +210,21 @@ export default function ReportsPage({
         </div>
 
         {/* Card 3: Movements Ledger */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="card-surface reports-cat-card">
           <div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+            <div className="reports-cat-icon indigo">
               <ClipboardList size={22} />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--ink)' }}>
+            <h3 className="reports-cat-title">
               تقرير حركة المخزن العام
             </h3>
-            <p style={{ fontSize: '0.84rem', color: 'var(--muted)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            <p className="reports-cat-desc">
               بيان كامل بحركات الوارد والمنصرف المالي والكمي ({movements.length} حركة)، الفواتير، الموردين، وأرصدة الصرف المتبقية.
             </p>
           </div>
           <button
             type="button"
-            className="secondary-btn"
-            style={{ width: '100%', justifyContent: 'center', fontWeight: 600 }}
+            className="secondary-btn reports-cat-btn"
             onClick={() => {
               if (onExportMovements) onExportMovements()
               else navigate('/movements')
@@ -240,22 +235,21 @@ export default function ReportsPage({
         </div>
 
         {/* Card 4: Quality & Audit Report */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="card-surface reports-cat-card">
           <div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+            <div className="reports-cat-icon amber">
               <ShieldCheck size={22} />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--ink)' }}>
+            <h3 className="reports-cat-title">
               تقرير تدقيق وجودة البيانات
             </h3>
-            <p style={{ fontSize: '0.84rem', color: 'var(--muted)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            <p className="reports-cat-desc">
               مطابقة القيود المخزنية، فحص التواريخ والأسعار غير المنطقية، واكتشاف تجاوزات الصرف آلياً.
             </p>
           </div>
           <button
             type="button"
-            className="secondary-btn"
-            style={{ width: '100%', justifyContent: 'center', fontWeight: 600 }}
+            className="secondary-btn reports-cat-btn"
             onClick={() => navigate('/quality')}
           >
             <ShieldCheck size={15} /> فتح تقرير الجودة
@@ -264,132 +258,115 @@ export default function ReportsPage({
       </div>
 
       {/* 3. Certified Inventory Reports per College (8 Warehouses Grid) */}
-      <div className="card-surface" style={{ padding: '24px', borderRadius: '16px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+      <div className="card-surface reports-wh-section">
+        <div className="reports-wh-head">
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--ink)' }}>
+            <h3 className="reports-wh-title">
               كشوف الجرد المعتمدة لمخازن وكليات المؤسسة (8 مخازن)
             </h3>
-            <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            <span className="reports-wh-subtitle">
               إمكانية طباعة محضر جرد رسمي معتمد أو تصدير كشف Excel مخصص لكل كلية على حدة
             </span>
           </div>
 
-          <div style={{ minWidth: '240px' }}>
-            <div className="toolbar-search" style={{ margin: 0 }}>
+          <div className="reports-wh-search-wrap">
+            <div className="toolbar-search m-0">
               <Search size={15} />
               <input
                 type="search"
                 placeholder="ابحث عن كلية أو مبنى..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ fontSize: '0.85rem' }}
               />
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+        <div className="reports-wh-grid">
           {filteredWarehouseReports.map(({ warehouse, items: whItems, stats }) => (
             <div
               key={warehouse.id}
-              style={{
-                border: '1px solid var(--line)',
-                borderRadius: '12px',
-                padding: '16px',
-                background: 'var(--surface)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-              }}
+              className="reports-wh-card"
             >
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(14, 124, 134, 0.08)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="reports-wh-card-top">
+                  <div className="flex items-center gap-2">
+                    <div className="reports-wh-icon-box">
                       <Warehouse size={17} />
                     </div>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--ink)' }}>
+                      <h4 className="reports-wh-name">
                         {warehouse.name}
                       </h4>
-                      <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{warehouse.building}</small>
+                      <small className="reports-wh-building">{warehouse.building}</small>
                     </div>
                   </div>
 
                   <span
-                    style={{
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      background: stats.healthyRatio >= 85 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                      color: stats.healthyRatio >= 85 ? '#059669' : '#d97706',
-                    }}
+                    className={`reports-readiness-badge ${stats.healthyRatio >= 85 ? 'ok' : 'warn'}`}
                   >
                     جاهزية {stats.healthyRatio}%
                   </span>
                 </div>
 
                 {/* Warehouse metrics */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', padding: '10px 0', borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)', marginBottom: '12px', textAlign: 'center' }}>
+                <div className="reports-wh-metrics">
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>عدد الأصناف</div>
-                    <strong style={{ fontSize: '0.94rem', color: 'var(--ink)' }}>{whItems.length}</strong>
+                    <div className="reports-metric-label">عدد الأصناف</div>
+                    <strong className="reports-metric-val">{whItems.length}</strong>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>إجمالي الوحدات</div>
-                    <strong style={{ fontSize: '0.94rem', color: 'var(--ink)' }}>{stats.totalUnits}</strong>
+                    <div className="reports-metric-label">إجمالي الوحدات</div>
+                    <strong className="reports-metric-val">{stats.totalUnits}</strong>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>القيمة الدفترية</div>
-                    <strong style={{ fontSize: '0.88rem', color: 'var(--accent)' }}>{formatCurrency(stats.totalValue, currency)}</strong>
+                    <div className="reports-metric-label">القيمة الدفترية</div>
+                    <strong className="reports-metric-val accent">{formatCurrency(stats.totalValue, currency)}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Action buttons */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <div className="reports-wh-actions">
                 <button
                   type="button"
-                  className="secondary-btn"
-                  style={{ flex: 1, padding: '7px 10px', fontSize: '0.8rem', justifyContent: 'center' }}
+                  className="secondary-btn reports-wh-btn-main"
                   onClick={() => handlePrintWarehouseSheet(warehouse)}
                   title={`طباعة محضر الجرد الرسمي A4 لكشف ${warehouse.name}`}
+                  aria-label={`طباعة كشف ${warehouse.name}`}
                 >
                   <Printer size={13} /> طباعة الجرد (A4)
                 </button>
 
                 <button
                   type="button"
-                  className="secondary-btn"
-                  style={{ flex: 1, padding: '7px 10px', fontSize: '0.8rem', justifyContent: 'center' }}
+                  className="secondary-btn reports-wh-btn-main"
                   onClick={() => void exportCustodyToExcel(warehouse.name, whItems, currency)}
                   title={`تصدير كشف Excel بالبنود والإجماليات لـ ${warehouse.name}`}
+                  aria-label={`تصدير كشف Excel ${warehouse.name}`}
                 >
                   <FileSpreadsheet size={13} /> تصدير Excel
                 </button>
 
                 <button
                   type="button"
-                  className="secondary-btn"
-                  style={{ padding: '7px 9px', fontSize: '0.8rem' }}
+                  className="secondary-btn reports-wh-btn-icon"
                   onClick={() => {
                     setPermitInitialItems(whItems.slice(0, 1))
                     setIsPermitModalOpen(true)
                   }}
                   title="إصدار إذن صرف لهذه الكلية"
+                  aria-label={`إصدار إذن صرف لـ ${warehouse.name}`}
                 >
                   <FileCheck2 size={13} /> إذن صرف
                 </button>
 
                 <button
                   type="button"
-                  className="secondary-btn"
-                  style={{ padding: '7px 9px', fontSize: '0.8rem' }}
+                  className="secondary-btn reports-wh-btn-icon"
                   onClick={() => navigate(`/custody?warehouse=${warehouse.id}`)}
                   title="فتح سجل وإدارة عهدة هذه الكلية"
+                  aria-label={`فتح سجل عهدة ${warehouse.name}`}
                 >
                   <ExternalLink size={13} />
                 </button>
@@ -400,27 +377,26 @@ export default function ReportsPage({
       </div>
 
       {/* 4. Technical Condition & Maintenance Reports */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+      <div className="reports-tech-grid">
         {/* Maintenance Items Card */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card-surface reports-tech-card">
+          <div className="reports-tech-head">
+            <div className="flex items-center gap-2">
+              <div className="reports-tech-icon warn">
                 <Wrench size={16} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--ink)' }}>
+                <h4 className="reports-tech-title">
                   كشف الأصول التي تحتاج صيانة عاجلة
                 </h4>
-                <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{maintenanceItems.length} أصل مسجل بحالة صيانة</small>
+                <small className="reports-tech-sub">{maintenanceItems.length} أصل مسجل بحالة صيانة</small>
               </div>
             </div>
 
             {maintenanceItems.length > 0 && (
               <button
                 type="button"
-                className="secondary-btn"
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                className="secondary-btn reports-tech-btn"
                 onClick={() => void exportCustodyToExcel('أصول_تحت_الصيانة', maintenanceItems, currency)}
               >
                 <Download size={13} /> تصدير Excel
@@ -429,13 +405,13 @@ export default function ReportsPage({
           </div>
 
           {maintenanceItems.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.88rem' }}>
-              <CheckCircle2 size={24} style={{ color: '#059669', margin: '0 auto 8px auto' }} />
+            <div className="reports-empty-box">
+              <CheckCircle2 size={24} className="reports-empty-icon" />
               لا توجد أصول مسجلة بحالة صيانة حالياً — كافة الأصول تعمل بكفاءة.
             </div>
           ) : (
-            <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', fontSize: '0.84rem' }}>
+            <div className="reports-tech-table-wrap">
+              <table className="reports-tech-table">
                 <thead>
                   <tr>
                     <th>كود العهدة</th>
@@ -451,10 +427,10 @@ export default function ReportsPage({
                     return (
                       <tr key={item.id}>
                         <td><code>{item.code}</code></td>
-                        <td style={{ fontWeight: 600 }}>{item.name}</td>
+                        <td className="font-semibold">{item.name}</td>
                         <td>{wh?.shortName || item.warehouseId}</td>
                         <td>{item.quantity} {item.unit}</td>
-                        <td style={{ color: 'var(--accent)', fontWeight: 600 }}>{formatCurrency(item.value, currency)}</td>
+                        <td className="text-accent font-semibold">{formatCurrency(item.value, currency)}</td>
                       </tr>
                     )
                   })}
@@ -465,25 +441,24 @@ export default function ReportsPage({
         </div>
 
         {/* Damaged & Scrap Items Card */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card-surface reports-tech-card">
+          <div className="reports-tech-head">
+            <div className="flex items-center gap-2">
+              <div className="reports-tech-icon bad">
                 <AlertTriangle size={16} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--ink)' }}>
+                <h4 className="reports-tech-title">
                   كشف الأصول التالفة والمعدة للتكهين
                 </h4>
-                <small style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{damagedItems.length} أصل بحالة تالفة / كهنة</small>
+                <small className="reports-tech-sub">{damagedItems.length} أصل بحالة تالفة / كهنة</small>
               </div>
             </div>
 
             {damagedItems.length > 0 && (
               <button
                 type="button"
-                className="secondary-btn"
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                className="secondary-btn reports-tech-btn"
                 onClick={() => void exportCustodyToExcel('أصول_كهنة_وتالفة', damagedItems, currency)}
               >
                 <Download size={13} /> تصدير Excel
@@ -492,13 +467,13 @@ export default function ReportsPage({
           </div>
 
           {damagedItems.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.88rem' }}>
-              <CheckCircle2 size={24} style={{ color: '#059669', margin: '0 auto 8px auto' }} />
+            <div className="reports-empty-box">
+              <CheckCircle2 size={24} className="reports-empty-icon" />
               لا توجد أصناف كهنة أو تالفة مسجلة في السجلات.
             </div>
           ) : (
-            <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', fontSize: '0.84rem' }}>
+            <div className="reports-tech-table-wrap">
+              <table className="reports-tech-table">
                 <thead>
                   <tr>
                     <th>كود العهدة</th>
@@ -514,10 +489,10 @@ export default function ReportsPage({
                     return (
                       <tr key={item.id}>
                         <td><code>{item.code}</code></td>
-                        <td style={{ fontWeight: 600 }}>{item.name}</td>
+                        <td className="font-semibold">{item.name}</td>
                         <td>{wh?.shortName || item.warehouseId}</td>
                         <td>{item.quantity} {item.unit}</td>
-                        <td style={{ color: '#dc2626', fontWeight: 600 }}>{formatCurrency(item.value, currency)}</td>
+                        <td className="text-bad font-semibold">{formatCurrency(item.value, currency)}</td>
                       </tr>
                     )
                   })}
@@ -610,14 +585,14 @@ export default function ReportsPage({
         <table className="print-official-table">
           <thead>
             <tr>
-              <th style={{ width: '4%' }}>م</th>
-              <th style={{ width: '13%' }}>كود العهدة</th>
-              <th style={{ width: '28%' }}>اسم الصنف والمواصفات الفنية</th>
-              <th style={{ width: '13%' }}>التصنيف والنوع</th>
-              <th style={{ width: '16%' }}>أمين العهدة / المكان</th>
-              <th style={{ width: '8%' }}>الكمية</th>
-              <th style={{ width: '10%' }}>القيمة الدفترية</th>
-              <th style={{ width: '8%' }}>الحالة الفنية</th>
+              <th className="col-w-4">م</th>
+              <th className="col-w-13">كود العهدة</th>
+              <th className="col-w-28">اسم الصنف والمواصفات الفنية</th>
+              <th className="col-w-13">التصنيف والنوع</th>
+              <th className="col-w-16">أمين العهدة / المكان</th>
+              <th className="col-w-8">الكمية</th>
+              <th className="col-w-10">القيمة الدفترية</th>
+              <th className="col-w-8">الحالة الفنية</th>
             </tr>
           </thead>
           <tbody>
