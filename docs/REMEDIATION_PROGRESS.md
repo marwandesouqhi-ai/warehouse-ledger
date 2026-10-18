@@ -167,6 +167,50 @@
      - مراجعة كافة الهجرات المضافة في هذا الفرع والتأكد من أنها تراكمية 100% ولا تحذف أي بيانات تشغيلية.
      - تأكيد بقاء الملف `supabase/pending/20261017153000_enforce_active_status_on_business_tables.sql` مقترحاً فقط في مجلد الانتظار.
 
+## الجلسة السادسة (Session G): استكمال دورة تأهيل الموظفين (من طلب تيليجرام حتى تفعيل الهوية)
+- **الحالة:** مكتملة ومختبرة محلياً بنجاح بنسبة 100% (Completed & Verified Locally)
+- **المحاور التي تم التحقق منها ومعالجتها:**
+  1. `G.1` اعتماد الطلبات وإرسال دعوة Gmail عبر Google SMTP:
+     - تحديث دالة `admin-users` (إجراء `approve_registration_request`):
+       - إزالة أي استدعاء لـ `listUsers` وحذف أي توليد لكلمات مرور مؤقتة نهائياً.
+       - حجز الكود الوظيفي الفريد `employee_id` ذرياً عبر التسلسل المخصص وسجل الأكواد.
+       - إنشاء أو ربط هوية `app_users` بحالة `pending_activation` واسم مستخدم مؤقت (`pending_<clean_emp_id>`) لا يمكن استخدامه للدخول نهائياً.
+       - استدعاء `supabaseAdmin.auth.admin.inviteUserByEmail` مع `redirectTo: APP_BASE_URL + "/#type=invite"` ليرسل خادم Supabase Auth رسالة الدعوة عبر مزود Google SMTP.
+       - تسجيل حالة الدعوة `invitation_status = 'sent'` وتوقيت الإرسال وهوية المعتمد.
+       - إشعار الموظف على تيليجرام دون أي أسرار أو روابط أو رموز OTP.
+     - إضافة إجراءات الإدارة: «إعادة إرسال الدعوة» (`resend_registration_invitation`) و «إلغاء الدعوة» (`cancel_registration_invitation`).
+  2. `G.2` شاشة تفعيل الحساب واختيار اسم المستخدم وكلمة المرور (`AuthPage.tsx` + `App.tsx`):
+     - استقبال رابط الدعوة `#type=invite` وعرض تبويب تفعيل الحساب باللغة العربية بنفس هوية صفحة الدخول.
+     - عرض بطاقة الهوية للقراءة فقط (الاسم، البريد، الكود الوظيفي، القسم، الدور).
+     - التحقق الفوري من قواعد اسم المستخدم (3-30 حرفاً، حروف إنجليزية وأرقام ونقاط وشرطات، غير مكرر، غير محجوز، ليس بريداً أو كوداً وظيفياً).
+     - تعيين كلمة المرور مباشرة في Supabase Auth عبر `supabase.auth.updateUser` دون كتابتها في أي جدول.
+  3. `G.3` دالة التفعيل الذرية الخادمة (`complete-activation`):
+     - التحقق من جلسة المصادقة النشطة.
+     - فحص وجود كلمة المرور في `auth.users.encrypted_password` عبر دالة أمنية `verify_auth_user_has_password` (SECURITY DEFINER).
+     - تنفيذ معاملة ذرية `complete_employee_activation` لتثبيت اسم المستخدم، تحويل الحالة إلى `active`، وتسجيل قبول الدعوة.
+  4. `G.4` تقرير المطابقة والاتساق التشخيصي (Identity Consistency Report):
+     - إضافة دالة خادم واستدعاء واجهة لجلب تقرير شامل للمطابقة بين `app_users` و `auth.users` وطلبات التسجيل دون أي حذف أو مساس بالبيانات.
+     - عرض التقرير في نافذة منبثقة مخصصة لمدير النظام.
+  5. `G.5` تحصين وتقييد الدالة القديمة `invite-user`:
+     - إزالة مسار `listUsers` واستبدال البحث المباشر بـ `getUserById`.
+     - حظر مسار إنشاء المستخدمين بالصلاحيات القديمة وتوجيه الإدارة إلى نظام التأهيل الموحد مع الإبقاء على حسابات وسجلات المستخدمين السابقة.
+- **الملفات المنشأة:**
+  - `supabase/migrations/20261018170000_employee_onboarding_invitation_and_activation.sql`
+  - `supabase/pending/20261018173000_formalize_app_users_status_check_constraint.sql`
+  - `supabase/rollbacks/20261018173000_formalize_app_users_status_check_constraint.rollback.sql`
+  - `supabase/functions/complete-activation/index.ts`
+  - `tests/unit/employeeOnboarding.test.ts`
+- **الملفات المعدلة:**
+  - `supabase/functions/admin-users/index.ts`
+  - `supabase/functions/invite-user/index.ts`
+  - `src/lib/employeeIdentity.ts`
+  - `src/lib/registrationService.ts`
+  - `src/pages/AuthPage.tsx`
+  - `src/pages/UsersPage.tsx`
+  - `src/App.tsx`
+  - `EMPLOYEE_REGISTRATION_SETUP.md`
+  - `docs/REMEDIATION_PROGRESS.md`
+
 ---
 
 ## جدول سلامة البيانات للهجرات المضافة في الفرع (`fix/registration-security`)
@@ -179,18 +223,22 @@
 | `20261017150000_approval_delegation_code_registry_and_rls.sql` | **نعم** | `DROP VIEW` فقط لتحديث العرض الآمن للطلبات | قراءة فقط (`SELECT` للتحقق من هوية المراجع) | آمن، يضيف سجل الأكواد ومصفوفة تفويض الأقسام وسياسات RLS |
 | `20261017160000_telegram_user_sessions.sql` | **نعم** | لا يوجد (إسقاط السياسة السابقة فقط) | **لا** | آمن، جدول مؤقت لجلسات المعالج مع RLS محصور بـ `service_role` |
 | `20261017210000_reset_users_and_pin_admin.sql` | **مرفوض (لا)** | **نعم (DELETE جماعي لـ auth.users و app_users)** | **نعم (كتابة وتعديل مباشر في auth.users)** | **تم رفضه وحظره ونقله إلى `pending/rejected` وتطهير كلمة المرور منه** |
+| `20261018170000_employee_onboarding_invitation_and_activation.sql` | **نعم** | لا يوجد أي حذف نهائياً | قراءة فقط (`encrypted_password IS NOT NULL` عبر دالة أمنية) | آمن 100%، فهارس فريدة ودوال تفعيل ذري وحفظ هويات |
 
 ---
 
 ## حالة الاختبارات والأنواع النهائية المحدثة والواقعية (Freshly Measured Results)
-- **اختبارات Vitest:** 40 ملف اختبار، 358 اختبار ناجح بنسبة 100% (40 passed, 358 passed, 0 failed).
-- **فحص TypeScript:** اجتياز كامل عبر `tsc -b` و `npm run typecheck` (0 errors).
+- **اختبارات Vitest:** 41 ملف اختبار، 374 اختبار ناجح بنسبة 100% (41 passed, 374 passed, 0 failed).
+- **فحص TypeScript:** اجتياز كامل عبر `tsc -b` (0 errors).
 - **بناء Vite الإنتاجي:** نجاح كامل عبر `npm run build` (`tsc -b && vite build`) (Code 0).
-- **فحص التنسيق والجودة (Lint):** اجتياز عبر `npm run lint` (`oxlint .`) (0 errors, 42 warnings غير حرجة).
+- **فحص خلو الحزمة الإنتاجية من الأسرار (`dist/`):** اجتياز كامل وفحص نظيف (0 تسريبات).
+- **فحص التنسيق والجودة (Lint):** اجتياز عبر `npm run lint` (`oxlint .`) (0 errors, 46 warnings غير حرجة).
 - **تثبيت الحزم (`npm ci`):** تم تشغيل `npm ci` وأخفق بسبب قفل ملفات النظام في Windows على المجلد `node_modules/react-router-dom/dist` (`EPERM: operation not permitted, rmdir`)؛ تم استكمال التدقيق عبر `npm install` بنجاح (193 حزمة مدققة، 0 تغييرات في `package-lock.json`).
 - **المقترحات المعلّقة في `supabase/pending/`:**
   - `20261013213000_harden_rls.sql` (مقترح معلق لسياسات RLS).
   - `20261017153000_enforce_active_status_on_business_tables.sql` (مقترح معلق لحالة المستخدمين النشطين).
   - `20261018130000_harden_telegram_user_sessions.sql` (مقترح معلق لتحصين جلسات التيليجرام وتنظيفها).
+  - `20261018173000_formalize_app_users_status_check_constraint.sql` (مقترح معلق لقيد حالة المستخدمين لاستيعاب `pending_activation`).
+
 
 

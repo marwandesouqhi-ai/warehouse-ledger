@@ -12,6 +12,7 @@ import {
     Lock,
     RefreshCw,
     Search,
+    Mail,
     Send,
     ShieldAlert,
     ShieldCheck,
@@ -60,6 +61,10 @@ import {
     getDepartmentDelegation,
     setDepartmentDelegation,
     sendPasswordRecovery,
+    resendRegistrationInvitation,
+    cancelRegistrationInvitation,
+    fetchIdentityConsistencyReport,
+    type IdentityConsistencyReport,
 } from '../lib/registrationService'
 import type { RegistrationRequest } from '../lib/employeeIdentity'
 import { formatEmployeeId } from '../lib/employeeIdentity'
@@ -106,6 +111,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [suspendingUser, setSuspendingUser] = useState<LocalUser | null>(null)
     const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
     const [isActionLoading, setIsActionLoading] = useState(false)
+    const [cancellingReq, setCancellingReq] = useState<RegistrationRequest | null>(null)
+    const [consistencyModalOpen, setConsistencyModalOpen] = useState(false)
+    const [consistencyReport, setConsistencyReport] = useState<IdentityConsistencyReport | null>(null)
+    const [consistencyLoading, setConsistencyLoading] = useState(false)
 
     // Local Users State
     const [localUsers, setLocalUsers] = useState<LocalUser[]>(loadLocalUsers)
@@ -416,7 +425,7 @@ export default function UsersPage({ session }: UsersPageProps) {
             const res = await approveRegistrationRequest(approvingReq.id, roleToAssign)
             if (res.success) {
                 setActionFeedback({
-                    message: `تم اعتماد وتسجيل الموظف "${approvingReq.fullName}" بنجاح! كود الموظف المُعيَّن: ${res.employeeId || 'تم تخصيصه'}`,
+                    message: `تم اعتماد وتسجيل الموظف "${approvingReq.fullName}" بنجاح! تم تخصيص الرقم الوظيفي (${res.employeeId || 'تم تخصيصه'}) وإرسال رابط الدعوة إلى بريده الإلكتروني (${approvingReq.email}) عبر Google SMTP.`,
                     type: 'success',
                 })
                 void logAuditEvent({
@@ -427,6 +436,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                 })
                 setApprovingReq(null)
                 reloadUsers()
+                void loadRequests()
             } else {
                 setActionFeedback({ message: res.error || 'تعذر اعتماد طلب الموظف.', type: 'error' })
             }
@@ -434,6 +444,78 @@ export default function UsersPage({ session }: UsersPageProps) {
             setActionFeedback({ message: err instanceof Error ? err.message : 'حدث خطأ أثناء الاعتماد.', type: 'error' })
         } finally {
             setIsActionLoading(false)
+        }
+    }
+
+    async function handleResendInvite(req: RegistrationRequest) {
+        setIsActionLoading(true)
+        setActionFeedback(null)
+        try {
+            const res = await resendRegistrationInvitation(req.id)
+            if (res.success) {
+                setActionFeedback({
+                    message: `تمت إعادة إرسال رابط دعوة التفعيل إلى ${req.email} بنجاح!`,
+                    type: 'success',
+                })
+                void loadRequests()
+            } else {
+                setActionFeedback({
+                    message: res.message || res.error || 'تعذر إعادة إرسال الدعوة.',
+                    type: 'error',
+                })
+            }
+        } catch (err) {
+            setActionFeedback({
+                message: err instanceof Error ? err.message : 'حدث خطأ أثناء إعادة إرسال الدعوة.',
+                type: 'error',
+            })
+        } finally {
+            setIsActionLoading(false)
+        }
+    }
+
+    async function handleConfirmCancelInvite() {
+        if (!cancellingReq) return
+        setIsActionLoading(true)
+        setActionFeedback(null)
+        try {
+            const res = await cancelRegistrationInvitation(cancellingReq.id)
+            if (res.success) {
+                setActionFeedback({
+                    message: `تم إلغاء الدعوة وتعليق حساب الموظف "${cancellingReq.fullName}" بنجاح مع الحفاظ على كافة السجلات.`,
+                    type: 'success',
+                })
+                setCancellingReq(null)
+                void loadRequests()
+                reloadUsers()
+            } else {
+                setActionFeedback({
+                    message: res.message || res.error || 'تعذر إلغاء الدعوة.',
+                    type: 'error',
+                })
+            }
+        } catch (err) {
+            setActionFeedback({
+                message: err instanceof Error ? err.message : 'حدث خطأ أثناء إلغاء الدعوة.',
+                type: 'error',
+            })
+        } finally {
+            setIsActionLoading(false)
+        }
+    }
+
+    async function handleOpenConsistencyReport() {
+        setConsistencyModalOpen(true)
+        setConsistencyLoading(true)
+        try {
+            const res = await fetchIdentityConsistencyReport()
+            if (res.success && res.report) {
+                setConsistencyReport(res.report)
+            }
+        } catch (err) {
+            console.error('Failed to load consistency report:', err)
+        } finally {
+            setConsistencyLoading(false)
         }
     }
 
@@ -457,6 +539,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                 setRejectingReq(null)
                 setRejectionReasonInput('')
                 reloadUsers()
+                void loadRequests()
             } else {
                 setActionFeedback({ message: res.error || 'تعذر رفض طلب التسجيل.', type: 'error' })
             }
@@ -685,12 +768,18 @@ export default function UsersPage({ session }: UsersPageProps) {
     }, [visibleLocalUsers, userSearchTerm, deptFilter, roleFilter, statusFilter])
 
     const pendingRequestsCount = useMemo(() => {
-        return registrationRequests.filter((r) => r.approvalStatus === 'pending_approval' || !r.approvalStatus).length
+        return registrationRequests.filter((r) => r.approvalStatus === 'pending' || r.approvalStatus === 'pending_approval' || !r.approvalStatus).length
     }, [registrationRequests])
 
     const filteredRequests = useMemo(() => {
         return registrationRequests.filter((r) => {
-            if (requestStatusFilter !== 'all' && r.approvalStatus !== requestStatusFilter) return false
+            if (requestStatusFilter !== 'all') {
+                if (requestStatusFilter === 'pending_approval' || requestStatusFilter === 'pending') {
+                    if (r.approvalStatus !== 'pending' && r.approvalStatus !== 'pending_approval' && r.approvalStatus) return false
+                } else if (r.approvalStatus !== requestStatusFilter) {
+                    return false
+                }
+            }
             if (requestDeptFilter !== 'all' && r.requestedDepartment !== requestDeptFilter) return false
             if (requestRoleFilter !== 'all' && r.requestedRole !== requestRoleFilter) return false
             if (!isSystemAdmin && isDepartmentAdmin && userDepartment && r.requestedDepartment !== userDepartment) {
@@ -1448,6 +1537,19 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
                                 تحديث
                             </button>
+
+                            {isSystemAdmin && (
+                                <button
+                                    type="button"
+                                    className="secondary-btn"
+                                    onClick={() => void handleOpenConsistencyReport()}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '0.84rem' }}
+                                    title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
+                                >
+                                    <ShieldCheck size={14} color="var(--accent)" />
+                                    تقرير تكامل الهويات
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -1503,7 +1605,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <th>البريد الإلكتروني</th>
                                     <th>التحقق (OTP)</th>
                                     <th>القسم المطلوب</th>
-                                    <th>الدور المطلوب</th>
+                                    <th>الدور المطلوب / المعتمد</th>
+                                    <th>حالة الدعوة</th>
                                     <th>تيليجرام ID</th>
                                     <th>تاريخ التقديم</th>
                                     <th>حالة الطلب</th>
@@ -1513,7 +1616,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <tbody>
                                 {filteredRequests.length === 0 ? (
                                     <tr>
-                                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                                        <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                                             {requestsLoading ? 'جارٍ تحميل طلبات التسجيل...' : 'لا توجد طلبات تسجيل مطابقة لهذا الفلتر حالياً.'}
                                         </td>
                                     </tr>
@@ -1569,9 +1672,87 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                 </span>
                                             </td>
                                             <td>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>
-                                                    {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
-                                                </span>
+                                                <div style={{ fontSize: '0.8rem' }}>
+                                                    <span style={{ color: 'var(--ink)' }}>
+                                                        {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
+                                                    </span>
+                                                    {req.approvedRole && req.approvedRole !== req.requestedRole && (
+                                                        <strong style={{ color: 'var(--accent)', display: 'block', marginTop: '2px' }}>
+                                                            ← {ROLE_LABELS[req.approvedRole as EffectiveRole] || req.approvedRole}
+                                                        </strong>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                {req.invitationStatus === 'accepted' ? (
+                                                    <span style={{
+                                                        fontSize: '0.74rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: 'rgba(16, 185, 129, 0.12)',
+                                                        color: '#059669',
+                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                    }}>
+                                                        <CheckCircle2 size={12} /> تم تفعيل الحساب
+                                                    </span>
+                                                ) : req.invitationStatus === 'sent' ? (
+                                                    <div style={{ display: 'grid', gap: '2px' }}>
+                                                        <span style={{
+                                                            fontSize: '0.74rem',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '999px',
+                                                            fontWeight: 600,
+                                                            background: 'rgba(37, 99, 235, 0.12)',
+                                                            color: '#2563eb',
+                                                            border: '1px solid rgba(37, 99, 235, 0.25)',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                        }}>
+                                                            <Mail size={12} /> تم إرسال الدعوة
+                                                        </span>
+                                                        {req.invitationSentAt && (
+                                                            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                                                                {new Date(req.invitationSentAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : req.invitationStatus === 'failed' ? (
+                                                    <span style={{
+                                                        fontSize: '0.74rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: 'rgba(239, 68, 68, 0.12)',
+                                                        color: '#dc2626',
+                                                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                    }}>
+                                                        <ShieldAlert size={12} /> فشل الإرسال
+                                                    </span>
+                                                ) : req.invitationStatus === 'cancelled' ? (
+                                                    <span style={{
+                                                        fontSize: '0.74rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: 600,
+                                                        background: 'rgba(107, 114, 128, 0.12)',
+                                                        color: '#6b7280',
+                                                        border: '1px solid rgba(107, 114, 128, 0.25)',
+                                                    }}>
+                                                        دعوة ملغاة
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+                                                        {req.approvalStatus === 'approved' ? 'بانتظار الإرسال' : '—'}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--muted)' }}>
                                                 {req.telegramUserId || '—'}
@@ -1602,14 +1783,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                             : 'rgba(59, 130, 246, 0.25)'}`,
                                                 }}>
                                                     {req.approvalStatus === 'approved'
-                                                        ? 'معتمد ومُسجل'
+                                                        ? 'معتمد'
                                                         : req.approvalStatus === 'rejected'
                                                             ? 'مرفوض'
                                                             : 'بانتظار الاعتماد'}
                                                 </span>
                                             </td>
                                             <td className="actions-cell">
-                                                {req.approvalStatus === 'pending_approval' || !req.approvalStatus ? (
+                                                {req.approvalStatus === 'pending' || req.approvalStatus === 'pending_approval' || !req.approvalStatus ? (
                                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <button
                                                             type="button"
@@ -1620,7 +1801,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                             }}
                                                             style={{ height: '32px', padding: '0 12px', fontSize: '0.78rem' }}
                                                         >
-                                                            <CheckCircle2 size={13} /> اعتماد
+                                                            <CheckCircle2 size={13} /> قبول وإرسال الدعوة
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1635,9 +1816,38 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                         </button>
                                                     </div>
                                                 ) : req.approvalStatus === 'approved' ? (
-                                                    <span style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Check size={14} /> تم تعيينه ({req.approvedRole})
-                                                    </span>
+                                                    req.invitationStatus === 'accepted' ? (
+                                                        <span style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <Check size={14} /> مفعّل ({req.employeeId || req.approvedRole})
+                                                        </span>
+                                                    ) : req.invitationStatus === 'cancelled' ? (
+                                                        <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                                            ملغاة
+                                                        </span>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                            <button
+                                                                type="button"
+                                                                className="secondary-btn"
+                                                                onClick={() => void handleResendInvite(req)}
+                                                                disabled={isActionLoading}
+                                                                style={{ height: '30px', padding: '0 8px', fontSize: '0.76rem' }}
+                                                                title="إعادة إرسال رابط الدعوة إلى البريد الإلكتروني"
+                                                            >
+                                                                <RefreshCw size={12} className={isActionLoading ? 'animate-spin' : ''} /> إعادة إرسال
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="secondary-btn"
+                                                                onClick={() => setCancellingReq(req)}
+                                                                disabled={isActionLoading}
+                                                                style={{ height: '30px', padding: '0 8px', fontSize: '0.76rem', color: '#dc2626' }}
+                                                                title="إلغاء الدعوة وتعليق الحساب"
+                                                            >
+                                                                <UserX size={12} /> إلغاء
+                                                            </button>
+                                                        </div>
+                                                    )
                                                 ) : (
                                                     <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }} title={req.rejectionReason || ''}>
                                                         مرفوض {req.rejectionReason ? `(${req.rejectionReason})` : ''}
@@ -2086,12 +2296,12 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     onChange={(e) => setSelectedApprovedRole(e.target.value)}
                                     style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
                                 >
-                                    {ASSIGNABLE_ROLES.map((r) => (
+                                    {ASSIGNABLE_ROLES.filter((r) => r.value !== 'system_admin').map((r) => (
                                         <option key={r.value} value={r.value}>{r.label}</option>
                                     ))}
                                 </select>
-                                <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
-                                    ملاحظة أمنية: سيتم توليد وتخصيص كود فريد (Unique ID) فورياً بحسب هذا الدور المحدد بصورة تسلسلية محكمة ومحمية من التكرار.
+                                <span style={{ fontSize: '0.76rem', color: 'var(--muted)', lineHeight: '1.5' }}>
+                                    سيتم توليد الرقم الوظيفي الموحد (Unique ID) فورياً، وإنشاء ملف الموظف بحالة بانتظار التفعيل، وإرسال رابط دعوة إلى بريده الإلكتروني ({approvingReq.email}) عبر Google SMTP لاختيار اسم المستخدم وكلمة المرور.
                                 </span>
                             </label>
 
@@ -2110,7 +2320,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     onClick={handleApproveRequest}
                                     disabled={isActionLoading}
                                 >
-                                    {isActionLoading ? 'جارٍ الاعتماد والتسجيل...' : 'تأكيد الاعتماد وتعيين الكود'}
+                                    {isActionLoading ? 'جارٍ الاعتماد وإرسال الدعوة...' : 'قبول وإرسال الدعوة'}
                                 </button>
                             </div>
                         </div>
@@ -2170,6 +2380,147 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     style={{ background: '#dc2626', borderColor: '#dc2626' }}
                                 >
                                     {isActionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Cancel Invitation Modal */}
+            {cancellingReq && (
+                <div className="modal-backdrop" onClick={() => !isActionLoading && setCancellingReq(null)}>
+                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title-wrap">
+                                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }}>
+                                    <UserX size={18} />
+                                </div>
+                                <div>
+                                    <h3>إلغاء دعوة الموظف</h3>
+                                    <span className="modal-subtitle">{cancellingReq.fullName} ({cancellingReq.email})</span>
+                                </div>
+                            </div>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setCancellingReq(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{ padding: '20px' }}>
+                            <p style={{ fontSize: '0.9rem', lineHeight: '1.6', color: 'var(--ink)', margin: '0 0 12px 0' }}>
+                                هل أنت متأكد من إلغاء دعوة الموظف <strong>"{cancellingReq.fullName}"</strong>؟
+                            </p>
+                            <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: '1.5', margin: 0 }}>
+                                سيتم إبطال رابط الدعوة فورياً ووضع الحساب في حالة تعليق، مع الحفاظ على كافة السجلات والأكواد في قاعدة البيانات بصورة آمنة ودون حذف أي بيانات.
+                            </p>
+                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                                <button type="button" className="secondary-btn" onClick={() => setCancellingReq(null)} disabled={isActionLoading}>
+                                    تراجع
+                                </button>
+                                <button type="button" className="primary-btn" style={{ background: '#dc2626', borderColor: '#dc2626' }} onClick={handleConfirmCancelInvite} disabled={isActionLoading}>
+                                    {isActionLoading ? 'جارٍ الإلغاء...' : 'تأكيد إلغاء الدعوة'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Consistency Report Modal */}
+            {consistencyModalOpen && (
+                <div className="modal-backdrop" onClick={() => setConsistencyModalOpen(false)}>
+                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title-wrap">
+                                <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+                                    <ShieldCheck size={18} />
+                                </div>
+                                <div>
+                                    <h3>تقرير مطابقة وتكامل الهويات الوظيفية</h3>
+                                    <span className="modal-subtitle">فحص تشخيصي للقراءة فقط — لا يتم تعديل أو حذف أي سجلات</span>
+                                </div>
+                            </div>
+                            <button type="button" className="modal-close-btn" onClick={() => setConsistencyModalOpen(false)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{ padding: '20px', maxHeight: '70vh', overflowY: 'auto' }}>
+                            {consistencyLoading ? (
+                                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
+                                    جارٍ فحص ومطابقة جداول المصادقة والهويات...
+                                </div>
+                            ) : consistencyReport ? (
+                                <div style={{ display: 'grid', gap: '14px', fontSize: '0.88rem' }}>
+                                    <div style={{
+                                        padding: '12px 16px',
+                                        borderRadius: '8px',
+                                        background: consistencyReport.has_issues ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                        border: `1px solid ${consistencyReport.has_issues ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                    }}>
+                                        {consistencyReport.has_issues ? <ShieldAlert size={20} color="#d97706" /> : <CheckCircle2 size={20} color="#059669" />}
+                                        <div>
+                                            <strong>{consistencyReport.has_issues ? 'تم رصد حالات تباين تتطلب مراجعة الإدارة' : 'كافة الهويات متطابقة ومنتظمة بالكامل'}</strong>
+                                            <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                                تاريخ الفحص: {new Date(consistencyReport.generated_at).toLocaleString('ar-EG')}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                        <strong>حسابات Auth بدون سجل app_users:</strong>
+                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                            {consistencyReport.missing_app_users.length === 0
+                                                ? 'لا يوجد أي تباين (0)'
+                                                : `${consistencyReport.missing_app_users.length} حساب: ${consistencyReport.missing_app_users.map(u => u.email).join(', ')}`}
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                        <strong>سجلات app_users بدون حساب Auth:</strong>
+                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                            {consistencyReport.missing_auth_users.length === 0
+                                                ? 'لا يوجد أي تباين (0)'
+                                                : `${consistencyReport.missing_auth_users.length} سجل: ${consistencyReport.missing_auth_users.map(u => u.email).join(', ')}`}
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                        <strong>طلبات تسجيل معتمدة بدون إرسال دعوة:</strong>
+                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                            {consistencyReport.approved_without_invitation.length === 0
+                                                ? 'لا توجد طلبات معلقة بدون دعوة (0)'
+                                                : `${consistencyReport.approved_without_invitation.length} طلب: ${consistencyReport.approved_without_invitation.map(r => r.email).join(', ')}`}
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                        <strong>حسابات نشطة بدون اسم مستخدم:</strong>
+                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                            {consistencyReport.active_without_username.length === 0
+                                                ? 'جميع الحسابات النشطة تمتلك أسماء مستخدمين صحيحة (0)'
+                                                : `${consistencyReport.active_without_username.length} حساب`}
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                        <strong>عناوين بريد إلكتروني مكررة:</strong>
+                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                            {consistencyReport.duplicate_emails.length === 0
+                                                ? 'لا يوجد أي بريد إلكتروني مكرر (0)'
+                                                : `${consistencyReport.duplicate_emails.length} مكرر`}
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                                <button type="button" className="secondary-btn" onClick={() => setConsistencyModalOpen(false)}>
+                                    إغلاق التقرير
+                                </button>
+                                <button type="button" className="primary-btn" onClick={handleOpenConsistencyReport} disabled={consistencyLoading}>
+                                    <RefreshCw size={14} className={consistencyLoading ? 'animate-spin' : ''} /> إعادة الفحص
                                 </button>
                             </div>
                         </div>

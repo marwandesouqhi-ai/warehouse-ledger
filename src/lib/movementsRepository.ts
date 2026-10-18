@@ -153,7 +153,11 @@ export async function updateMovement(movement: FixtureMovement, _ownerId?: strin
     return movement
 }
 
-export async function deleteMovement(movementId: string | number, _ownerId?: string): Promise<void> {
+export async function deleteMovement(
+    movementId: string | number,
+    _ownerId?: string,
+    movementData?: Partial<FixtureMovement>
+): Promise<void> {
     if (!supabase) return
 
     const client = getClient()
@@ -167,5 +171,29 @@ export async function deleteMovement(movementId: string | number, _ownerId?: str
             .eq('id', movementId)
 
         if (error) throw error
+        return
     }
+
+    // Fallback deletion when movement was loaded without a UUID or by local fingerprint
+    if (movementData) {
+        try {
+            const fp = movementFingerprint(movementData as FixtureMovement)
+            const { error: fpError } = await client
+                .from('movements')
+                .delete()
+                .eq('fingerprint', fp)
+
+            if (!fpError) return
+        } catch {
+            // ignore fingerprint calc error and proceed to attribute fallback
+        }
+    }
+
+    // Attempt deletion by fingerprint matching idStr
+    const { error } = await client
+        .from('movements')
+        .delete()
+        .eq('fingerprint', idStr)
+
+    if (error) throw error
 }

@@ -85,10 +85,32 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
   }
 }
 
-export async function deleteUserFromCloud(id: string): Promise<void> {
+export async function deleteUserFromCloud(id: string, username?: string): Promise<void> {
   if (!supabase) return
   try {
-    await supabase.from('app_users').delete().eq('id', id)
+    // 1. Invoke admin-users Edge Function for clean Auth + Database cascade
+    try {
+      await supabase.functions.invoke('admin-users', {
+        body: {
+          action: 'delete_user',
+          userId: id,
+          username,
+        },
+      })
+    } catch (fnErr) {
+      console.warn('Edge function delete_user call error:', fnErr)
+    }
+
+    // 2. Direct hard delete from app_users table
+    const cleanUsername = username?.trim().toLowerCase()
+    if (cleanUsername) {
+      await supabase.from('app_users').delete().ilike('username', cleanUsername)
+      await supabase.from('user_invitations').delete().ilike('username', cleanUsername)
+      await supabase.from('telegram_user_sessions').delete().ilike('username', cleanUsername)
+    }
+    if (id) {
+      await supabase.from('app_users').delete().eq('id', id)
+    }
   } catch (err) {
     console.warn('Could not delete user from cloud:', err)
   }
@@ -510,11 +532,39 @@ export function deleteLocalUser(id: string): void {
 
   const next = users.filter((u) => u.id !== id)
   saveLocalUsers(next)
-  void deleteUserFromCloud(id)
+  void deleteUserFromCloud(id, target.username)
 
   void logAuditEvent({
-    action: `حذف مستخدم محلي: ${target.username}`,
+    action: `حذف مستخدم: ${target.username}`,
     entity_type: 'local_user',
+    details: { username: target.username, role: target.role },
+  })
+}
+
+export async function deleteUserPermanently(id: string): Promise<void> {
+  const users = loadLocalUsers()
+  const target = users.find((u) => u.id === id)
+  if (!target) return
+
+  const delCheck = canDeleteUser(target.username)
+  if (!delCheck.allowed) {
+    throw new Error(delCheck.reason || 'لا يمكن حذف هذا المستخدم المحمي.')
+  }
+
+  if (isLastActiveSystemAdmin(id, users)) {
+    throw new Error('لا يمكن حذف آخر مدير نظام نشط في المؤسسة دون تعيين مدير بديل أولاً.')
+  }
+
+  // 1. Await cloud deletion from auth and database
+  await deleteUserFromCloud(id, target.username)
+
+  // 2. Remove locally
+  const next = users.filter((u) => u.id !== id)
+  saveLocalUsers(next)
+
+  void logAuditEvent({
+    action: `حذف مستخدم نهائياً: ${target.username}`,
+    entity_type: 'user',
     details: { username: target.username, role: target.role },
   })
 }

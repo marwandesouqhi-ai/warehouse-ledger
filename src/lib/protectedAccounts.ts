@@ -88,14 +88,17 @@ export function isRootAdmin(usernameOrEmail: string | null | undefined): boolean
 /**
  * Validates whether a user can be deleted.
  */
-export function canDeleteUser(targetUsername: string): { allowed: boolean; reason?: string } {
+export function canDeleteUser(
+  targetUsername: string,
+  allowRootAdminDelete = false
+): { allowed: boolean; reason?: string } {
   if (isProtectedUsername(targetUsername)) {
     return {
       allowed: false,
       reason: 'حساب مدير النظام الرئيسي (marwan-desouky) محمي بشكل كامل ودائم، ولا يمكن حذفه نهائياً من النظام.',
     }
   }
-  if (isRootAdmin(targetUsername)) {
+  if (!allowRootAdminDelete && isRootAdmin(targetUsername)) {
     return {
       allowed: false,
       reason: 'حساب المشرف الرئيسي (admin) محمي من الحذف.',

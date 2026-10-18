@@ -41,6 +41,9 @@ export type RegistrationRequest = {
   reviewedBy?: string
   reviewedAt?: string
   rejectionReason?: string
+  invitationStatus?: 'pending' | 'sent' | 'failed' | 'accepted' | 'cancelled'
+  invitationSentAt?: string
+  invitationSentBy?: string
   createdAt: string
   updatedAt: string
 }
@@ -213,4 +216,77 @@ export function canReviewRegistration(
   }
 
   return false
+}
+
+/**
+ * Standard reserved usernames that cannot be claimed by employees.
+ */
+export const RESERVED_USERNAMES = Object.freeze([
+  'admin',
+  'root',
+  'system',
+  'support',
+  'marwan-desouky',
+  'marwandesouqhi@gmail.com',
+])
+
+/**
+ * Validates a candidate username according to employee activation rules:
+ * - 3–30 chars
+ * - lowercase letters, digits, '.', '_', '-'
+ * - must start with a letter or digit
+ * - not an email (@)
+ * - not an employee-code pattern (WH-..., PUR-..., SYS-..., EMP-..., ADM-...)
+ * - not in reserved list
+ */
+import { isProtectedUsername, isRootAdmin } from './protectedAccounts'
+
+export function validateChosenUsername(username: string | null | undefined): { valid: boolean; error?: string } {
+  if (!username) {
+    return { valid: false, error: 'اسم المستخدم مطلوب.' }
+  }
+
+  const clean = username.trim().toLowerCase()
+
+  if (RESERVED_USERNAMES.includes(clean) || isProtectedUsername(clean) || isRootAdmin(clean)) {
+    return { valid: false, error: 'اسم المستخدم محجوز لنظام إدارة الخادم ولا يمكن استخدامه.' }
+  }
+
+  if (clean.includes('@')) {
+    return { valid: false, error: 'اسم المستخدم يجب ألا يكون بريداً إلكترونياً.' }
+  }
+
+  if (clean.length < 3 || clean.length > 30) {
+    return { valid: false, error: 'اسم المستخدم يجب أن يتكون من 3 إلى 30 حرفاً.' }
+  }
+
+  if (!/^[a-z0-9._-]+$/.test(clean)) {
+    return { valid: false, error: 'اسم المستخدم يمكن أن يحتوي فقط على أحرف إنجليزية صغيرة وأرقام والنقطة والشرطة (- _ .).' }
+  }
+
+  if (!/^[a-z0-9]/.test(clean)) {
+    return { valid: false, error: 'اسم المستخدم يجب أن يبدأ بحرف إنجليزي أو رقم.' }
+  }
+
+  if (/^(wh|pur|sys|emp|adm)-/i.test(clean) || /^[a-z]{2,3}-[a-z]{3}-\d{4,6}$/i.test(clean)) {
+    return { valid: false, error: 'اسم المستخدم لا يمكن أن يطابق نمط الأكواد الوظيفية.' }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validates candidate password for account activation:
+ * Minimum 10 characters length, sensible complexity.
+ */
+export function validateChosenPassword(password: string | null | undefined): { valid: boolean; error?: string } {
+  if (!password) {
+    return { valid: false, error: 'كلمة المرور مطلوبة.' }
+  }
+
+  if (password.length < 10) {
+    return { valid: false, error: 'كلمة المرور يجب ألا تقل عن 10 أحرف ورموز لضمان أمان الحساب.' }
+  }
+
+  return { valid: true }
 }
