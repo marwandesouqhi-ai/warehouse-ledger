@@ -391,44 +391,53 @@ function App() {
     'مستخدم'
   )
 
-  const dynamicNavItems = useMemo(() => {
-    const items = [
+  const navSections = useMemo(() => {
+    const sections: Array<{
+      id: string
+      title: string
+      items: Array<{ to: string; label: string; mark: string; icon: typeof LayoutDashboard }>
+    }> = []
+
+    const warehouseItems = [
       { to: '/', label: 'الرئيسية (التحليلات)', mark: '', icon: LayoutDashboard },
     ]
-
     if (canViewPage(session, 'custody')) {
-      items.push({ to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 })
+      warehouseItems.push({ to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 })
     }
-
-    if (canViewPage(session, 'purchases')) {
-      items.push({ to: '/purchases', label: 'المشتريات والتوريدات', mark: '', icon: ShoppingCart })
-    }
-
     if (canViewPage(session, 'reports')) {
-      items.push({ to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet })
+      warehouseItems.push({ to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet })
     }
-
     if (canViewPage(session, 'imports')) {
-      items.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
+      warehouseItems.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
     }
-
     if (canViewPage(session, 'quality')) {
-      items.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues} تنبيه` : '', icon: ShieldAlert })
+      warehouseItems.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues} تنبيه` : '', icon: ShieldAlert })
+    }
+    sections.push({ id: 'warehouse', title: 'إدارة المخزن والتشغيل', items: warehouseItems })
+
+    const procurementItems = []
+    if (canViewPage(session, 'purchases')) {
+      procurementItems.push({ to: '/purchases', label: 'المشتريات والتوريدات', mark: '', icon: ShoppingCart })
+    }
+    if (procurementItems.length > 0) {
+      sections.push({ id: 'procurement', title: 'المشتريات والتوريدات', items: procurementItems })
     }
 
+    const adminItems = []
     if (canViewPage(session, 'audit')) {
-      items.push({ to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History })
+      adminItems.push({ to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History })
     }
-
     if (canViewPage(session, 'users')) {
-      items.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
+      adminItems.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
     }
-
     if (canViewPage(session, 'settings')) {
-      items.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
+      adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
+    }
+    if (adminItems.length > 0) {
+      sections.push({ id: 'admin', title: 'الإدارة والأمان', items: adminItems })
     }
 
-    return items
+    return sections
   }, [totalQualityIssues, session])
 
   const stockStatusConfig = useMemo(() => {
@@ -1280,7 +1289,8 @@ function App() {
 
   return (
     <div className="app-shell" dir="rtl">
-      <aside className="sidebar">
+      <a href="#main-content" className="skip-link">تخطي إلى المحتوى الرئيسي</a>
+      <aside className="sidebar" aria-label="شريط التنقل الجانبي">
         <div>
           <div className="brand-wrap">
             <div className="brand-mark">
@@ -1305,12 +1315,17 @@ function App() {
           </div>
 
           <nav className="nav" aria-label="التنقل الرئيسي">
-            {dynamicNavItems.map(({ to, label, mark, icon: Icon }) => (
-              <NavLink key={to} to={to} title={label} aria-label={label} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Icon size={21} strokeWidth={2.1} aria-hidden="true" />
-                <span className="nav-label">{label}</span>
-                {mark ? <small className="nav-badge">{mark}</small> : null}
-              </NavLink>
+            {navSections.map((section) => (
+              <div key={section.id} className="nav-section">
+                <div className="nav-section-title">{section.title}</div>
+                {section.items.map(({ to, label, mark, icon: Icon }) => (
+                  <NavLink key={to} to={to} title={label} aria-label={label} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Icon size={20} strokeWidth={2.1} aria-hidden="true" />
+                    <span className="nav-label">{label}</span>
+                    {mark ? <small className="nav-badge">{mark}</small> : null}
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </nav>
         </div>
@@ -1343,7 +1358,7 @@ function App() {
         )}
       </aside>
 
-      <main className="main-panel">
+      <main id="main-content" className="main-panel">
         <header className="topbar">
           <div className="topbar-meta">
             <div className="eyebrow">
@@ -1380,18 +1395,10 @@ function App() {
               {searchTerm && (
                 <button
                   type="button"
+                  className="toolbar-search-clear-btn"
                   onClick={() => setSearchTerm('')}
                   title="مسح البحث"
                   aria-label="مسح البحث"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--muted)',
-                    padding: '2px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
                 >
                   <X size={14} />
                 </button>
@@ -1409,11 +1416,10 @@ function App() {
                 </span>
                 <button
                   type="button"
-                  className="secondary-btn"
+                  className="secondary-btn topbar-logout-btn"
                   onClick={signOut}
                   title="تسجيل الخروج"
                   aria-label="تسجيل الخروج"
-                  style={{ padding: '5px 8px', borderRadius: '10px' }}
                 >
                   <LogOut size={16} />
                 </button>
