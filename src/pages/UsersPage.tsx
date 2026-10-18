@@ -795,34 +795,24 @@ export default function UsersPage({ session }: UsersPageProps) {
         return (
             <section className="page-stack users-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)' }}>
+                    <div className="page-intro-icon modal-icon-danger">
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad, #ef4444)' }}>منطقة إدارة مقيدة</p>
+                        <p className="eyebrow text-bad">منطقة إدارة مقيدة</p>
                         <h2>المستخدمون والصلاحيات</h2>
                         <p>خاص ومقتصر على مدير النظام (System Admin) ومدراء الأقسام المصرح لهم.</p>
                     </div>
                 </header>
 
-                <div className="card-surface" style={{ textAlign: 'center', padding: '48px 24px', maxWidth: '600px', margin: '30px auto', borderRadius: '14px' }}>
-                    <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '16px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--bad, #ef4444)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 18px',
-                    }}>
+                <div className="card-surface users-restricted-panel">
+                    <div className="users-restricted-icon-box">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                    <h3 className="modal-lead-text" style={{ fontSize: '1.25rem' }}>
                         صلاحية وصول مقيدة لمدير النظام فقط
                     </h3>
-                    <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+                    <p className="text-muted" style={{ margin: '0 0 24px 0', lineHeight: '1.6' }}>
                         عذراً، إدارة المستخدمين والاطلاع على حساباتهم وتغيير كلمات المرور مخصصة حصرياً لحسابات <strong>مدير النظام (System Administrator)</strong> لحماية سرية وأمان الحسابات.
                     </p>
                 </div>
@@ -844,12 +834,12 @@ export default function UsersPage({ session }: UsersPageProps) {
             </header>
 
             {/* KPI Summary Block */}
-            <div className="kpi-block" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+            <div className="kpi-block users-kpi-container">
                 <div className="kpi-item tone-primary">
                     <span className="kpi-icon"><UsersRound size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">إجمالي الموظفين</span>
-                        <strong className="kpi-val">{visibleLocalUsers.length}</strong>
+                        <strong className="kpi-val tabular-nums">{visibleLocalUsers.length}</strong>
                         <span className="kpi-sub">حسابات مسجلة بالنظام</span>
                     </div>
                 </div>
@@ -858,16 +848,16 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <span className="kpi-icon"><UserCheck size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">الحسابات المفعلة</span>
-                        <strong className="kpi-val">{activeUsersCount}</strong>
+                        <strong className="kpi-val tabular-nums">{activeUsersCount}</strong>
                         <span className="kpi-sub">حسابات نشطة وجاهزة للدخول</span>
                     </div>
                 </div>
 
-                <div className="kpi-item tone-warn" style={{ cursor: 'pointer' }} onClick={() => setMainTab('requests')}>
+                <div className="kpi-item tone-warn" onClick={() => setMainTab('requests')} role="button" tabIndex={0} aria-label="عرض طلبات تيليجرام بانتظار الاعتماد">
                     <span className="kpi-icon"><Send size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">طلبات تيليجرام بانتظار الاعتماد</span>
-                        <strong className="kpi-val" style={{ color: pendingRequestsCount > 0 ? '#ef4444' : 'inherit' }}>
+                        <strong className={`kpi-val tabular-nums ${pendingRequestsCount > 0 ? 'text-danger' : ''}`}>
                             {pendingRequestsCount}
                         </strong>
                         <span className="kpi-sub">اضغط لعرض الطلبات واعتمادها</span>
@@ -878,7 +868,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <span className="kpi-icon"><ShieldCheck size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">صلاحية حسابك الحالي</span>
-                        <strong className="kpi-val" style={{ fontSize: '1.05rem', whiteSpace: 'nowrap' }}>
+                        <strong className="kpi-val">
                             {isSystemAdmin ? 'مدير النظام (Admin)' : 'مستخدم مسجل'}
                         </strong>
                         <span className="kpi-sub">{currentSession?.user?.email ?? 'غير مسجل'}</span>
@@ -889,14 +879,20 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Action Feedback Banner */}
             {actionFeedback && (
                 <div
-                    className={`inline-message ${actionFeedback.type === 'success' ? 'success' : 'error'}`}
-                    style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    className={`inline-message users-alert-banner ${actionFeedback.type === 'success' ? 'success' : 'error'}`}
+                    role="alert"
                 >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="users-alert-content">
                         {actionFeedback.type === 'success' ? <CheckCircle2 size={18} /> : <ShieldAlert size={18} />}
                         <span>{actionFeedback.message}</span>
                     </div>
-                    <button type="button" onClick={() => setActionFeedback(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>
+                    <button
+                        type="button"
+                        onClick={() => setActionFeedback(null)}
+                        className="users-icon-action-btn"
+                        aria-label="إغلاق التنبيه"
+                        title="إغلاق"
+                    >
                         <X size={16} />
                     </button>
                 </div>
@@ -942,7 +938,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <Send size={16} />
                     <span>طلبات التسجيل (تيليجرام)</span>
                     {pendingRequestsCount > 0 ? (
-                        <span className="badge-pill" style={{ background: '#ef4444', color: '#fff' }}>
+                        <span className="badge-pill users-tag-pill-danger">
                             {pendingRequestsCount} جديد
                         </span>
                     ) : (
@@ -964,33 +960,30 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             {/* Tab: Add New Employee Directly */}
             {mainTab === 'add_employee' && isSystemAdmin && (
-                <div className="card-surface settings-section" style={{ padding: '26px', marginBottom: '24px', borderRadius: '14px', border: '1px solid var(--line)' }}>
-                    <div className="section-head" style={{ marginBottom: '20px', borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                            <div>
-                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.12rem', margin: 0 }}>
-                                    <UserPlus size={20} color="var(--accent)" />
-                                    إضافة وتعيين موظف جديد مباشرة
-                                </h3>
-                                <span style={{ display: 'block', marginTop: '4px', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                                    إنشاء حساب موظف جديد باسم مستخدم، قسم، دور وظيفي، كلمة مرور، وتوليد كود التفعيل
-                                </span>
-                            </div>
-                            <button
-                                type="button"
-                                className="secondary-btn"
-                                onClick={() => setMainTab('employees')}
-                                style={{ height: '36px', padding: '0 16px', fontSize: '0.84rem' }}
-                            >
-                                العودة لدليل الموظفين
-                            </button>
+                <div className="card-surface settings-section users-section-panel">
+                    <div className="users-panel-head">
+                        <div>
+                            <h3 className="users-panel-title">
+                                <UserPlus size={20} color="var(--accent)" />
+                                إضافة وتعيين موظف جديد مباشرة
+                            </h3>
+                            <span className="users-panel-desc">
+                                إنشاء حساب موظف جديد باسم مستخدم، قسم، دور وظيفي، كلمة مرور، وتوليد كود التفعيل
+                            </span>
                         </div>
+                        <button
+                            type="button"
+                            className="secondary-btn users-icon-action-btn"
+                            onClick={() => setMainTab('employees')}
+                        >
+                            العودة لدليل الموظفين
+                        </button>
                     </div>
 
-                    <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <form onSubmit={handleAddUser} className="users-form-col">
                         <div className="user-form-grid">
                             <label className="user-field-group">
-                                <span>اسم المستخدم (Username) <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <span>اسم المستخدم (Username) <span className="req-star">*</span></span>
                                 <input
                                     type="text"
                                     value={newUsername}
@@ -1013,7 +1006,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </label>
 
                             <label className="user-field-group">
-                                <span>القسم التابع له <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <span>القسم التابع له <span className="req-star">*</span></span>
                                 <select
                                     value={newDepartment}
                                     onChange={(e) => setNewDepartment(e.target.value as any)}
@@ -1026,7 +1019,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </label>
 
                             <label className="user-field-group">
-                                <span>الدور والصلاحية في النظام <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <span>الدور والصلاحية في النظام <span className="req-star">*</span></span>
                                 <select
                                     value={newRole}
                                     onChange={(e) => setNewRole(e.target.value as UserRole)}
@@ -1052,28 +1045,17 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                             <label className="user-field-group">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                    <span>كلمة المرور <span className="req-star">*</span></span>
                                     <button
                                         type="button"
                                         onClick={generateRandomPassword}
-                                        style={{
-                                            background: 'rgba(14, 124, 134, 0.1)',
-                                            border: '1px solid rgba(14, 124, 134, 0.25)',
-                                            borderRadius: '6px',
-                                            color: 'var(--accent)',
-                                            cursor: 'pointer',
-                                            fontSize: '0.78rem',
-                                            fontWeight: 600,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            padding: '2px 8px'
-                                        }}
+                                        className="text-link-btn"
+                                        style={{ fontSize: '0.78rem' }}
                                     >
                                         <Sparkles size={13} /> توليد عشوائي
                                     </button>
                                 </div>
-                                <div style={{ position: 'relative', width: '100%' }}>
+                                <div className="users-input-wrapper">
                                     <input
                                         type={showNewPassword ? 'text' : 'password'}
                                         value={newPassword}
@@ -1081,25 +1063,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         placeholder="أدخل كلمة المرور"
                                         required
                                         className="user-field-input"
-                                        style={{ paddingRight: '12px', paddingLeft: '40px' }}
+                                        style={{ paddingInlineStart: '12px', paddingInlineEnd: '40px' }}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowNewPassword(!showNewPassword)}
-                                        style={{
-                                            position: 'absolute',
-                                            left: '10px',
-                                            top: '50%',
-                                            transform: 'translateY(-50%)',
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            color: 'var(--muted)',
-                                            padding: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center'
-                                        }}
+                                        className="users-pw-toggle-btn"
                                         title={showNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                        aria-label={showNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                     >
                                         {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
@@ -1107,21 +1078,13 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </label>
                         </div>
 
-                        <div style={{
-                            background: 'var(--panel, rgba(14, 124, 134, 0.04))',
-                            padding: '16px 20px',
-                            borderRadius: '10px',
-                            border: '1px solid var(--line)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '10px'
-                        }}>
-                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)' }}>
+                        <div className="users-extra-perms-box">
+                            <span className="users-extra-perms-title">
                                 صلاحيات استثنائية إضافية:
                             </span>
-                            <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap' }}>
+                            <div className="users-checkbox-row">
                                 {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
-                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.86rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                    <label key={p} className="users-checkbox-item">
                                         <input
                                             type="checkbox"
                                             checked={newPermissions.includes(p)}
@@ -1129,7 +1092,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                 if (e.target.checked) setNewPermissions([...newPermissions, p])
                                                 else setNewPermissions(newPermissions.filter(x => x !== p))
                                             }}
-                                            style={{ accentColor: 'var(--accent)', width: '16px', height: '16px' }}
+                                            className="users-checkbox-input"
                                         />
                                         <span>{PERMISSION_LABELS[p]}</span>
                                     </label>
@@ -1137,15 +1100,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-                            <button type="submit" className="primary-btn" style={{ height: '44px', padding: '0 26px', fontSize: '0.92rem', fontWeight: 600 }}>
+                        <div className="users-btn-submit-row">
+                            <button type="submit" className="primary-btn">
                                 <UserPlus size={17} /> حفظ وتفعيل الموظف
                             </button>
                             <button
                                 type="button"
                                 className="secondary-btn"
                                 onClick={() => setMainTab('employees')}
-                                style={{ height: '44px', padding: '0 20px', fontSize: '0.88rem' }}
                             >
                                 إلغاء
                             </button>
@@ -1153,17 +1115,16 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </form>
 
                     {addSuccess && (
-                        <div className="inline-message success" role="status" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="inline-message success" role="status">
+                            <div className="users-alert-content">
                                 <CheckCircle2 size={18} />
                                 <span>{addSuccess}</span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div className="users-alert-actions">
                                 <button
                                     type="button"
                                     className="text-link-btn"
                                     onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
-                                    style={{ fontSize: '0.82rem' }}
                                 >
                                     <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
                                 </button>
@@ -1171,7 +1132,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     type="button"
                                     className="primary-btn"
                                     onClick={() => setMainTab('employees')}
-                                    style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem' }}
                                 >
                                     عرض في دليل الموظفين
                                 </button>
@@ -1180,7 +1140,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                     )}
 
                     {addError && (
-                        <div className="inline-message error" role="alert" style={{ marginTop: '16px' }}>
+                        <div className="inline-message error" role="alert">
                             {addError}
                         </div>
                     )}
@@ -1189,22 +1149,24 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             {/* Tab 1: Employee Directory */}
             {mainTab === 'employees' && (
-                <div className="card-surface settings-section" style={{ padding: '20px' }}>
-                    <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                <div className="card-surface users-section-card">
+                    <div className="users-section-head">
                         <div>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3 className="users-section-title">
                                 <UsersRound size={19} color="var(--accent)" />
                                 دليل الموظفين والحسابات المسجلة
                             </h3>
-                            <span>قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
+                            <span className="users-section-subtitle">قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
                         </div>
 
                         {/* Search & Actions */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div className="users-filter-row">
+                            <div className="users-filter-group">
                                 <select
                                     value={deptFilter}
                                     onChange={(e) => setDeptFilter(e.target.value)}
-                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب القسم"
                                 >
                                     <option value="all">كل الأقسام</option>
                                     <option value="المخازن">المخازن</option>
@@ -1215,7 +1177,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={roleFilter}
                                     onChange={(e) => setRoleFilter(e.target.value)}
-                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب الصلاحية"
                                 >
                                     <option value="all">كل الصلاحيات</option>
                                     {ASSIGNABLE_ROLES.map((r) => (
@@ -1226,7 +1189,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب حالة الحساب"
                                 >
                                     <option value="all">كل الحالات</option>
                                     <option value="active">نشط ومفعل</option>
@@ -1234,20 +1198,21 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <option value="suspended">موقوف مؤقتاً</option>
                                 </select>
 
-                                <div style={{ position: 'relative', minWidth: '220px' }}>
+                                <div className="toolbar-search">
                                     <input
                                         type="search"
                                         placeholder="بحث بالاسم، الكود، المعرف..."
                                         value={userSearchTerm}
                                         onChange={(e) => setUserSearchTerm(e.target.value)}
-                                        style={{ width: '100%', padding: '8px 32px 8px 10px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
+                                        aria-label="بحث في دليل الموظفين"
                                     />
-                                    <Search size={15} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
+                                    <Search size={15} />
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div className="table-scroll-container">
+                    <div className="table-responsive">
                             <table className="custody-table">
                                 <thead>
                                     <tr>
@@ -1265,90 +1230,65 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <tbody>
                                     {filteredUsers.length === 0 ? (
                                         <tr>
-                                            <td colSpan={isSystemAdmin ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
+                                            <td colSpan={isSystemAdmin ? 9 : 8} className="empty-message-cell">
                                                 لا توجد حسابات موظفين مطابقة للبحث أو الفلتر
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredUsers.map((user, idx) => (
                                             <tr key={user.id}>
-                                                <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
+                                                <td className="tabular-nums text-muted">{idx + 1}</td>
                                                 <td>
                                                     {user.employeeId ? (
-                                                        <span style={{
-                                                            fontFamily: 'monospace',
-                                                            fontWeight: 700,
-                                                            fontSize: '0.86rem',
-                                                            padding: '2px 8px',
-                                                            borderRadius: '6px',
-                                                            background: 'rgba(14, 124, 134, 0.08)',
-                                                            color: 'var(--accent)',
-                                                            border: '1px solid rgba(14, 124, 134, 0.2)',
-                                                            display: 'inline-block',
-                                                            direction: 'ltr',
-                                                        }}>
+                                                        <span className="users-unique-id">
                                                             {formatEmployeeId(user.employeeId)}
                                                         </span>
                                                     ) : (
-                                                        <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>—</span>
+                                                        <span className="text-muted">—</span>
                                                     )}
                                                 </td>
                                                 <td>
-                                                    <strong style={{ direction: 'ltr', display: 'inline-block', color: 'var(--ink)', fontSize: '0.92rem' }}>
+                                                    <strong className="user-username-label">
                                                         {user.username}
                                                     </strong>
                                                     {(user.username === currentSession?.user?.email || user.username === activeUserEmail) && (
-                                                        <span style={{ marginRight: '6px', fontSize: '0.72rem', background: 'var(--accent-wash)', color: 'var(--accent)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                                        <span className="badge badge--info self-badge">
                                                             أنت
                                                         </span>
                                                     )}
                                                 </td>
                                                 <td>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                        <span style={{ fontWeight: 500 }}>{user.displayName || '—'}</span>
+                                                    <div className="user-name-email-wrap">
+                                                        <span className="user-fullname">{user.displayName || '—'}</span>
                                                         {user.email && (
-                                                            <span style={{ fontSize: '0.76rem', color: 'var(--muted)', direction: 'ltr', textAlign: 'right' }}>
+                                                            <span className="user-email-text">
                                                                 {user.email}
                                                             </span>
                                                         )}
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 500 }}>
+                                                    <div className="user-dept-role-wrap">
+                                                        <span className="users-dept-chip">
                                                             {user.department || 'المخازن'}
                                                         </span>
-                                                        <span style={{
-                                                            fontSize: '0.78rem',
-                                                            padding: '3px 8px',
-                                                            borderRadius: '6px',
-                                                            fontWeight: 600,
-                                                            background: (user.role === 'system_admin' || user.role === 'admin')
-                                                                ? 'rgba(14, 124, 134, 0.12)'
-                                                                : (user.role === 'warehouse_staff' || user.role === 'editor' || user.role === 'warehouse_employee' || user.role === 'warehouse_admin')
-                                                                    ? 'rgba(59, 130, 246, 0.12)'
-                                                                    : 'rgba(16, 185, 129, 0.12)',
-                                                            color: (user.role === 'system_admin' || user.role === 'admin')
-                                                                ? 'var(--accent)'
-                                                                : (user.role === 'warehouse_staff' || user.role === 'editor' || user.role === 'warehouse_employee' || user.role === 'warehouse_admin')
-                                                                    ? '#2563eb'
-                                                                    : '#059669',
-                                                        }}>
+                                                        <span className="users-role-chip">
                                                             {ROLE_LABELS[user.role as EffectiveRole] || user.role}
                                                         </span>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 0, 0, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
-                                                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.88rem', color: 'var(--ink)' }}>
+                                                    <div className="pin-display-wrap">
+                                                        <span className="tabular-nums font-mono">
                                                             {user.activationCode || '—'}
                                                         </span>
                                                         {user.activationCode && (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => copyToClipboard(user.activationCode)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '2px', display: 'flex' }}
+                                                                className="users-icon-action-btn"
                                                                 title="نسخ كود التفعيل"
+                                                                aria-label="نسخ كود التفعيل"
                                                             >
                                                                 <Copy size={13} />
                                                             </button>
@@ -1356,27 +1296,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <span style={{
-                                                        fontSize: '0.78rem',
-                                                        padding: '3px 9px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: user.status === 'active'
-                                                            ? 'rgba(16, 185, 129, 0.12)'
-                                                            : user.status === 'suspended'
-                                                                ? 'rgba(239, 68, 68, 0.12)'
-                                                                : 'rgba(245, 158, 11, 0.14)',
-                                                        color: user.status === 'active'
-                                                            ? '#059669'
-                                                            : user.status === 'suspended'
-                                                                ? '#dc2626'
-                                                                : '#d97706',
-                                                        border: `1px solid ${user.status === 'active'
-                                                            ? 'rgba(16, 185, 129, 0.25)'
-                                                            : user.status === 'suspended'
-                                                                ? 'rgba(239, 68, 68, 0.25)'
-                                                                : 'rgba(245, 158, 11, 0.3)'}`,
-                                                    }}>
+                                                    <span className={`badge ${user.status === 'active' ? 'badge--ok' : user.status === 'suspended' ? 'badge--bad' : 'badge--warn'}`}>
                                                         {user.status === 'active'
                                                             ? 'نشط مفعل'
                                                             : user.status === 'suspended'
@@ -1384,7 +1304,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 : 'بانتظار التفعيل'}
                                                     </span>
                                                 </td>
-                                                <td style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                                <td className="tabular-nums text-muted">
                                                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString('ar-EG') : '—'}
                                                 </td>
                                                 {isSystemAdmin && (
@@ -1395,7 +1315,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 className="action-icon-btn edit-btn"
                                                                 onClick={() => handleOpenChangePassword(user)}
                                                                 title="تغيير كلمة المرور لهذا المستخدم"
-                                                                style={{ color: '#0e7c86' }}
+                                                                aria-label={`تغيير كلمة المرور للمستخدم ${user.username}`}
                                                             >
                                                                 <KeyRound size={15} />
                                                             </button>
@@ -1404,6 +1324,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 className="action-icon-btn edit-btn"
                                                                 onClick={() => handleOpenEdit(user)}
                                                                 title="تعديل المستخدم وكود التفعيل"
+                                                                aria-label={`تعديل المستخدم ${user.username}`}
                                                             >
                                                                 <Edit2 size={15} />
                                                             </button>
@@ -1420,7 +1341,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                         }
                                                                     }}
                                                                     title="إرسال رابط تعيين أو استعادة كلمة المرور للبريد الإلكتروني"
-                                                                    style={{ color: '#2563eb' }}
+                                                                    aria-label={`إرسال رابط تعيين كلمة المرور للمستخدم ${user.username}`}
                                                                 >
                                                                     <Send size={15} />
                                                                 </button>
@@ -1428,7 +1349,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                             {!isProtectedUsername(user.username) && (
                                                                 <button
                                                                     type="button"
-                                                                    className="action-icon-btn"
+                                                                    className={`action-icon-btn ${user.status === 'suspended' ? 'text-ok' : 'text-warn'}`}
                                                                     onClick={() => {
                                                                         if (user.status === 'suspended') {
                                                                             void handleSetStatus(user, 'active')
@@ -1437,7 +1358,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                         }
                                                                     }}
                                                                     title={user.status === 'suspended' ? 'إعادة تنشيط الحساب' : 'تعليق وإيقاف الحساب'}
-                                                                    style={{ color: user.status === 'suspended' ? '#059669' : '#d97706' }}
+                                                                    aria-label={user.status === 'suspended' ? `إعادة تنشيط حساب ${user.username}` : `تعليق حساب ${user.username}`}
                                                                 >
                                                                     {user.status === 'suspended' ? <UserCheck size={15} /> : <UserX size={15} />}
                                                                 </button>
@@ -1448,21 +1369,13 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                     className="action-icon-btn delete-btn"
                                                                     onClick={() => setDeletingUser(user)}
                                                                     title="حذف المستخدم"
+                                                                    aria-label={`حذف المستخدم ${user.username}`}
                                                                 >
                                                                     <Trash2 size={15} />
                                                                 </button>
                                                             ) : (
                                                                 <span
-                                                                    style={{
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        width: '28px',
-                                                                        height: '28px',
-                                                                        borderRadius: '6px',
-                                                                        background: 'rgba(14, 124, 134, 0.12)',
-                                                                        color: 'var(--accent)',
-                                                                    }}
+                                                                    className="users-protected-badge"
                                                                     title="حساب محمي بشكل دائم ضد الحذف"
                                                                 >
                                                                     <ShieldCheck size={16} />
@@ -1482,96 +1395,91 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             {/* Tab 2: Telegram Registration Requests */}
             {mainTab === 'requests' && (
-                <div className="card-surface settings-section" style={{ padding: '20px' }}>
-                    <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                <div className="card-surface users-section-card">
+                    <div className="users-section-head">
                         <div>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3 className="users-section-title">
                                 <Send size={19} color="var(--accent)" />
                                 طلبات التسجيل الواردة عبر بوت تيليجرام
                             </h3>
-                            <span>مراجعة بيانات الموظفين المتقدمين، التحقق من البريد الإلكتروني، والاعتماد وتخصيص كود فريد</span>
+                            <span className="users-section-subtitle">مراجعة بيانات الموظفين المتقدمين، التحقق من البريد الإلكتروني، والاعتماد وتخصيص كود فريد</span>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                            <select
-                                value={requestStatusFilter}
-                                onChange={(e) => setRequestStatusFilter(e.target.value)}
-                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
-                            >
-                                <option value="all">كل الحالات ({registrationRequests.length})</option>
-                                <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
-                                <option value="approved">المعتمدة</option>
-                                <option value="rejected">المرفوضة</option>
-                                <option value="cancelled">الملغاة</option>
-                            </select>
+                        <div className="users-filter-row">
+                            <div className="users-filter-group">
+                                <select
+                                    value={requestStatusFilter}
+                                    onChange={(e) => setRequestStatusFilter(e.target.value)}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب حالة الطلب"
+                                >
+                                    <option value="all">كل الحالات ({registrationRequests.length})</option>
+                                    <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
+                                    <option value="approved">المعتمدة</option>
+                                    <option value="rejected">المرفوضة</option>
+                                    <option value="cancelled">الملغاة</option>
+                                </select>
 
-                            <select
-                                value={requestDeptFilter}
-                                onChange={(e) => setRequestDeptFilter(e.target.value)}
-                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
-                            >
-                                <option value="all">كل الأقسام</option>
-                                <option value="المخازن">المخازن</option>
-                                <option value="المشتريات">المشتريات</option>
-                            </select>
+                                <select
+                                    value={requestDeptFilter}
+                                    onChange={(e) => setRequestDeptFilter(e.target.value)}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب القسم"
+                                >
+                                    <option value="all">كل الأقسام</option>
+                                    <option value="المخازن">المخازن</option>
+                                    <option value="المشتريات">المشتريات</option>
+                                </select>
 
-                            <select
-                                value={requestRoleFilter}
-                                onChange={(e) => setRequestRoleFilter(e.target.value)}
-                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.84rem' }}
-                            >
-                                <option value="all">كل الأدوار المطلوبة</option>
-                                <option value="warehouse_employee">موظف مخازن</option>
-                                <option value="warehouse_admin">مدير مخازن</option>
-                                <option value="procurement_employee">موظف مشتريات</option>
-                                <option value="procurement_admin">مدير مشتريات</option>
-                            </select>
+                                <select
+                                    value={requestRoleFilter}
+                                    onChange={(e) => setRequestRoleFilter(e.target.value)}
+                                    className="user-field-input"
+                                    aria-label="تصفية حسب الدور المطلوب"
+                                >
+                                    <option value="all">كل الأدوار المطلوبة</option>
+                                    <option value="warehouse_employee">موظف مخازن</option>
+                                    <option value="warehouse_admin">مدير مخازن</option>
+                                    <option value="procurement_employee">موظف مشتريات</option>
+                                    <option value="procurement_admin">مدير مشتريات</option>
+                                </select>
 
-                            <button
-                                type="button"
-                                className="secondary-btn"
-                                onClick={() => void loadRequests()}
-                                disabled={requestsLoading}
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '0.84rem' }}
-                            >
-                                <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
-                                تحديث
-                            </button>
-
-                            {isSystemAdmin && (
                                 <button
                                     type="button"
-                                    className="secondary-btn"
-                                    onClick={() => void handleOpenConsistencyReport()}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '0.84rem' }}
-                                    title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
+                                    className="secondary-btn users-icon-action-btn"
+                                    onClick={() => void loadRequests()}
+                                    disabled={requestsLoading}
+                                    aria-label="تحديث قائمة الطلبات"
                                 >
-                                    <ShieldCheck size={14} color="var(--accent)" />
-                                    تقرير تكامل الهويات
+                                    <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
+                                    تحديث
                                 </button>
-                            )}
+
+                                {isSystemAdmin && (
+                                    <button
+                                        type="button"
+                                        className="secondary-btn users-icon-action-btn"
+                                        onClick={() => void handleOpenConsistencyReport()}
+                                        title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
+                                        aria-label="تقرير مطابقة وتكامل الهويات الوظيفية"
+                                    >
+                                        <ShieldCheck size={14} color="var(--accent)" />
+                                        تقرير تكامل الهويات
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     {/* Delegation Control Banner */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '14px 18px',
-                        background: 'var(--panel, rgba(255,255,255,0.03))',
-                        border: '1px solid var(--line)',
-                        borderRadius: '10px',
-                        marginBottom: '16px',
-                        gap: '12px',
-                    }}>
+                    <div className="users-delegation-banner">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <ShieldCheck size={20} color="var(--accent)" />
                             <div>
-                                <strong style={{ fontSize: '0.9rem', display: 'block', color: 'var(--ink)' }}>
+                                <strong className="modal-lead-text" style={{ margin: 0 }}>
                                     تفويض مراجعة واعتماد طلبات الموظفين لمدراء الأقسام
                                 </strong>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                <span className="modal-help-text">
                                     {deptDelegationEnabled
                                         ? 'مفعّل: يحق لمدير القسم مراجعة واعتماد موظفي قسمه فقط وتخصيص أكوادهم.'
                                         : 'معطّل (الافتراضي): اعتماد الموظفين مقتصر حصرياً على مدير النظام الرئيسي.'}
@@ -1581,10 +1489,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                         {isSystemAdmin && (
                             <button
                                 type="button"
-                                className={deptDelegationEnabled ? 'secondary-btn' : 'primary-btn'}
+                                className={deptDelegationEnabled ? 'secondary-btn users-icon-action-btn' : 'primary-btn users-icon-action-btn'}
                                 onClick={() => void handleToggleDelegation()}
                                 disabled={delegationLoading}
-                                style={{ height: '34px', padding: '0 14px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
                             >
                                 {delegationLoading
                                     ? 'جاري الحفظ...'
@@ -1595,7 +1502,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         )}
                     </div>
 
-                    <div className="table-scroll-container">
+                    <div className="table-responsive">
                         <table className="custody-table">
                             <thead>
                                 <tr>
@@ -1606,6 +1513,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <th>التحقق (OTP)</th>
                                     <th>القسم المطلوب</th>
                                     <th>الدور المطلوب / المعتمد</th>
+                                    <th>مسار التفعيل</th>
                                     <th>حالة الدعوة</th>
                                     <th>تيليجرام ID</th>
                                     <th>تاريخ التقديم</th>
@@ -1616,172 +1524,110 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <tbody>
                                 {filteredRequests.length === 0 ? (
                                     <tr>
-                                        <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                                        <td colSpan={13} className="empty-message-cell">
                                             {requestsLoading ? 'جارٍ تحميل طلبات التسجيل...' : 'لا توجد طلبات تسجيل مطابقة لهذا الفلتر حالياً.'}
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredRequests.map((req, idx) => (
                                         <tr key={req.id}>
-                                            <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{idx + 1}</td>
-                                            <td style={{ fontSize: '0.74rem', fontFamily: 'monospace', color: 'var(--muted)' }} title={req.id}>
+                                            <td className="tabular-nums text-muted">{idx + 1}</td>
+                                            <td className="font-mono text-muted text-xs" title={req.id}>
                                                 {req.id.slice(0, 8)}...
                                             </td>
                                             <td>
-                                                <strong style={{ color: 'var(--ink)' }}>{req.fullName}</strong>
+                                                <strong className="user-fullname">{req.fullName}</strong>
                                             </td>
-                                            <td style={{ direction: 'ltr', textAlign: 'right', fontSize: '0.86rem' }}>
+                                            <td className="user-email-text">
                                                 {req.email}
                                             </td>
                                             <td>
                                                 {req.verificationStatus === 'verified' ? (
-                                                    <span style={{
-                                                        fontSize: '0.74rem',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: 'rgba(16, 185, 129, 0.12)',
-                                                        color: '#059669',
-                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                    }}>
+                                                    <span className="badge badge--ok">
                                                         <CheckCircle2 size={12} /> تم التحقق
                                                     </span>
                                                 ) : (
-                                                    <span style={{
-                                                        fontSize: '0.74rem',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: 'rgba(245, 158, 11, 0.12)',
-                                                        color: '#d97706',
-                                                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                    }}>
+                                                    <span className="badge badge--warn">
                                                         <Clock size={12} /> بانتظار OTP
                                                     </span>
                                                 )}
                                             </td>
                                             <td>
-                                                <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
+                                                <span className="users-dept-chip">
                                                     {req.requestedDepartment}
                                                 </span>
                                             </td>
                                             <td>
-                                                <div style={{ fontSize: '0.8rem' }}>
-                                                    <span style={{ color: 'var(--ink)' }}>
+                                                <div className="users-role-wrap">
+                                                    <span className="users-role-chip">
                                                         {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
                                                     </span>
                                                     {req.approvedRole && req.approvedRole !== req.requestedRole && (
-                                                        <strong style={{ color: 'var(--accent)', display: 'block', marginTop: '2px' }}>
+                                                        <strong className="users-role-approved">
                                                             ← {ROLE_LABELS[req.approvedRole as EffectiveRole] || req.approvedRole}
                                                         </strong>
                                                     )}
                                                 </div>
                                             </td>
                                             <td>
+                                                <div className="users-progress-track" title="مسار حالة تفعيل الحساب">
+                                                    <span className="users-progress-step done">طلب</span>
+                                                    <span className="users-progress-arrow">←</span>
+                                                    <span className={`users-progress-step ${req.verificationStatus === 'verified' ? 'done' : 'current'}`}>
+                                                        تحقق
+                                                    </span>
+                                                    <span className="users-progress-arrow">←</span>
+                                                    <span className={`users-progress-step ${req.approvalStatus === 'approved' ? 'done' : req.verificationStatus === 'verified' ? 'current' : ''}`}>
+                                                        موافقة
+                                                    </span>
+                                                    <span className="users-progress-arrow">←</span>
+                                                    <span className={`users-progress-step ${(req.invitationStatus === 'sent' || req.invitationStatus === 'accepted') ? 'done' : req.approvalStatus === 'approved' ? 'current' : ''}`}>
+                                                        دعوة
+                                                    </span>
+                                                    <span className="users-progress-arrow">←</span>
+                                                    <span className={`users-progress-step ${req.invitationStatus === 'accepted' ? 'done' : req.invitationStatus === 'sent' ? 'current' : ''}`}>
+                                                        تفعيل
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td>
                                                 {req.invitationStatus === 'accepted' ? (
-                                                    <span style={{
-                                                        fontSize: '0.74rem',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: 'rgba(16, 185, 129, 0.12)',
-                                                        color: '#059669',
-                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                    }}>
-                                                        <CheckCircle2 size={12} /> تم تفعيل الحساب
+                                                    <span className="badge badge--ok">
+                                                        <CheckCircle2 size={12} /> تم التفعيل
                                                     </span>
                                                 ) : req.invitationStatus === 'sent' ? (
-                                                    <div style={{ display: 'grid', gap: '2px' }}>
-                                                        <span style={{
-                                                            fontSize: '0.74rem',
-                                                            padding: '2px 8px',
-                                                            borderRadius: '999px',
-                                                            fontWeight: 600,
-                                                            background: 'rgba(37, 99, 235, 0.12)',
-                                                            color: '#2563eb',
-                                                            border: '1px solid rgba(37, 99, 235, 0.25)',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '4px',
-                                                        }}>
-                                                            <Mail size={12} /> تم إرسال الدعوة
+                                                    <div className="users-invite-sent-wrap">
+                                                        <span className="badge badge--info">
+                                                            <Mail size={12} /> تم الإرسال
                                                         </span>
                                                         {req.invitationSentAt && (
-                                                            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                                                            <span className="tabular-nums text-muted text-xs">
                                                                 {new Date(req.invitationSentAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         )}
                                                     </div>
                                                 ) : req.invitationStatus === 'failed' ? (
-                                                    <span style={{
-                                                        fontSize: '0.74rem',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: 'rgba(239, 68, 68, 0.12)',
-                                                        color: '#dc2626',
-                                                        border: '1px solid rgba(239, 68, 68, 0.25)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                    }}>
+                                                    <span className="badge badge--bad">
                                                         <ShieldAlert size={12} /> فشل الإرسال
                                                     </span>
                                                 ) : req.invitationStatus === 'cancelled' ? (
-                                                    <span style={{
-                                                        fontSize: '0.74rem',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        background: 'rgba(107, 114, 128, 0.12)',
-                                                        color: '#6b7280',
-                                                        border: '1px solid rgba(107, 114, 128, 0.25)',
-                                                    }}>
+                                                    <span className="badge badge--muted">
                                                         دعوة ملغاة
                                                     </span>
                                                 ) : (
-                                                    <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+                                                    <span className="text-muted text-xs">
                                                         {req.approvalStatus === 'approved' ? 'بانتظار الإرسال' : '—'}
                                                     </span>
                                                 )}
                                             </td>
-                                            <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                            <td className="font-mono text-muted text-xs">
                                                 {req.telegramUserId || '—'}
                                             </td>
-                                            <td style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                            <td className="tabular-nums text-muted text-xs">
                                                 {new Date(req.createdAt).toLocaleDateString('ar-EG')}
                                             </td>
                                             <td>
-                                                <span style={{
-                                                    fontSize: '0.76rem',
-                                                    padding: '3px 9px',
-                                                    borderRadius: '999px',
-                                                    fontWeight: 600,
-                                                    background: req.approvalStatus === 'approved'
-                                                        ? 'rgba(16, 185, 129, 0.12)'
-                                                        : req.approvalStatus === 'rejected'
-                                                            ? 'rgba(239, 68, 68, 0.12)'
-                                                            : 'rgba(59, 130, 246, 0.12)',
-                                                    color: req.approvalStatus === 'approved'
-                                                        ? '#059669'
-                                                        : req.approvalStatus === 'rejected'
-                                                            ? '#dc2626'
-                                                            : '#2563eb',
-                                                    border: `1px solid ${req.approvalStatus === 'approved'
-                                                        ? 'rgba(16, 185, 129, 0.25)'
-                                                        : req.approvalStatus === 'rejected'
-                                                            ? 'rgba(239, 68, 68, 0.25)'
-                                                            : 'rgba(59, 130, 246, 0.25)'}`,
-                                                }}>
+                                                <span className={`badge ${req.approvalStatus === 'approved' ? 'badge--ok' : req.approvalStatus === 'rejected' ? 'badge--bad' : 'badge--info'}`}>
                                                     {req.approvalStatus === 'approved'
                                                         ? 'معتمد'
                                                         : req.approvalStatus === 'rejected'
@@ -1791,65 +1637,65 @@ export default function UsersPage({ session }: UsersPageProps) {
                                             </td>
                                             <td className="actions-cell">
                                                 {req.approvalStatus === 'pending' || req.approvalStatus === 'pending_approval' || !req.approvalStatus ? (
-                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    <div className="users-action-btn-group">
                                                         <button
                                                             type="button"
-                                                            className="primary-btn"
+                                                            className="primary-btn btn-sm"
                                                             onClick={() => {
                                                                 setApprovingReq(req)
                                                                 setSelectedApprovedRole(req.requestedRole || 'warehouse_employee')
                                                             }}
-                                                            style={{ height: '32px', padding: '0 12px', fontSize: '0.78rem' }}
+                                                            aria-label={`قبول وإرسال الدعوة للمتقدم ${req.fullName}`}
                                                         >
                                                             <CheckCircle2 size={13} /> قبول وإرسال الدعوة
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            className="secondary-btn"
+                                                            className="secondary-btn btn-sm btn-danger-text"
                                                             onClick={() => {
                                                                 setRejectingReq(req)
                                                                 setRejectionReasonInput('')
                                                             }}
-                                                            style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', color: '#dc2626' }}
+                                                            aria-label={`رفض طلب المتقدم ${req.fullName}`}
                                                         >
                                                             <UserX size={13} /> رفض
                                                         </button>
                                                     </div>
                                                 ) : req.approvalStatus === 'approved' ? (
                                                     req.invitationStatus === 'accepted' ? (
-                                                        <span style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span className="users-activated-label">
                                                             <Check size={14} /> مفعّل ({req.employeeId || req.approvedRole})
                                                         </span>
                                                     ) : req.invitationStatus === 'cancelled' ? (
-                                                        <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                                        <span className="text-muted text-xs">
                                                             ملغاة
                                                         </span>
                                                     ) : (
-                                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                        <div className="users-action-btn-group">
                                                             <button
                                                                 type="button"
-                                                                className="secondary-btn"
+                                                                className="secondary-btn btn-sm"
                                                                 onClick={() => void handleResendInvite(req)}
                                                                 disabled={isActionLoading}
-                                                                style={{ height: '30px', padding: '0 8px', fontSize: '0.76rem' }}
                                                                 title="إعادة إرسال رابط الدعوة إلى البريد الإلكتروني"
+                                                                aria-label={`إعادة إرسال الدعوة للمتقدم ${req.fullName}`}
                                                             >
                                                                 <RefreshCw size={12} className={isActionLoading ? 'animate-spin' : ''} /> إعادة إرسال
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="secondary-btn"
+                                                                className="secondary-btn btn-sm btn-danger-text"
                                                                 onClick={() => setCancellingReq(req)}
                                                                 disabled={isActionLoading}
-                                                                style={{ height: '30px', padding: '0 8px', fontSize: '0.76rem', color: '#dc2626' }}
                                                                 title="إلغاء الدعوة وتعليق الحساب"
+                                                                aria-label={`إلغاء دعوة المتقدم ${req.fullName}`}
                                                             >
                                                                 <UserX size={12} /> إلغاء
                                                             </button>
                                                         </div>
                                                     )
                                                 ) : (
-                                                    <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }} title={req.rejectionReason || ''}>
+                                                    <span className="text-muted text-xs" title={req.rejectionReason || ''}>
                                                         مرفوض {req.rejectionReason ? `(${req.rejectionReason})` : ''}
                                                     </span>
                                                 )}
@@ -1865,42 +1711,22 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             {/* Tab 4: Current User Password Change & Security Section */}
             {mainTab === 'security' && (
-                <div className="card-surface settings-section" style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--line)' }}>
-                    <div className="section-head" style={{ marginBottom: '20px', borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
+                <div className="card-surface settings-section users-section-panel">
+                    <div className="users-panel-head">
                         <div>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.12rem', margin: 0 }}>
+                            <h3 className="users-panel-title">
                                 <KeyRound size={20} color="var(--accent)" />
                                 أمان الحساب وتغيير كلمة المرور
                             </h3>
-                            <span style={{ display: 'block', marginTop: '4px', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                            <span className="users-panel-desc">
                                 إدارة أمان حسابك الشخصي ({activeUserEmail}) وتعيين كلمة مرور جديدة لتسجيل الدخول بها لاحقاً
                             </span>
                         </div>
                     </div>
 
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: '12px',
-                        padding: '14px 18px',
-                        background: 'var(--panel, rgba(255,255,255,0.03))',
-                        border: '1px solid var(--line)',
-                        borderRadius: '10px',
-                        marginBottom: '22px'
-                    }}>
+                    <div className="users-security-user-badge">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: '50%',
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--accent)'
-                            }}>
+                            <div className="modal-title-icon modal-icon-accent" style={{ borderRadius: '50%' }}>
                                 <ShieldCheck size={22} />
                             </div>
                             <div>
@@ -1912,39 +1738,30 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </span>
                             </div>
                         </div>
-                        <span style={{
-                            fontSize: '0.76rem',
-                            padding: '4px 12px',
-                            borderRadius: '999px',
-                            fontWeight: 600,
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            color: '#059669',
-                            border: '1px solid rgba(16, 185, 129, 0.25)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                        }}>
+                        <span className="badge badge--ok">
                             <CheckCircle2 size={13} /> جلسة موثقة ونشطة
                         </span>
                     </div>
 
-                    <div style={{ maxWidth: '640px' }}>
+                    <div className="users-security-box">
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '18px' }}>
                             <label className="user-field-group">
-                                <span>كلمة المرور الجديدة <span style={{ color: 'var(--accent)' }}>*</span></span>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <span>كلمة المرور الجديدة <span className="req-star">*</span></span>
+                                <div className="users-input-wrapper">
                                     <input
                                         type={showSelfPassword ? 'text' : 'password'}
                                         value={selfPassword}
                                         onChange={(e) => setSelfPassword(e.target.value)}
                                         placeholder="أدخل كلمة المرور الجديدة"
                                         className="user-field-input"
-                                        style={{ paddingLeft: '40px' }}
+                                        style={{ paddingInlineStart: '12px', paddingInlineEnd: '40px' }}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowSelfPassword(!showSelfPassword)}
-                                        style={{ position: 'absolute', left: '10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px', display: 'flex', alignItems: 'center' }}
+                                        className="users-pw-toggle-btn"
+                                        title={showSelfPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                        aria-label={showSelfPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                     >
                                         {showSelfPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
@@ -1952,7 +1769,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </label>
 
                             <label className="user-field-group">
-                                <span>تأكيد كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <span>تأكيد كلمة المرور <span className="req-star">*</span></span>
                                 <input
                                     type={showSelfPassword ? 'text' : 'password'}
                                     value={selfConfirm}
@@ -1963,13 +1780,12 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </label>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div className="users-btn-submit-row">
                             <button
                                 type="button"
                                 className="primary-btn"
                                 onClick={handleSaveSelfPassword}
                                 disabled={selfPasswordSaving || !selfPassword}
-                                style={{ height: '42px', padding: '0 24px', fontSize: '0.88rem', fontWeight: 600 }}
                             >
                                 <Lock size={16} />
                                 {selfPasswordSaving ? 'جارٍ الحفظ...' : 'تحديث كلمة المرور الآن'}
@@ -1978,13 +1794,13 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
 
                     {selfPasswordSuccess && (
-                        <div className="inline-message success" role="status" style={{ marginTop: '16px', maxWidth: '640px' }}>
+                        <div className="inline-message success users-security-box mt-4" role="status">
                             <CheckCircle2 size={16} /> {selfPasswordSuccess}
                         </div>
                     )}
 
                     {selfPasswordError && (
-                        <div className="inline-message error" role="alert" style={{ marginTop: '16px', maxWidth: '640px' }}>
+                        <div className="inline-message error users-security-box mt-4" role="alert">
                             {selfPasswordError}
                         </div>
                     )}
@@ -1994,10 +1810,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Edit User Modal */}
             {editingUser && (
                 <div className="modal-backdrop" onClick={() => setEditingUser(null)}>
-                    <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+                    <div className="modal-dialog modal-dialog-form modal-dialog-md" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon">
+                                <div className="modal-title-icon modal-icon-accent">
                                     <Edit2 size={18} />
                                 </div>
                                 <div>
@@ -2005,30 +1821,30 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">تعديل الصلاحيات، كلمة المرور، أو كود التفعيل</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setEditingUser(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => setEditingUser(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
                         <div className="modal-body">
-                            <form onSubmit={handleSaveEdit} style={{ display: 'grid', gap: '14px' }}>
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                            <form onSubmit={handleSaveEdit} className="form-label-block">
+                                <label className="form-label-block">
                                     الاسم الكامل / الصفة
                                     <input
                                         type="text"
                                         value={editDisplayName}
                                         onChange={(e) => setEditDisplayName(e.target.value)}
-                                        style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
+                                        className="form-input-themed"
                                     />
                                 </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                <label className="form-label-block">
                                     الصلاحية {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(آخر مدير نظام نشط محمي ضد خفض الصلاحيات)</span>}
                                     <select
                                         value={editRole}
                                         onChange={(e) => setEditRole(e.target.value as UserRole)}
                                         disabled={editingUser ? isLastActiveSystemAdmin(editingUser.id, localUsers) : false}
-                                        style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
+                                        className="form-input-themed"
                                     >
                                         {ASSIGNABLE_ROLES.map((r) => (
                                             <option key={r.value} value={r.value}>{r.label}</option>
@@ -2036,7 +1852,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     </select>
                                 </label>
 
-                                <div style={{ background: 'rgba(14, 124, 134, 0.05)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
+                                <div className="info-grid-box">
                                     <span style={{ fontSize: '0.84rem', fontWeight: 600, display: 'block', marginBottom: '6px', color: 'var(--ink)' }}>
                                         صلاحيات استثنائية إضافية:
                                     </span>
@@ -2058,7 +1874,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     </div>
                                 </div>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                <label className="form-label-block">
                                     تغيير كلمة المرور (اتركه فارغاً للإبقاء على الحالية)
                                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                         <input
@@ -2066,36 +1882,39 @@ export default function UsersPage({ session }: UsersPageProps) {
                                             value={editPassword}
                                             onChange={(e) => setEditPassword(e.target.value)}
                                             placeholder="اتركه فارغاً لعدم التغيير"
-                                            style={{ width: '100%', padding: '9px 36px 9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
+                                            className="form-input-themed"
+                                            style={{ paddingLeft: '36px' }}
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowEditPassword(!showEditPassword)}
                                             style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                                            aria-label={showEditPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         >
                                             {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
                                 </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                <label className="form-label-block">
                                     كود تأكيد التفعيل (PIN)
                                     <input
                                         type="text"
                                         value={editActivationCode}
                                         onChange={(e) => setEditActivationCode(e.target.value)}
                                         required
-                                        style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', fontFamily: 'monospace', fontWeight: 700 }}
+                                        className="form-input-themed"
+                                        style={{ fontFamily: 'monospace', fontWeight: 700 }}
                                     />
                                 </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                                <label className="form-label-block">
                                     حالة الحساب {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(نشط دائماً ومحمي ضد التعطيل)</span>}
                                     <select
                                         value={editStatus}
                                         onChange={(e) => setEditStatus(e.target.value as 'active' | 'pending_activation')}
                                         disabled={editingUser ? isLastActiveSystemAdmin(editingUser.id, localUsers) : false}
-                                        style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
+                                        className="form-input-themed"
                                     >
                                         <option value="active">مفعل ونشط فوراً (Active)</option>
                                         <option value="pending_activation">معلق بانتظار إدخال كود التفعيل (Pending Activation)</option>
@@ -2121,10 +1940,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Delete Confirmation Modal */}
             {deletingUser && (
                 <div className="modal-backdrop" onClick={() => setDeletingUser(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }}>
+                                <div className="modal-title-icon modal-icon-danger">
                                     <Trash2 size={18} />
                                 </div>
                                 <div>
@@ -2132,16 +1951,16 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">إلغاء وصول المستخدم للنظام</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setDeletingUser(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => setDeletingUser(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <p style={{ margin: '0 0 16px 0', fontSize: '0.92rem', color: 'var(--ink)' }}>
+                        <div className="modal-body modal-body-pad">
+                            <p className="modal-lead-text">
                                 هل أنت متأكد من رغبتك في حذف حساب المستخدم <strong>"{deletingUser.username}"</strong>؟
                             </p>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                            <p className="modal-help-text">
                                 لن يتمكن هذا المستخدم من تسجيل الدخول إلى النظام بعد الحذف.
                             </p>
 
@@ -2151,9 +1970,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </button>
                                 <button
                                     type="button"
-                                    className="primary-btn"
+                                    className="primary-btn btn-danger-action"
                                     onClick={() => handleDelete(deletingUser)}
-                                    style={{ background: '#dc2626', borderColor: '#dc2626' }}
                                 >
                                     تأكيد الحذف
                                 </button>
@@ -2166,10 +1984,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Quick Admin Password Change Modal */}
             {pwdModalUser && (
                 <div className="modal-backdrop" onClick={() => setPwdModalUser(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+                                <div className="modal-title-icon modal-icon-accent">
                                     <KeyRound size={18} />
                                 </div>
                                 <div>
@@ -2177,30 +1995,21 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">المستخدم: {pwdModalUser.username} ({pwdModalUser.displayName})</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setPwdModalUser(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => setPwdModalUser(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <form onSubmit={handleSaveUserPassword} style={{ display: 'grid', gap: '14px' }}>
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
+                        <div className="modal-body modal-body-pad">
+                            <form onSubmit={handleSaveUserPassword} className="form-label-block">
+                                <label className="form-label-block">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>كلمة المرور الجديدة</span>
                                         <button
                                             type="button"
                                             onClick={handleGenerateModalPassword}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                color: 'var(--accent)',
-                                                fontSize: '0.78rem',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                fontWeight: 600,
-                                            }}
+                                            className="text-link-btn"
+                                            style={{ fontSize: '0.78rem' }}
                                         >
                                             <Sparkles size={13} />
                                             توليد كلمة مرور
@@ -2213,12 +2022,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                                             onChange={(e) => setModalNewPassword(e.target.value)}
                                             required
                                             placeholder="أدخل كلمة المرور الجديدة"
-                                            style={{ width: '100%', padding: '9px 36px 9px 11px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}
+                                            className="form-input-themed"
+                                            style={{ paddingLeft: '36px' }}
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowModalNewPassword(!showModalNewPassword)}
                                             style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                                            aria-label={showModalNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         >
                                             {showModalNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
@@ -2250,10 +2061,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Approve Registration Request Modal */}
             {approvingReq && (
                 <div className="modal-backdrop" onClick={() => !isActionLoading && setApprovingReq(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                    <div className="modal-dialog modal-dialog-md" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
+                                <div className="modal-title-icon modal-icon-success">
                                     <CheckCircle2 size={18} />
                                 </div>
                                 <div>
@@ -2261,14 +2072,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">المتقدم: {approvingReq.fullName}</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setApprovingReq(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setApprovingReq(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '16px', fontSize: '0.86rem' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '8px', alignItems: 'center' }}>
+                        <div className="modal-body modal-body-pad">
+                            <div className="info-grid-box" style={{ marginBottom: '16px', fontSize: '0.86rem' }}>
+                                <div className="info-grid-row">
                                     <span style={{ color: 'var(--muted)' }}>البريد الإلكتروني:</span>
                                     <strong style={{ direction: 'ltr', textAlign: 'right' }}>{approvingReq.email}</strong>
 
@@ -2289,18 +2100,18 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </div>
                             </div>
 
-                            <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', marginBottom: '16px' }}>
-                                <span>الدور النهائي المُعتمد للموظف <span style={{ color: 'var(--accent)' }}>*</span></span>
+                            <label className="form-label-block" style={{ marginBottom: '16px' }}>
+                                <span>الدور النهائي المُعتمد للموظف <span className="req-star">*</span></span>
                                 <select
                                     value={selectedApprovedRole}
                                     onChange={(e) => setSelectedApprovedRole(e.target.value)}
-                                    style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
+                                    className="form-input-themed"
                                 >
                                     {ASSIGNABLE_ROLES.filter((r) => r.value !== 'system_admin').map((r) => (
                                         <option key={r.value} value={r.value}>{r.label}</option>
                                     ))}
                                 </select>
-                                <span style={{ fontSize: '0.76rem', color: 'var(--muted)', lineHeight: '1.5' }}>
+                                <span className="modal-help-text">
                                     سيتم توليد الرقم الوظيفي الموحد (Unique ID) فورياً، وإنشاء ملف الموظف بحالة بانتظار التفعيل، وإرسال رابط دعوة إلى بريده الإلكتروني ({approvingReq.email}) عبر Google SMTP لاختيار اسم المستخدم وكلمة المرور.
                                 </span>
                             </label>
@@ -2331,10 +2142,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Reject Registration Request Modal */}
             {rejectingReq && (
                 <div className="modal-backdrop" onClick={() => !isActionLoading && setRejectingReq(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }}>
+                                <div className="modal-title-icon modal-icon-danger">
                                     <UserX size={18} />
                                 </div>
                                 <div>
@@ -2342,24 +2153,24 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">المتقدم: {rejectingReq.fullName}</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setRejectingReq(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setRejectingReq(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--ink)' }}>
+                        <div className="modal-body modal-body-pad">
+                            <p className="modal-lead-text">
                                 هل أنت متأكد من رغبتك في رفض طلب التسجيل للمتقدم <strong>"{rejectingReq.fullName}"</strong>؟
                             </p>
 
-                            <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', marginBottom: '16px' }}>
+                            <label className="form-label-block" style={{ marginBottom: '16px' }}>
                                 <span>سبب الرفض (سيتم حفظه في السجل وإبلاغ المتقدم):</span>
                                 <textarea
                                     value={rejectionReasonInput}
                                     onChange={(e) => setRejectionReasonInput(e.target.value)}
                                     placeholder="مثال: لم يتم استيفاء شروط الانضمام، أو بيانات الاتصال غير مطابقة..."
                                     rows={3}
-                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)', fontSize: '0.86rem' }}
+                                    className="form-input-themed"
                                 />
                             </label>
 
@@ -2374,10 +2185,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </button>
                                 <button
                                     type="button"
-                                    className="primary-btn"
+                                    className="primary-btn btn-danger-action"
                                     onClick={handleRejectRequest}
                                     disabled={isActionLoading}
-                                    style={{ background: '#dc2626', borderColor: '#dc2626' }}
                                 >
                                     {isActionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
                                 </button>
@@ -2390,10 +2200,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Cancel Invitation Modal */}
             {cancellingReq && (
                 <div className="modal-backdrop" onClick={() => !isActionLoading && setCancellingReq(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }}>
+                                <div className="modal-title-icon modal-icon-danger">
                                     <UserX size={18} />
                                 </div>
                                 <div>
@@ -2401,22 +2211,22 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">{cancellingReq.fullName} ({cancellingReq.email})</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setCancellingReq(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setCancellingReq(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <p style={{ fontSize: '0.9rem', lineHeight: '1.6', color: 'var(--ink)', margin: '0 0 12px 0' }}>
+                        <div className="modal-body modal-body-pad">
+                            <p className="modal-lead-text">
                                 هل أنت متأكد من إلغاء دعوة الموظف <strong>"{cancellingReq.fullName}"</strong>؟
                             </p>
-                            <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: '1.5', margin: 0 }}>
+                            <p className="modal-help-text">
                                 سيتم إبطال رابط الدعوة فورياً ووضع الحساب في حالة تعليق، مع الحفاظ على كافة السجلات والأكواد في قاعدة البيانات بصورة آمنة ودون حذف أي بيانات.
                             </p>
                             <div className="form-actions" style={{ marginTop: '20px' }}>
                                 <button type="button" className="secondary-btn" onClick={() => setCancellingReq(null)} disabled={isActionLoading}>
                                     تراجع
                                 </button>
-                                <button type="button" className="primary-btn" style={{ background: '#dc2626', borderColor: '#dc2626' }} onClick={handleConfirmCancelInvite} disabled={isActionLoading}>
+                                <button type="button" className="primary-btn btn-danger-action" onClick={handleConfirmCancelInvite} disabled={isActionLoading}>
                                     {isActionLoading ? 'جارٍ الإلغاء...' : 'تأكيد إلغاء الدعوة'}
                                 </button>
                             </div>
@@ -2428,10 +2238,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Consistency Report Modal */}
             {consistencyModalOpen && (
                 <div className="modal-backdrop" onClick={() => setConsistencyModalOpen(false)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+                    <div className="modal-dialog modal-dialog-lg" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+                                <div className="modal-title-icon modal-icon-accent">
                                     <ShieldCheck size={18} />
                                 </div>
                                 <div>
@@ -2439,27 +2249,25 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">فحص تشخيصي للقراءة فقط — لا يتم تعديل أو حذف أي سجلات</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setConsistencyModalOpen(false)}>
+                            <button type="button" className="modal-close-btn" onClick={() => setConsistencyModalOpen(false)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="modal-body" style={{ padding: '20px', maxHeight: '70vh', overflowY: 'auto' }}>
+                        <div className="modal-body modal-body-pad" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                             {consistencyLoading ? (
                                 <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
                                     جارٍ فحص ومطابقة جداول المصادقة والهويات...
                                 </div>
                             ) : consistencyReport ? (
                                 <div style={{ display: 'grid', gap: '14px', fontSize: '0.88rem' }}>
-                                    <div style={{
-                                        padding: '12px 16px',
-                                        borderRadius: '8px',
-                                        background: consistencyReport.has_issues ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                        border: `1px solid ${consistencyReport.has_issues ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                    <div className="info-grid-box" style={{
+                                        background: consistencyReport.has_issues ? 'var(--warn-bg)' : 'var(--ok-bg)',
+                                        borderColor: consistencyReport.has_issues ? 'var(--warn)' : 'var(--ok)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '10px',
                                     }}>
-                                        {consistencyReport.has_issues ? <ShieldAlert size={20} color="#d97706" /> : <CheckCircle2 size={20} color="#059669" />}
+                                        {consistencyReport.has_issues ? <ShieldAlert size={20} color="var(--warn)" /> : <CheckCircle2 size={20} color="var(--ok)" />}
                                         <div>
                                             <strong>{consistencyReport.has_issues ? 'تم رصد حالات تباين تتطلب مراجعة الإدارة' : 'كافة الهويات متطابقة ومنتظمة بالكامل'}</strong>
                                             <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--muted)' }}>
@@ -2468,7 +2276,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </div>
                                     </div>
 
-                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                    <div className="info-grid-box">
                                         <strong>حسابات Auth بدون سجل app_users:</strong>
                                         <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
                                             {consistencyReport.missing_app_users.length === 0
@@ -2477,7 +2285,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </p>
                                     </div>
 
-                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                    <div className="info-grid-box">
                                         <strong>سجلات app_users بدون حساب Auth:</strong>
                                         <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
                                             {consistencyReport.missing_auth_users.length === 0
@@ -2486,7 +2294,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </p>
                                     </div>
 
-                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                    <div className="info-grid-box">
                                         <strong>طلبات تسجيل معتمدة بدون إرسال دعوة:</strong>
                                         <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
                                             {consistencyReport.approved_without_invitation.length === 0
@@ -2495,7 +2303,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </p>
                                     </div>
 
-                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                    <div className="info-grid-box">
                                         <strong>حسابات نشطة بدون اسم مستخدم:</strong>
                                         <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
                                             {consistencyReport.active_without_username.length === 0
@@ -2504,7 +2312,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         </p>
                                     </div>
 
-                                    <div style={{ background: 'var(--bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                                    <div className="info-grid-box">
                                         <strong>عناوين بريد إلكتروني مكررة:</strong>
                                         <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
                                             {consistencyReport.duplicate_emails.length === 0
@@ -2531,10 +2339,10 @@ export default function UsersPage({ session }: UsersPageProps) {
             {/* Suspend Confirmation Modal */}
             {suspendingUser && (
                 <div className="modal-backdrop" onClick={() => !isActionLoading && setSuspendingUser(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title-wrap">
-                                <div className="modal-title-icon" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706' }}>
+                                <div className="modal-title-icon modal-icon-warning">
                                     <UserX size={18} />
                                 </div>
                                 <div>
@@ -2542,16 +2350,16 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     <span className="modal-subtitle">المستخدم: {suspendingUser.username}</span>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setSuspendingUser(null)}>
+                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setSuspendingUser(null)} aria-label="إغلاق النافذة">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="modal-body" style={{ padding: '20px' }}>
-                            <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--ink)' }}>
+                        <div className="modal-body modal-body-pad">
+                            <p className="modal-lead-text">
                                 هل أنت متأكد من رغبتك في إيقاف وتعليق حساب الموظف <strong>"{suspendingUser.displayName || suspendingUser.username}"</strong>؟
                             </p>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)', lineHeight: '1.5' }}>
+                            <p className="modal-help-text">
                                 لن يتمكن الموظف من تسجيل الدخول إلى النظام أو إجراء أي عمليات حتى يتم رفع التعليق وإعادة تنشيطه من قِبل مدير النظام.
                             </p>
 
@@ -2566,10 +2374,9 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </button>
                                 <button
                                     type="button"
-                                    className="primary-btn"
+                                    className="primary-btn btn-warning-action"
                                     onClick={() => handleSetStatus(suspendingUser, 'suspended')}
                                     disabled={isActionLoading}
-                                    style={{ background: '#d97706', borderColor: '#d97706' }}
                                 >
                                     {isActionLoading ? 'جارٍ التعليق...' : 'تأكيد إيقاف الحساب'}
                                 </button>
