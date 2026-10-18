@@ -1,6 +1,7 @@
+/// <reference types="node" />
 import { describe, it, expect } from 'vitest'
-import * as fs from 'fs'
-import * as path from 'path'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
 describe('Security Static Scan: No Hardcoded Passwords in Edge Functions', () => {
   const functionsDir = path.resolve(__dirname, '../../supabase/functions')

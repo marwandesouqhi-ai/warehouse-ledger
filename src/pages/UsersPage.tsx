@@ -42,7 +42,7 @@ import {
 import {
     addLocalUser,
     changeUserPassword,
-    deleteLocalUser,
+    deleteUserPermanently,
     generateActivationPin,
     getLocalSession,
     isLastActiveSystemAdmin,
@@ -88,7 +88,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const userDepartment = ((session?.user?.app_metadata as any)?.department as string) || ((localSess?.user?.app_metadata as any)?.department as string) || ''
 
     // Navigation Tab & Filter States
-    const [mainTab, setMainTab] = useState<'employees' | 'requests'>('employees')
+    const [mainTab, setMainTab] = useState<'employees' | 'add_employee' | 'requests' | 'security'>('employees')
     const [deptFilter, setDeptFilter] = useState<string>('all')
     const [roleFilter, setRoleFilter] = useState<string>('all')
     const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -500,24 +500,29 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    function handleDelete(user: LocalUser) {
+    async function handleDelete(user: LocalUser) {
         const check = canDeleteUser(user.username)
         if (!check.allowed) {
             alert(check.reason || 'غير مصرح بحذف هذا المستخدم.')
             return
         }
+        setIsActionLoading(true)
+        setActionFeedback(null)
         try {
-            deleteLocalUser(user.id)
+            await deleteUserPermanently(user.id)
             reloadUsers()
-            void logAuditEvent({
-                action: `حذف المستخدم: ${user.username}`,
-                entity_type: 'user',
-                details: { username: user.username, role: user.role },
-                user: currentSession?.user,
+            setActionFeedback({
+                message: `تم حذف المستخدم "${user.username}" نهائياً من قاعدة البيانات ونظام المصادقة.`,
+                type: 'success',
             })
             setDeletingUser(null)
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'تعذر حذف المستخدم.')
+            setActionFeedback({
+                message: err instanceof Error ? err.message : 'تعذر حذف المستخدم من قاعدة البيانات.',
+                type: 'error',
+            })
+        } finally {
+            setIsActionLoading(false)
         }
     }
 
@@ -808,218 +813,305 @@ export default function UsersPage({ session }: UsersPageProps) {
                 </div>
             )}
 
-            {/* Navigation Tabs */}
-            <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '20px' }}>
+            {/* Navigation Tabs Bar */}
+            <div className="users-nav-tabs-bar" role="tablist">
                 <button
                     type="button"
+                    role="tab"
+                    aria-selected={mainTab === 'employees'}
                     onClick={() => setMainTab('employees')}
-                    className={mainTab === 'employees' ? 'primary-btn' : 'secondary-btn'}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '8px', fontWeight: 600 }}
+                    className={`users-nav-tab-btn ${mainTab === 'employees' ? 'active' : ''}`}
                 >
                     <UsersRound size={17} />
-                    دليل الموظفين والحسابات ({visibleLocalUsers.length})
+                    <span>دليل الموظفين والحسابات</span>
+                    <span className="badge-pill">{visibleLocalUsers.length}</span>
                 </button>
+
+                {isSystemAdmin && (
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={mainTab === 'add_employee'}
+                        onClick={() => setMainTab('add_employee')}
+                        className={`users-nav-tab-btn ${mainTab === 'add_employee' ? 'active' : ''}`}
+                    >
+                        <UserPlus size={17} />
+                        <span>إضافة موظف جديد</span>
+                    </button>
+                )}
+
                 <button
                     type="button"
+                    role="tab"
+                    aria-selected={mainTab === 'requests'}
                     onClick={() => {
                         setMainTab('requests')
                         void loadRequests()
                     }}
-                    className={mainTab === 'requests' ? 'primary-btn' : 'secondary-btn'}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '8px', fontWeight: 600, position: 'relative' }}
+                    className={`users-nav-tab-btn ${mainTab === 'requests' ? 'active' : ''}`}
                 >
                     <Send size={16} />
-                    طلبات التسجيل (تيليجرام)
-                    {pendingRequestsCount > 0 && (
-                        <span style={{
-                            background: '#ef4444',
-                            color: '#fff',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            marginRight: '6px',
-                        }}>
+                    <span>طلبات التسجيل (تيليجرام)</span>
+                    {pendingRequestsCount > 0 ? (
+                        <span className="badge-pill" style={{ background: '#ef4444', color: '#fff' }}>
                             {pendingRequestsCount} جديد
                         </span>
+                    ) : (
+                        <span className="badge-pill">{registrationRequests.length}</span>
                     )}
+                </button>
+
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={mainTab === 'security'}
+                    onClick={() => setMainTab('security')}
+                    className={`users-nav-tab-btn ${mainTab === 'security' ? 'active' : ''}`}
+                >
+                    <KeyRound size={17} />
+                    <span>أمان الحساب وكلمة المرور</span>
                 </button>
             </div>
 
-            {/* Tab 1: Employee Directory */}
-            {mainTab === 'employees' && (
-                <>
-                    {/* Add User Section (Admin Only) */}
-                    {isSystemAdmin && (
-                        <div className="card-surface settings-section" style={{ padding: '22px', marginBottom: '20px' }}>
-                            <div className="section-head" style={{ marginBottom: '16px' }}>
-                                <div>
-                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <UserPlus size={19} color="var(--accent)" />
-                                        إضافة وتعيين موظف جديد مباشرة
-                                    </h3>
-                                    <span>إنشاء حساب موظف جديد باسم مستخدم، قسم، كلمة مرور، وتوليد كود التفعيل</span>
-                                </div>
+            {/* Tab: Add New Employee Directly */}
+            {mainTab === 'add_employee' && isSystemAdmin && (
+                <div className="card-surface settings-section" style={{ padding: '26px', marginBottom: '24px', borderRadius: '14px', border: '1px solid var(--line)' }}>
+                    <div className="section-head" style={{ marginBottom: '20px', borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                            <div>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.12rem', margin: 0 }}>
+                                    <UserPlus size={20} color="var(--accent)" />
+                                    إضافة وتعيين موظف جديد مباشرة
+                                </h3>
+                                <span style={{ display: 'block', marginTop: '4px', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                                    إنشاء حساب موظف جديد باسم مستخدم، قسم، دور وظيفي، كلمة مرور، وتوليد كود التفعيل
+                                </span>
                             </div>
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => setMainTab('employees')}
+                                style={{ height: '36px', padding: '0 16px', fontSize: '0.84rem' }}
+                            >
+                                العودة لدليل الموظفين
+                            </button>
+                        </div>
+                    </div>
 
-                            <form onSubmit={handleAddUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'start' }}>
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    اسم المستخدم (Username) <span style={{ color: 'var(--accent)' }}>*</span>
-                                    <input
-                                        type="text"
-                                        value={newUsername}
-                                        onChange={(e) => setNewUsername(e.target.value)}
-                                        placeholder="مثال: store_keeper أو ahmed"
-                                        required
-                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                    />
-                                </label>
+                    <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="user-form-grid">
+                            <label className="user-field-group">
+                                <span>اسم المستخدم (Username) <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <input
+                                    type="text"
+                                    value={newUsername}
+                                    onChange={(e) => setNewUsername(e.target.value)}
+                                    placeholder="مثال: store_keeper أو ahmed"
+                                    required
+                                    className="user-field-input"
+                                />
+                            </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    الاسم الكامل / المسمى الوظيفي
-                                    <input
-                                        type="text"
-                                        value={newDisplayName}
-                                        onChange={(e) => setNewDisplayName(e.target.value)}
-                                        placeholder="مثال: م. أحمد عبد الرحمن - أمين العهدة"
-                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                    />
-                                </label>
+                            <label className="user-field-group">
+                                <span>الاسم الكامل / المسمى الوظيفي</span>
+                                <input
+                                    type="text"
+                                    value={newDisplayName}
+                                    onChange={(e) => setNewDisplayName(e.target.value)}
+                                    placeholder="مثال: م. أحمد عبد الرحمن - أمين العهدة"
+                                    className="user-field-input"
+                                />
+                            </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    القسم التابع له <span style={{ color: 'var(--accent)' }}>*</span>
-                                    <select
-                                        value={newDepartment}
-                                        onChange={(e) => setNewDepartment(e.target.value as any)}
-                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                    >
-                                        <option value="المخازن">المخازن (Warehouse)</option>
-                                        <option value="المشتريات">المشتريات (Procurement)</option>
-                                        <option value="الإدارة العامة">الإدارة العامة (General Admin)</option>
-                                    </select>
-                                </label>
+                            <label className="user-field-group">
+                                <span>القسم التابع له <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <select
+                                    value={newDepartment}
+                                    onChange={(e) => setNewDepartment(e.target.value as any)}
+                                    className="user-field-input"
+                                >
+                                    <option value="المخازن">المخازن (Warehouse)</option>
+                                    <option value="المشتريات">المشتريات (Procurement)</option>
+                                    <option value="الإدارة العامة">الإدارة العامة (General Admin)</option>
+                                </select>
+                            </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    البريد الإلكتروني للموظف (اختياري)
-                                    <input
-                                        type="email"
-                                        value={newEmail}
-                                        onChange={(e) => setNewEmail(e.target.value)}
-                                        placeholder="employee@company.com"
-                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                    />
-                                </label>
+                            <label className="user-field-group">
+                                <span>الدور والصلاحية في النظام <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <select
+                                    value={newRole}
+                                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                                    className="user-field-input"
+                                >
+                                    {ASSIGNABLE_ROLES.map((r) => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                    ))}
+                                </select>
+                            </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    الدور والصلاحية في النظام <span style={{ color: 'var(--accent)' }}>*</span>
-                                    <select
-                                        value={newRole}
-                                        onChange={(e) => setNewRole(e.target.value as UserRole)}
-                                        style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                    >
-                                        {ASSIGNABLE_ROLES.map((r) => (
-                                            <option key={r.value} value={r.value}>{r.label}</option>
-                                        ))}
-                                    </select>
-                                </label>
+                            <label className="user-field-group">
+                                <span>البريد الإلكتروني للموظف (اختياري)</span>
+                                <input
+                                    type="email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    placeholder="employee@company.com"
+                                    className="user-field-input"
+                                    style={{ direction: 'ltr', textAlign: 'right' }}
+                                />
+                            </label>
 
-                                <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span>كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
-                                        <button
-                                            type="button"
-                                            onClick={generateRandomPassword}
-                                            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}
-                                        >
-                                            <Sparkles size={13} /> توليد عشوائي
-                                        </button>
-                                    </div>
-                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                        <input
-                                            type={showNewPassword ? 'text' : 'password'}
-                                            value={newPassword}
-                                            onChange={(e) => setNewPassword(e.target.value)}
-                                            placeholder="أدخل كلمة المرور"
-                                            required
-                                            style={{ width: '100%', padding: '10px 38px 10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowNewPassword(!showNewPassword)}
-                                            style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
-                                        >
-                                            {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                        </button>
-                                    </div>
-                                </label>
-
-                                <div style={{ gridColumn: '1 / -1', background: 'rgba(14, 124, 134, 0.05)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
-                                    <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', marginBottom: '8px', color: 'var(--ink)' }}>
-                                        صلاحيات استثنائية إضافية:
-                                    </span>
-                                    <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
-                                        {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
-                                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', cursor: 'pointer', color: 'var(--ink)' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={newPermissions.includes(p)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) setNewPermissions([...newPermissions, p])
-                                                        else setNewPermissions(newPermissions.filter(x => x !== p))
-                                                    }}
-                                                    style={{ accentColor: 'var(--accent)' }}
-                                                />
-                                                <span>{PERMISSION_LABELS[p]}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
-                                    <button type="submit" className="primary-btn" style={{ height: '42px', padding: '0 24px' }}>
-                                        <UserPlus size={16} /> حفظ وتفعيل الموظف
-                                    </button>
-                                </div>
-                            </form>
-
-                            {addSuccess && (
-                                <div className="inline-message success" role="status" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <CheckCircle2 size={18} />
-                                        <span>{addSuccess}</span>
-                                    </div>
+                            <label className="user-field-group">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
                                     <button
                                         type="button"
-                                        className="text-link-btn"
-                                        onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
-                                        style={{ fontSize: '0.82rem' }}
+                                        onClick={generateRandomPassword}
+                                        style={{
+                                            background: 'rgba(14, 124, 134, 0.1)',
+                                            border: '1px solid rgba(14, 124, 134, 0.25)',
+                                            borderRadius: '6px',
+                                            color: 'var(--accent)',
+                                            cursor: 'pointer',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 600,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '2px 8px'
+                                        }}
                                     >
-                                        <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
+                                        <Sparkles size={13} /> توليد عشوائي
                                     </button>
                                 </div>
-                            )}
-
-                            {addError && (
-                                <div className="inline-message error" role="alert" style={{ marginTop: '16px' }}>
-                                    {addError}
+                                <div style={{ position: 'relative', width: '100%' }}>
+                                    <input
+                                        type={showNewPassword ? 'text' : 'password'}
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="أدخل كلمة المرور"
+                                        required
+                                        className="user-field-input"
+                                        style={{ paddingRight: '12px', paddingLeft: '40px' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                        style={{
+                                            position: 'absolute',
+                                            left: '10px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            color: 'var(--muted)',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}
+                                        title={showNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                    >
+                                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
                                 </div>
-                            )}
+                            </label>
+                        </div>
+
+                        <div style={{
+                            background: 'var(--panel, rgba(14, 124, 134, 0.04))',
+                            padding: '16px 20px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--line)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px'
+                        }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                صلاحيات استثنائية إضافية:
+                            </span>
+                            <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap' }}>
+                                {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
+                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.86rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={newPermissions.includes(p)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) setNewPermissions([...newPermissions, p])
+                                                else setNewPermissions(newPermissions.filter(x => x !== p))
+                                            }}
+                                            style={{ accentColor: 'var(--accent)', width: '16px', height: '16px' }}
+                                        />
+                                        <span>{PERMISSION_LABELS[p]}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
+                            <button type="submit" className="primary-btn" style={{ height: '44px', padding: '0 26px', fontSize: '0.92rem', fontWeight: 600 }}>
+                                <UserPlus size={17} /> حفظ وتفعيل الموظف
+                            </button>
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => setMainTab('employees')}
+                                style={{ height: '44px', padding: '0 20px', fontSize: '0.88rem' }}
+                            >
+                                إلغاء
+                            </button>
+                        </div>
+                    </form>
+
+                    {addSuccess && (
+                        <div className="inline-message success" role="status" style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <CheckCircle2 size={18} />
+                                <span>{addSuccess}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <button
+                                    type="button"
+                                    className="text-link-btn"
+                                    onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
+                                    style={{ fontSize: '0.82rem' }}
+                                >
+                                    <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="primary-btn"
+                                    onClick={() => setMainTab('employees')}
+                                    style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem' }}
+                                >
+                                    عرض في دليل الموظفين
+                                </button>
+                            </div>
                         </div>
                     )}
 
-                    {/* Local Users Table Section */}
-                    <div className="card-surface settings-section" style={{ padding: '20px' }}>
-                        <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-                            <div>
-                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <UsersRound size={19} color="var(--accent)" />
-                                    دليل الموظفين والحسابات المسجلة
-                                </h3>
-                                <span>قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
-                            </div>
+                    {addError && (
+                        <div className="inline-message error" role="alert" style={{ marginTop: '16px' }}>
+                            {addError}
+                        </div>
+                    )}
+                </div>
+            )}
 
-                            {/* Search & Filters */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Tab 1: Employee Directory */}
+            {mainTab === 'employees' && (
+                <div className="card-surface settings-section" style={{ padding: '20px' }}>
+                    <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <UsersRound size={19} color="var(--accent)" />
+                                دليل الموظفين والحسابات المسجلة
+                            </h3>
+                            <span>قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
+                        </div>
+
+                        {/* Search & Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                                 <select
                                     value={deptFilter}
                                     onChange={(e) => setDeptFilter(e.target.value)}
@@ -1297,7 +1389,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </table>
                         </div>
                     </div>
-                </>
             )}
 
             {/* Tab 2: Telegram Registration Requests */}
@@ -1562,74 +1653,133 @@ export default function UsersPage({ session }: UsersPageProps) {
                 </div>
             )}
 
-            {/* Current User Password Change Section */}
-            <div className="card-surface settings-section" style={{ padding: '20px' }}>
-                <div className="section-head" style={{ marginBottom: '16px' }}>
-                    <div>
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <KeyRound size={19} color="var(--accent)" />
-                            تغيير كلمة المرور الخاصة بحسابك ({activeUserEmail})
-                        </h3>
-                        <span>تعيين كلمة مرور جديدة لحسابك لتسجيل الدخول بها لاحقاً</span>
+            {/* Tab 4: Current User Password Change & Security Section */}
+            {mainTab === 'security' && (
+                <div className="card-surface settings-section" style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--line)' }}>
+                    <div className="section-head" style={{ marginBottom: '20px', borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
+                        <div>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.12rem', margin: 0 }}>
+                                <KeyRound size={20} color="var(--accent)" />
+                                أمان الحساب وتغيير كلمة المرور
+                            </h3>
+                            <span style={{ display: 'block', marginTop: '4px', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                                إدارة أمان حسابك الشخصي ({activeUserEmail}) وتعيين كلمة مرور جديدة لتسجيل الدخول بها لاحقاً
+                            </span>
+                        </div>
                     </div>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', alignItems: 'end' }}>
-                    <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                        كلمة المرور الجديدة
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                            <input
-                                type={showSelfPassword ? 'text' : 'password'}
-                                value={selfPassword}
-                                onChange={(e) => setSelfPassword(e.target.value)}
-                                placeholder="كلمة المرور الجديدة"
-                                style={{ width: '100%', padding: '10px 38px 10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                            />
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        padding: '14px 18px',
+                        background: 'var(--panel, rgba(255,255,255,0.03))',
+                        border: '1px solid var(--line)',
+                        borderRadius: '10px',
+                        marginBottom: '22px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--accent)'
+                            }}>
+                                <ShieldCheck size={22} />
+                            </div>
+                            <div>
+                                <strong style={{ fontSize: '0.92rem', display: 'block', color: 'var(--ink)' }}>
+                                    {activeUserEmail}
+                                </strong>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                    الدور الحالي: {isSystemAdmin ? 'مدير النظام الرئيسي' : (ROLE_LABELS[activeUserRole as EffectiveRole] || activeUserRole || 'موظف')}
+                                </span>
+                            </div>
+                        </div>
+                        <span style={{
+                            fontSize: '0.76rem',
+                            padding: '4px 12px',
+                            borderRadius: '999px',
+                            fontWeight: 600,
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            color: '#059669',
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}>
+                            <CheckCircle2 size={13} /> جلسة موثقة ونشطة
+                        </span>
+                    </div>
+
+                    <div style={{ maxWidth: '640px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+                            <label className="user-field-group">
+                                <span>كلمة المرور الجديدة <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <input
+                                        type={showSelfPassword ? 'text' : 'password'}
+                                        value={selfPassword}
+                                        onChange={(e) => setSelfPassword(e.target.value)}
+                                        placeholder="أدخل كلمة المرور الجديدة"
+                                        className="user-field-input"
+                                        style={{ paddingLeft: '40px' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSelfPassword(!showSelfPassword)}
+                                        style={{ position: 'absolute', left: '10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px', display: 'flex', alignItems: 'center' }}
+                                    >
+                                        {showSelfPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </label>
+
+                            <label className="user-field-group">
+                                <span>تأكيد كلمة المرور <span style={{ color: 'var(--accent)' }}>*</span></span>
+                                <input
+                                    type={showSelfPassword ? 'text' : 'password'}
+                                    value={selfConfirm}
+                                    onChange={(e) => setSelfConfirm(e.target.value)}
+                                    placeholder="أعد كتابة كلمة المرور"
+                                    className="user-field-input"
+                                />
+                            </label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                             <button
                                 type="button"
-                                onClick={() => setShowSelfPassword(!showSelfPassword)}
-                                style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
+                                className="primary-btn"
+                                onClick={handleSaveSelfPassword}
+                                disabled={selfPasswordSaving || !selfPassword}
+                                style={{ height: '42px', padding: '0 24px', fontSize: '0.88rem', fontWeight: 600 }}
                             >
-                                {showSelfPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                <Lock size={16} />
+                                {selfPasswordSaving ? 'جارٍ الحفظ...' : 'تحديث كلمة المرور الآن'}
                             </button>
                         </div>
-                    </label>
+                    </div>
 
-                    <label style={{ display: 'grid', gap: '5px', fontSize: '0.88rem' }}>
-                        تأكيد كلمة المرور
-                        <input
-                            type={showSelfPassword ? 'text' : 'password'}
-                            value={selfConfirm}
-                            onChange={(e) => setSelfConfirm(e.target.value)}
-                            placeholder="أعد كتابة كلمة المرور"
-                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--ink)' }}
-                        />
-                    </label>
+                    {selfPasswordSuccess && (
+                        <div className="inline-message success" role="status" style={{ marginTop: '16px', maxWidth: '640px' }}>
+                            <CheckCircle2 size={16} /> {selfPasswordSuccess}
+                        </div>
+                    )}
 
-                    <button
-                        type="button"
-                        className="primary-btn"
-                        onClick={handleSaveSelfPassword}
-                        disabled={selfPasswordSaving || !selfPassword}
-                        style={{ height: '42px', minWidth: '160px' }}
-                    >
-                        <Lock size={16} />
-                        {selfPasswordSaving ? 'جارٍ الحفظ...' : 'حفظ كلمة المرور'}
-                    </button>
+                    {selfPasswordError && (
+                        <div className="inline-message error" role="alert" style={{ marginTop: '16px', maxWidth: '640px' }}>
+                            {selfPasswordError}
+                        </div>
+                    )}
                 </div>
-
-                {selfPasswordSuccess && (
-                    <div className="inline-message success" role="status" style={{ marginTop: '12px' }}>
-                        <CheckCircle2 size={16} /> {selfPasswordSuccess}
-                    </div>
-                )}
-
-                {selfPasswordError && (
-                    <div className="inline-message error" role="alert" style={{ marginTop: '12px' }}>
-                        {selfPasswordError}
-                    </div>
-                )}
-            </div>
+            )}
 
             {/* Edit User Modal */}
             {editingUser && (
