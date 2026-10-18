@@ -1,6 +1,8 @@
 # دليل النشر الشامل والتشغيل في بيئة الإنتاج (Deployment & Operations Guide)
-
-يوثق هذا الدليل خطوات نشر وتشغيل تطبيق **"دفتر حركة المخزن (Warehouse Ledger)"** في بيئة الإنتاج خطوة بخطوة، مع توضيح إعدادات Supabase، ونشر دوال السحابة (Edge Functions)، وتطبيق الترحيلات (Migrations)، وإعداد الواجهة على Vercel، وتهيئة حساب مدير النظام، مع ضمان عدم انقطاع الخدمة (Zero-Lockout Rollout) وإمكانية التراجع الفوري (Rollback Plan).
+**المشروع:** `warehouse-ledger`  
+**الفرع الحالي:** `fix/registration-security`  
+**تاريخ التحديث:** 18 أكتوبر 2026  
+**حالة البناء والاختبارات:** ✅ اجتياز 358/358 اختباراً في Vitest، وفحص الأنواع `tsc -b` خالٍ من الأخطاء (0 errors)، وحزمة الإنتاج `dist/` مبنية بنجاح.
 
 ---
 
@@ -8,68 +10,73 @@
 
 - **الواجهة الأمامية (Frontend):** 
   - مبنية بتقنية Vite + React 19 + TypeScript + Tailwind CSS.
-  - واجهة عربية بالكامل (RTL) تدعم وضع عدم الاتصال (PWA / Offline-First).
-  - تُنشر كأصول ثابتة (SPA) على منصة **Vercel** أو أي خادم ويب ثابت (Cloudflare Pages, Netlify, Nginx).
+  - واجهة عربية بالكامل (RTL) مع دعم وضع عدم الاتصال (Offline-First / PWA).
+  - تُنشر كأصول ثابتة (SPA) على منصة **Vercel** أو أي خادم ويب ثابت (Cloudflare Pages, Netlify).
 - **الواجهة الخلفية وقاعدة البيانات (Backend & Database):**
   - تدار بواسطة **Supabase (PostgreSQL 15+)**.
   - محكومة بسياسات أمان صارمة على مستوى السجلات (Row Level Security - RLS).
   - تستخدم **Supabase Edge Functions (Deno Runtime)** لتنفيذ العمليات الإدارية الحساسة بمفتاح الخدمة السري (`service_role`).
+  - معالج تسجيل تفاعلي عبر بوت تيليجرام وتوثيق البريد الإلكتروني برموز OTP آمنة.
 - **نمطا المصادقة (Dual-Mode Authentication):**
-  - `legacy` (الوضع الافتراضي خلال الانتقال): يعتمد على الحسابات المحلية المتزامنة لضمان استمرار عمل جميع الموظفين دون انقطاع.
-  - `secure`: يعتمد كلياً على مصادقة Supabase Auth الرسمية بالبريد الاصطناعي (`<username>@warehouse.local`) وبيانات الصلاحيات المشفرة داخل `app_metadata`.
+  - `transitional` (الوضع الانتقالي الافتراضي): يتيح تسجيل الدخول السلس دون انقطاع لأي موظف عبر جسر الدخول الآمن `login-bridge` وترقية الحسابات تلقائياً.
+  - `secure`: يعتمد كلياً على مصادقة Supabase Auth الرسمية ورموز JWT المشفرة.
 
 ---
 
 ## 2. المتطلبات المسبقة (Prerequisites)
 
 قبل البدء في النشر، تأكد من توفر الآتي:
-1. **Node.js** (الإصدار 18 أو 20 أو 22) ومدير الحزم **npm** (أو pnpm).
-2. حساب على [Supabase](https://supabase.com) مع مشروع جديد جاهز.
+1. **Node.js** (الإصدار 18 أو 20 أو 22) ومدير الحزم **npm**.
+2. حساب على [Supabase](https://supabase.com) مع مشروع سحابي جاهز.
 3. حساب على [Vercel](https://vercel.com) مرتبط بمستودع المشروع (GitHub).
 4. تثبيت أداة **Supabase CLI** محلياً على جهازك:
    ```bash
-   # عبر npm
    npm install -g supabase
-   
-   # أو عبر Scoop (Windows)
-   scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-   scoop install supabase
-   
-   # أو عبر Homebrew (macOS/Linux)
-   brew install supabase/tap/supabase
    ```
+5. حسابات مزودي الخدمات الخارجية:
+   - بوت تيليجرام عبر BotFather.
+   - حساب [Resend](https://resend.com) أو حساب بريد Gmail مفعل فيه كلمة مرور التطبيق (App Password) لإرسال رسائل التحقق.
 
 ---
 
 ## 3. متغيرات البيئة والمفاتيح السرية (Environment Variables & Secrets)
 
-### أ. متغيرات بيئة الواجهة الأمامية (Frontend / Vercel / `.env.local`)
+### أ. متغيرات بيئة الواجهة الأمامية (Frontend / Vercel / `.env`)
 | المتغير | الوصف | مثال | إلزامي؟ |
 | :--- | :--- | :--- | :--- |
 | `VITE_SUPABASE_URL` | رابط مشروع Supabase الخاص بك | `https://xyzproject.supabase.co` | نعم |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | المفتاح العام للمشروع (Anon/Publishable Key) | `sb_publishable_...` | نعم |
-| `VITE_AUTH_MODE` | نمط المصادقة (`legacy` أثناء النشر المبدئي، ثم `secure` بعد الترحيل) | `legacy` أو `secure` | اختياري (الافتراضي `legacy`) |
+| `VITE_AUTH_MODE` | نمط المصادقة (`transitional` أثناء النشر المبدئي، ثم `secure` لاحقاً) | `transitional` أو `secure` | نعم (الافتراضي `transitional`) |
 
 > [!CAUTION]
 > **تحذير أمني صارم:** لا تقم أبداً بوضع مفتاح `service_role` السري في ملفات `.env` أو متغيرات Vercel للواجهة الأمامية. المفتاح العام فقط (`VITE_SUPABASE_PUBLISHABLE_KEY` أو `anon key`) هو المخصص للاستخدام داخل المتصفح.
 
 ### ب. المفاتيح السرية لدوال السحابة (Supabase Edge Functions Secrets)
-| المتغير | الوصف | مكان التعيين |
+يتم تعيين هذه المتغيرات داخل Supabase عبر لوحة التحكم (**Project Settings** -> **Edge Functions**) أو عبر الأمر `supabase secrets set`:
+
+| المتغير | الوصف | المصدر / الاستخدام |
 | :--- | :--- | :--- |
-| `SUPABASE_SERVICE_ROLE_KEY` | مفتاح الخدمة السري لإدارة المستخدمين في Auth و DB | يُعين عبر `supabase secrets set` داخل المشروع السحابي |
-| `SUPABASE_URL` | رابط المشروع (يوفره Supabase تلقائياً داخل الدالة) | تلقائي |
-| `SUPABASE_ANON_KEY` | المفتاح العام (يوفره Supabase تلقائياً داخل الدالة) | تلقائي |
+| `SUPABASE_SERVICE_ROLE_KEY` | مفتاح الخدمة السري لإدارة المستخدمين في Auth و DB | لوحة تحكم Supabase API Keys |
+| `TELEGRAM_BOT_TOKEN` | توكن بوت التيليجرام | BotFather على تيليجرام |
+| `TELEGRAM_WEBHOOK_SECRET` | رمز الحماية السري للتحقق من طلبات Webhook | سلسلة عشوائية قوية تولدها بنفسك |
+| `RESEND_API_KEY` | مفتاح خدمة إرسال البريد الإلكتروني | لوحة تحكم منصة Resend |
+| `SMTP_HOST` | خادم SMTP (اختياري، مثل `smtp.gmail.com`) | إعدادات البريد الإلكتروني |
+| `SMTP_PORT` | منفذ SMTP (مثل `465` أو `587`) | إعدادات البريد الإلكتروني |
+| `SMTP_USER` | اسم مستخدم SMTP / البريد المرسل | بريد النظام |
+| `SMTP_PASSWORD` | كلمة مرور التطبيق لخادم SMTP | كلمات مرور التطبيقات (App Passwords) |
+| `REGISTRATION_OTP_PEPPER` | ملح إضافي لتشفير رموز OTP قبل مقارنتها بـ SHA-256 | سلسلة سرية عشوائية |
+| `BOOTSTRAP_ADMIN_IDENTITY` | معرّف أو بريد مسؤول النظام المصرح له بالتهيئة | `marwandesouqhi@gmail.com` |
 
 ---
 
 ## 4. إعداد قاعدة البيانات والترحيلات (Database Migrations)
 
-يحتوي المستودع على ملفات ترحيل SQL مرتبة في مجلد `supabase/migrations/`.
+يحتوي المستودع على ملفات ترحيل SQL مرتبة زمنياً في مجلد `supabase/migrations/`.
 
-### ترتيب تطبيق الترحيلات:
-قم بتطبيق الملفات بالترتيب الزمني إما عبر Supabase CLI أو عبر **Supabase SQL Editor**:
+### ترتيب تطبيق الترحيلات المعتمدة:
+قم بتطبيق الملفات بالترتيب الزمني إما عبر Supabase CLI (`supabase db push`) أو عبر **Supabase SQL Editor**:
 
-1. `0001_init.sql` — الجداول الأساسية لحركات المخزن.
+1. `0001_init.sql` — الجداول الأساسية لحركات المخزن والأصناف.
 2. `20261010161551_create_user_movements.sql` — تخصيص الحركات لكل مستخدم.
 3. `20261010200500_create_audit_logs_and_invitations.sql` — سجل التدقيق ودعوات المستخدمين.
 4. `20261010204500_harden_admin_security.sql` — حماية صلاحيات الأدمن.
@@ -82,112 +89,120 @@
 11. `20261013200000_transfers_custody_sources.sql` — دعم حركات التحويل وصرف العهدة من أي مخزن.
 12. `20261013210000_security_hardening_schema.sql` — دالة `record_purchase` الذرية وميزات الأمان المعززة.
 13. `20261013220000_remove_username_privilege_escalation.sql` — إزالة أي تصعيد صلاحيات يعتمد على اسم المستخدم وحده.
+14. `20261014120000_protected_system_admin.sql` — تحصين حساب مسؤول النظام الثابت `marwan-desouky` ضد الحذف والتعديل.
+15. `20261014120001_login_attempts.sql` — جدول تتبع محاولات الدخول الفاشلة ومكافحة التخمين.
+16. `20261014130000_fix_record_purchase_rpc.sql` — تصحيح دالة تسجيل المشتريات الذرية وضمان اتساق العهدة.
+17. `20261014140000_procurement_module.sql` — جداول موديول المشتريات، الموردين، طلبات الشراء، عروض الأسعار، وأوامر الشراء.
+18. `20261017120000_employee_registration_and_identity.sql` — موديول تسجيل الموظفين وتوثيق الهوية المؤسسية.
+19. `20261017130000_lockdown_privileged_functions_and_bootstrap.sql` — قفل دوال RPC وتوفير دالة التهيئة الأحادية الآمنة لمدير النظام.
+20. `20261017140000_telegram_bot_hardening_and_email_verification.sql` — تحصين بوت تيليجرام وتوثيق البريد برموز OTP.
+21. `20261017150000_approval_delegation_code_registry_and_rls.sql` — سجل الأكواد ومصفوفة تفويض الأقسام وسياسات RLS.
+22. `20261017160000_telegram_user_sessions.sql` — جدول إدارة جلسات معالج التسجيل المتدرج.
 
-> [!IMPORTANT]
-> **ملاحظة حرجة حول ملف تشديد الحماية `20261013213000_harden_rls.sql`:**
-> هذا الملف يلغي وصول المستخدمين غير المسجلين (`anon`) تماماً ويقيد الوصول فقط لرموز JWT الموقعة. **لا تنفذ هذا الملف أثناء وضع `legacy`** حتى لا يتعطل دخول الموظفين القدامى. يتم تنفيذه فقط في **المرحلة 6** بعد اكتمال ترحيل الحسابات وتفعيل وضع `secure`.
+> [!WARNING]
+> **تنبيه أمني بخصوص الملفات المعلقة والمرفوضة:**
+> - تم **رفض وحظر** الملف `20261017210000_reset_users_and_pin_admin.sql` ونقله إلى `supabase/pending/rejected/` لمنع أي حذف تدميري لبيانات المستخدمين ومصادقة النظام.
+> - الملفات الموجودة في `supabase/pending/` (`20261013213000_harden_rls.sql` و `20261017153000_enforce_active_status_on_business_tables.sql` و `20261018130000_harden_telegram_user_sessions.sql`) هي مقترحات تنتظر المراجعة اليدوية للمالك ولا تُطبق مباشرة.
 
 ---
 
 ## 5. نشر وظائف السحابة (Edge Functions Deployment)
 
-يشتمل النظام على 3 دوال سحابية أساسية في `supabase/functions/`:
-1. `admin-users` — إدارة حسابات المستخدمين (إنشاء، تعديل، إعادة تعيين كلمة المرور، تبديل مدير النظام) مع التحقق الصارم من JWT.
-2. `invite-user` — إنشاء الدعوات الأمنية وتوليد روابط الدعوة.
-3. `migrate-users` — ترحيل المستخدمين بضغطة زر وبشكل تكراري آمن (Idempotent) من جدول `app_users` إلى Supabase Auth الرسمي.
+يشتمل النظام على دوال سحابية متخصصة ومحصنة داخل `supabase/functions/`:
+1. `admin-users` — إدارة حسابات المستخدمين مع حظر تعديل حساب مسؤول النظام والتحقق من التوقيع.
+2. `login-bridge` — جسر الدخول الآمن بمقارنة زمنية ثابتة ومكافحة التخمين، دون تعداد المستخدمين.
+3. `telegram-bot` — معالج التسجيل التفاعلي والتحقق من توقيع Webhook وإرسال OTP عبر البريد.
+4. `user-registration` — معالجة واعتماد طلبات تسجيل الموظفين وفق مصفوفة التفويض.
+5. `invite-user` — إنشاء وتوثيق دعوات المستخدمين الجدد.
+6. `migrate-users` — ترحيل المستخدمين بضغطة زر إلى Supabase Auth.
+7. `verify-email` — التحقق من صحة عناوين البريد الإلكتروني.
 
 ### أوامر النشر عبر Supabase CLI:
-
 ```bash
-# 1. تسجيل الدخول إلى حساب Supabase
+# 1. تسجيل الدخول
 supabase login
 
-# 2. ربط المشروع المحلي بالمشروع السحابي (استبدل YOUR_PROJECT_REF برمز مشروعك)
+# 2. ربط المشروع السحابي
 supabase link --project-ref YOUR_PROJECT_REF
 
-# 3. تعيين مفتاح service_role السري لدوال السحابة
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY="YOUR_ACTUAL_SERVICE_ROLE_KEY"
+# 3. ضبط المفاتيح السرية
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
+supabase secrets set TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
+supabase secrets set TELEGRAM_WEBHOOK_SECRET="YOUR_WEBHOOK_SECRET"
+supabase secrets set RESEND_API_KEY="YOUR_RESEND_KEY"
+supabase secrets set REGISTRATION_OTP_PEPPER="YOUR_RANDOM_PEPPER"
 
-# 4. نشر الدوال السحابية الثلاث
+# 4. نشر الدوال السحابية
 supabase functions deploy admin-users
+supabase functions deploy login-bridge
+supabase functions deploy telegram-bot
+supabase functions deploy user-registration
 supabase functions deploy invite-user
 supabase functions deploy migrate-users
+supabase functions deploy verify-email
 ```
 
 ---
 
-## 6. تهيئة حساب مدير النظام الأول (Bootstrap System Admin)
+## 6. تهيئة حساب مدير النظام (Bootstrap System Admin)
 
-عند تثبيت النظام لأول مرة على قاعدة بيانات جديدة فارغة، يلزم إنشاء حساب مدير النظام الأولي (`marwan-desouky`):
+يتم ضبط الحساب دون أي كلمات مرور نصية في الكود وفق الدليل في [`scripts/bootstrap-system-admin.md`](file:///c:/Users/Glory/warehouse-ledger/scripts/bootstrap-system-admin.md):
 
-### الطريقة السريعة عبر Supabase Dashboard:
-1. ادخل إلى **Authentication** -> **Users** -> **Add user** -> **Create user**.
-2. أدخل البيانات:
-   - **Email:** `marwan-desouky@warehouse.local`
-   - **Password:** أدخل كلمة مرور قوية جديدة (8 أحرف على الأقل).
-   - **Auto Confirm User:** فعّل الخيار (`true`).
-3. بعد إنشاء الحساب، اضغط على المستخدم ثم انتقل إلى خانة **App Metadata**:
-   ```json
-   {
-     "username": "marwan-desouky",
-     "role": "system_admin",
-     "system_admin": true,
-     "permissions": ["view_audit", "view_settings", "manage_records"],
-     "must_change_password": false
-   }
+1. **إنشاء الحساب في Supabase Auth:**
+   - من **Authentication** -> **Users** -> **Add user** -> **Create user**.
+   - البريد: `marwandesouqhi@gmail.com` (أو `marwan-desouky@warehouse.local`).
+   - تعيين كلمة مرور قوية وتفعيل **Auto Confirm User**.
+2. **استدعاء دالة التهيئة الأحادية الآمنة في SQL Editor:**
+   ```sql
+   SELECT public.bootstrap_system_admin(
+     'marwandesouqhi@gmail.com',
+     'marwan-desouky',
+     'YOUR_AUTH_USER_UUID_HERE'::UUID
+   );
    ```
-4. احفظ التعديلات.
-
-*(للطريقة البرمجية عبر SQL Editor مع تشفير كلمة المرور بـ pgcrypto ومزامنة `app_users`، راجع الدليل المخصص في [scripts/bootstrap-admin.md](file:///c:/Users/Glory/warehouse-ledger/scripts/bootstrap-admin.md)).*
+3. في حال الرغبة في تعيين كلمة مرور جديدة لاحقاً، يتم إرسال رابط آمن عبر خيار **Send password recovery** في لوحة تحكم Supabase.
 
 ---
 
 ## 7. نشر الواجهة الأمامية على Vercel (Frontend Deployment)
 
-1. ادخل إلى منصة [Vercel](https://vercel.com) واضغط **Add New...** -> **Project**.
-2. اربط مستودع المشروع من GitHub.
-3. اضبط إعدادات البناء:
+1. ادخل إلى [Vercel Dashboard](https://vercel.com) واضغط **Add New...** -> **Project**.
+2. اربط مستودع المشروع (الفرع `fix/registration-security` أو الفرع الرئيسي بعد الدمج).
+3. إعدادات البناء:
    - **Framework Preset:** `Vite`
-   - **Root Directory:** `./`
    - **Build Command:** `npm run build`
    - **Output Directory:** `dist`
    - **Install Command:** `npm install`
-4. أضف متغيرات البيئة في قسم **Environment Variables**:
-   - `VITE_SUPABASE_URL` = `https://<your-project>.supabase.co`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` = `<your-publishable-key>`
-   - `VITE_AUTH_MODE` = `legacy` (في المرحلة الأولى)
+4. إضافة متغيرات البيئة في **Environment Variables**:
+   ```env
+   VITE_SUPABASE_URL=https://<your-project>.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=<your-anon-publishable-key>
+   VITE_AUTH_MODE=transitional
+   ```
 5. اضغط **Deploy**.
-
-> [!NOTE]
-> ملف [vercel.json](file:///c:/Users/Glory/warehouse-ledger/vercel.json) المرفق في المستودع معد مسبقاً للتعامل مع إعادة توجيه مسارات SPA (`/* -> /index.html`)، وترويس الحماية الأمنية (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`)، والتحكم في كاش ملف الخدمة (`sw.js`).
 
 ---
 
-## 8. مراحل الإطلاق التدريجي وضمان عدم القفل (Phased Rollout - Zero Lockout)
-
-لضمان انتقال سلس ومعدوم المخاطر دون انقطاع أي موظف عن العمل:
+## 8. مراحل الإطلاق التدريجي وضمان عدم القفل (Zero-Lockout Phased Rollout)
 
 ```
-[ المرحلة 1: نشر Legacy ] ──> [ المرحلة 2: نشر Edge Functions ] ──> [ المرحلة 3: ترحيل المستخدمين ]
-                                                                                │
-[ المرحلة 6: قفل RLS المشدد ] <── [ المرحلة 5: التحويل إلى Secure ] <── [ المرحلة 4: التحقق والاختبار ]
+[ المرحلة 1: نشر الواجهة بـ transitional ] ──> [ المرحلة 2: نشر Edge Functions ] ──> [ المرحلة 3: تفعيل الموظفين ]
+                                                                                             │
+[ المرحلة 6: قفل RLS المشدد ] <── [ المرحلة 5: التحويل إلى secure ] <── [ المرحلة 4: التحقق والاختبار ]
 ```
 
-1. **المرحلة 1: النشر المبدئي بالوضع القديم (`VITE_AUTH_MODE=legacy`)**:
-   - يتيح لجميع المستخدمين الحاليين تسجيل الدخول واستخدام النظام كالمعتاد بدون أي تغيير.
-2. **المرحلة 2: نشر الدوال السحابية ومفتاح الخدمة**:
-   - نشر `admin-users`, `invite-user`, `migrate-users` وضبط `SUPABASE_SERVICE_ROLE_KEY`.
-3. **المرحلة 3: تهيئة مدير النظام وترحيل المستخدمين**:
-   - تسجيل دخول مدير النظام، ثم تشغيل زر الترحيل (أو استدعاء الدالة السحابية `migrate-users`).
-   - تنشئ الدالة حسابات Supabase Auth رسمية لكل موظف وتعين `must_change_password: true`.
-4. **المرحلة 4: الاختبار والتحقق**:
-   - تجربة تسجيل الدخول بحساب مدير النظام ومستخدم تجريبي للتأكد من استلام الرموز وتطبيق الصلاحيات.
-5. **المرحلة 5: تفعيل الوضع الآمن رسمياً**:
-   - تعديل المتغير في Vercel إلى: `VITE_AUTH_MODE=secure`.
-   - إعادة نشر الواجهة (Redeploy).
-   - عند تسجيل دخول الموظفين لأول مرة، تطلب منهم الواجهة تعيين كلمة مرور شخصية قوية جديدة.
-6. **المرحلة 6: تفعيل الحماية المشددة لقاعدة البيانات**:
-   - تطبيق ملف `supabase/migrations/20261013213000_harden_rls.sql` في Supabase SQL Editor لقفل الجداول وسجل العمليات تماماً.
+1. **المرحلة 1: النشر بالوضع الانتقالي (`VITE_AUTH_MODE=transitional`):**
+   - يتيح لكافة الموظفين الدخول دون أي انقطاع، ويقوم جسر الدخول بترقية حساباتهم تدريجياً.
+2. **المرحلة 2: نشر وظائف السحابة وإعداد أسرارها:**
+   - نشر دوال الحافة وضبط أسرار تيليجرام والبريد ومفتاح الخدمة.
+3. **المرحلة 3: تسجيل الموظفين وربط الهويات:**
+   - استخدام معالج تيليجرام أو تسجيل الدخول الأول لربط البريد وتوليد أكواد الموظفين.
+4. **المرحلة 4: التحقق والاختبار الشامل:**
+   - التأكد من قدرة كل دور على أداء مهامه الوظيفية بنجاح.
+5. **المرحلة 5: التبديل إلى الوضع المشدد (`VITE_AUTH_MODE=secure`):**
+   - تغيير المتغير في Vercel إلى `secure` وإعادة النشر.
+6. **المرحلة 6: تفعيل سياسات RLS المشددة:**
+   - مراجعة وتطبيق ملف [`supabase/pending/20261013213000_harden_rls.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/pending/20261013213000_harden_rls.sql) في SQL Editor لقفل الجداول وسحب أي صلاحيات عامة.
 
 ---
 
@@ -195,22 +210,20 @@ supabase functions deploy migrate-users
 
 في حال حدوث أي طارئ أو عائق أثناء الانتقال:
 1. **الرجوع الفوري للواجهة الأمامية:**
-   - قم بتغيير `VITE_AUTH_MODE=legacy` في Vercel Project Settings ثم أعد النشر (Redeploy).
-   - سيعود النظام للعمل بالنمط المحلي القديم فوراً.
-2. **التراجع عن سياسات RLS المقيدة:**
-   - في حال كنت قد طبقت `20261013213000_harden_rls.sql`، قم بتشغيل سكريبت التراجع الجاهز:
-     [supabase/rollbacks/20261013213000_harden_rls_rollback.sql](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261013213000_harden_rls_rollback.sql)
+   - تغيير `VITE_AUTH_MODE=transitional` في إعدادات Vercel ثم الضغط على **Redeploy**.
+2. **التراجع عن سياسات RLS المشددة:**
+   - تشغيل سكريبت التراجع الجاهز:
+     [`supabase/rollbacks/20261013213000_harden_rls_rollback.sql`](file:///c:/Users/Glory/warehouse-ledger/supabase/rollbacks/20261013213000_harden_rls_rollback.sql)
      داخل Supabase SQL Editor لإعادة فتح الصلاحيات فوراً.
 
 ---
 
 ## 10. قائمة التحقق بعد النشر (Post-Deployment Verification Checklist)
 
-- [ ] التأكد من تشغيل الموقع عبر HTTPS بنجاح وظهور الترويسات الأمنية (Check Headers via DevTools).
+- [ ] تشغيل الواجهة عبر HTTPS وظهور ترويسات الأمان (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`).
 - [ ] تسجيل الدخول بحساب مدير النظام (`marwan-desouky`).
-- [ ] التأكد من قفل صفحة المستخدمين وسجل العمليات والإعدادات عن المستخدمين العاديين.
-- [ ] تسجيل دخول موظف مشتريات والتأكد من نطاق المشتريات العام (`purchasesScope: 'all'`).
-- [ ] تجربة تسجيل حركة مشتريات جديدة والتحقق من حفظها ومزامنتها في السحابة.
-- [ ] تجربة تسجيل حركة صرف أو تحويل في صفحة العهدة والتحقق من خصم الرصيد.
-- [ ] اختبار تصدير واستيراد ملفات Excel والتأكد من تطابق البيانات.
-- [ ] تجربة وضع عدم الاتصال (قطع الإنترنت والتأكد من استمرار عمل الواجهة وسحب البيانات المخزنة محلياً).
+- [ ] التأكد من حجب صفحة المستخدمين والإعدادات وسجلات التدقيق عن الموظفين العاديين.
+- [ ] تجربة تسجيل فاتورة مشتريات جديدة والتحقق من مزامنتها في السحابة.
+- [ ] تجربة حركة صرف أو تحويل في العهدة والتحقق من خصم الرصيد الذري.
+- [ ] اختبار بوت تيليجرام وإرسال رمز التحقق OTP إلى البريد الإلكتروني.
+- [ ] اختبار وضع عدم الاتصال (قطع الإنترنت والتأكد من استمرار عمل الواجهة وسحب البيانات المخزنة محلياً).
