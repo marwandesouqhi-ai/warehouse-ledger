@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import nodemailer from "npm:nodemailer"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +45,7 @@ function generateSecureTempPassword(): string {
   return Array.from(array, (byte) => chars[byte % chars.length]).join("")
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -194,11 +195,11 @@ serve(async (req) => {
         .from("app_users")
         .select("id, username, display_name, role, status, created_at, activated_at, last_login_at, notes, permissions, auth_user_id, must_change_password, employee_id, email, department, telegram_user_id")
 
-      const appUserMap = new Map((appUsersData || []).map((u) => [normalizeUsername(u.username), u]))
+      const appUserMap = new Map((appUsersData as any[] || []).map((u: any) => [normalizeUsername(u.username), u]))
 
-      const allUsers = (listData?.users || []).map((u) => {
+      const allUsers = (listData?.users || []).map((u: any) => {
         const username = (u.app_metadata?.username as string) || (u.email?.replace(/@warehouse\.local$/, "") ?? "")
-        const mirror = appUserMap.get(normalizeUsername(username))
+        const mirror: any = appUserMap.get(normalizeUsername(username))
 
         const employeeId = mirror?.employee_id || (u.app_metadata?.employee_id as string) || (isProtectedUsername(username) ? "SYS-ADM-000001" : "")
         const department = mirror?.department || (u.app_metadata?.department as string) || (isProtectedUsername(username) ? "الإدارة العامة" : "")
@@ -222,7 +223,7 @@ serve(async (req) => {
       })
 
       // Layer 2: Hide protected System Admin marwan-desouky from all other callers
-      const visibleUsers = allUsers.filter((u) => {
+      const visibleUsers = allUsers.filter((u: any) => {
         if (isProtectedUsername(u.username) || isProtectedUsername(u.email)) {
           return isCallerProtected
         }
@@ -400,7 +401,7 @@ serve(async (req) => {
         const syntheticEmail = `${targetUsername}@warehouse.local`
         const { data: authList } = await supabaseAdmin.auth.admin.listUsers()
         targetAuthUser = (authList?.users || []).find(
-          (u) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
+          (u: any) => normalizeUsername(u.email) === normalizeUsername(syntheticEmail)
         )
       }
 
@@ -600,26 +601,72 @@ serve(async (req) => {
 
     // ─── ACTION: delete_user ─────────────────────────────────────────────────
     if (action === "delete_user") {
-      const { userId } = body
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "معرّف المستخدم مطلوب." }), {
+      const { userId, username, email } = body
+      if (!userId && !username && !email) {
+        return new Response(JSON.stringify({ error: "معرّف المستخدم أو اسم المستخدم مطلوب." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
 
-      const { data: targetUser, error: getError } = await supabaseAdmin.auth.admin.getUserById(userId)
-      if (getError || !targetUser?.user) {
-        return new Response(JSON.stringify({ error: "المستخدم غير موجود." }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
+      let targetAuthId: string | null = null
+      let targetUsername = username ? normalizeUsername(username) : ""
+      let targetEmail = email ? email.trim().toLowerCase() : ""
+
+      // 1. Try resolving auth user if userId looks like a UUID
+      const isUuid = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+      if (isUuid) {
+        const { data: targetAuth } = await supabaseAdmin.auth.admin.getUserById(userId)
+        if (targetAuth?.user) {
+          targetAuthId = targetAuth.user.id
+          if (!targetUsername) {
+            targetUsername = (targetAuth.user.app_metadata?.username as string) || (targetAuth.user.email?.replace(/@warehouse\.local$/, "") ?? "")
+          }
+          if (!targetEmail && targetAuth.user.email) {
+            targetEmail = targetAuth.user.email.toLowerCase()
+          }
+        }
       }
 
-      const targetUsername = targetUser.user.email?.replace(/@warehouse\.local$/, "") ?? ""
-      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser.user.email)
+      // 2. If not found yet, search in app_users
+      const query = supabaseAdmin.from("app_users").select("*")
+      if (isUuid) {
+        query.or(`id.eq.${userId},auth_user_id.eq.${userId}${targetUsername ? `,username.ilike.${targetUsername}` : ""}`)
+      } else if (targetUsername) {
+        query.ilike("username", targetUsername)
+      } else if (userId) {
+        query.eq("id", userId)
+      }
+      const { data: mirrorRows } = await query
+      const mirror = mirrorRows && mirrorRows.length > 0 ? mirrorRows[0] : null
+      if (mirror) {
+        if (!targetUsername) targetUsername = mirror.username
+        if (!targetAuthId && mirror.auth_user_id) targetAuthId = mirror.auth_user_id
+        if (!targetEmail && mirror.email) targetEmail = mirror.email.toLowerCase()
+      }
 
-      // Strictly forbid deleting marwan-desouky
+      // 3. Search auth.users by synthetic email if targetAuthId is still not resolved
+      if (!targetAuthId && targetUsername) {
+        const syntheticEmail = `${targetUsername}@warehouse.local`.toLowerCase()
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers()
+        const matched = listData?.users?.find(
+          (u) =>
+            u.email?.toLowerCase() === syntheticEmail ||
+            (targetEmail && u.email?.toLowerCase() === targetEmail) ||
+            normalizeUsername(u.app_metadata?.username as string) === targetUsername
+        )
+        if (matched) {
+          targetAuthId = matched.id
+          if (!targetEmail && matched.email) targetEmail = matched.email.toLowerCase()
+        }
+      }
+
+      // 4. Strictly forbid deleting the System Admin (marwan-desouky / marwandesouqhi@gmail.com)
+      const isTargetProtected =
+        isProtectedUsername(targetUsername) ||
+        isProtectedUsername(targetEmail) ||
+        (targetAuthId && caller.id === targetAuthId && isCallerProtected)
+
       if (isTargetProtected) {
         return new Response(JSON.stringify({
           error: "غير مصرح: حساب مدير النظام الرئيسي (marwan-desouky) محمي بشكل دائم ولا يمكن حذفه نهائياً من النظام.",
@@ -629,33 +676,60 @@ serve(async (req) => {
         })
       }
 
-      // Strictly forbid deleting root admin
-      if (targetUsername.toLowerCase() === "admin") {
-        return new Response(JSON.stringify({
-          error: "غير مصرح: حساب المشرف الرئيسي (admin) محمي من الحذف.",
-        }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
+      // 5. Permanent deletion from Supabase Auth (auth.users)
+      if (targetAuthId) {
+        try {
+          await supabaseAdmin.auth.admin.deleteUser(targetAuthId)
+        } catch (authDelErr) {
+          console.warn("Could not delete from auth.users:", authDelErr)
+        }
       }
 
-      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
-      if (deleteError) throw deleteError
+      // 6. Permanent deletion from public database tables (app_users, user_invitations, registration_requests, telegram_user_sessions)
+      if (targetUsername || userId) {
+        if (targetUsername) {
+          await supabaseAdmin.from("app_users").delete().ilike("username", targetUsername)
+          await supabaseAdmin.from("user_invitations").delete().ilike("username", targetUsername)
+          await supabaseAdmin.from("telegram_user_sessions").delete().ilike("username", targetUsername)
+        }
+        if (userId) {
+          await supabaseAdmin.from("app_users").delete().eq("id", userId)
+        }
+        if (targetAuthId) {
+          await supabaseAdmin.from("app_users").delete().eq("auth_user_id", targetAuthId)
+        }
+      }
 
-      // Remove from app_users mirror
-      await supabaseAdmin.from("app_users").delete().eq("username", targetUsername.toLowerCase())
+      if (targetEmail) {
+        await supabaseAdmin.from("user_invitations").delete().ilike("email", targetEmail)
+        await supabaseAdmin.from("registration_requests").delete().ilike("email", targetEmail)
+        await supabaseAdmin.from("telegram_user_sessions").delete().ilike("email", targetEmail)
+      }
 
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
         user_email: caller.email,
-        action: `حذف حساب المستخدم: ${targetUsername}`,
+        action: `حذف حساب المستخدم نهائياً من قاعدة البيانات: ${targetUsername || userId}`,
         entity_type: "user_management",
-        entity_id: userId,
-        details: { target_username: targetUsername },
+        entity_id: targetAuthId || userId,
+        details: { target_username: targetUsername, target_email: targetEmail, auth_id: targetAuthId },
       })
 
-      return new Response(JSON.stringify({ success: true, message: "تم حذف المستخدم بنجاح." }), {
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم حذف المستخدم وجميع سجلاته المرتبطة نهائياً من قاعدة البيانات ونظام المصادقة.",
+      }), {
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: reset_and_seed_system_admin (REJECTED / DISABLED) ───────────
+    if (action === "reset_and_seed_system_admin") {
+      return new Response(JSON.stringify({
+        error: "هذا الإجراء محظور نهائياً لمنع مساس أو حذف أي بيانات مستخدمين. لتهيئة حساب مدير النظام، استخدم إجراء bootstrap_system_admin، ولتعيين كلمة المرور استخدم send_password_recovery.",
+      }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
@@ -874,7 +948,7 @@ serve(async (req) => {
       if (!existingAuth) {
         const { data: authList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 })
         existingAuth = (authList?.users || []).find(
-          (u) => normalizeUsername(u.email) === normalizeUsername(regReq.email)
+          (u: any) => normalizeUsername(u.email) === normalizeUsername(regReq.email)
         )
       }
 
@@ -1159,10 +1233,38 @@ serve(async (req) => {
         })
       }
 
-      // If RESEND_API_KEY is configured, dispatch real recovery email
-      const resendApiKey = Deno.env.get("RESEND_API_KEY")
+      // If Gmail SMTP or Resend is configured, dispatch real recovery email
       const actionLink = linkData?.properties?.action_link
-      if (resendApiKey && actionLink) {
+      const smtpUser = (Deno.env.get("SMTP_USER") || Deno.env.get("GMAIL_USER") || "").trim()
+      const smtpPass = (Deno.env.get("SMTP_PASS") || Deno.env.get("GMAIL_APP_PASSWORD") || "").trim()
+      const resendApiKey = (Deno.env.get("RESEND_API_KEY") ?? "").trim()
+      const emailSubject = "تعيين كلمة المرور - نظام إدارة المستودع"
+      const emailHtml = `<div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2>تعيين كلمة المرور</h2>
+        <p>تم طلب تعيين أو استعادة كلمة المرور لحسابك في نظام المستودع.</p>
+        <p><a href="${actionLink}" style="background-color: #2563eb; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">تعيين كلمة المرور</a></p>
+        <p style="color: #666; font-size: 12px;">ينتهي الرابط تلقائياً بعد فترة قصيرة ولأمانك لا تشاركه مع أي شخص.</p>
+      </div>`
+
+      if (actionLink && smtpUser && smtpPass) {
+        try {
+          const port = Number(Deno.env.get("SMTP_PORT")) || 465
+          const transporter = nodemailer.createTransport({
+            host: Deno.env.get("SMTP_HOST") || "smtp.gmail.com",
+            port,
+            secure: port === 465,
+            auth: { user: smtpUser, pass: smtpPass },
+          })
+          await transporter.sendMail({
+            from: Deno.env.get("EMAIL_FROM") || Deno.env.get("RESEND_FROM_EMAIL") || `Warehouse Ledger <${smtpUser}>`,
+            to: targetEmail,
+            subject: emailSubject,
+            html: emailHtml,
+          })
+        } catch {
+          // ignore email transport error
+        }
+      } else if (actionLink && resendApiKey) {
         try {
           await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -1171,15 +1273,10 @@ serve(async (req) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: Deno.env.get("RESEND_FROM_EMAIL") || "Warehouse Ledger <onboarding@resend.dev>",
+              from: Deno.env.get("EMAIL_FROM") || Deno.env.get("RESEND_FROM_EMAIL") || "Warehouse Ledger <onboarding@resend.dev>",
               to: [targetEmail],
-              subject: "تعيين كلمة المرور - نظام إدارة المستودع",
-              html: `<div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px;">
-                <h2>تعيين كلمة المرور</h2>
-                <p>تم طلب تعيين أو استعادة كلمة المرور لحسابك في نظام المستودع.</p>
-                <p><a href="${actionLink}" style="background-color: #2563eb; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">تعيين كلمة المرور</a></p>
-                <p style="color: #666; font-size: 12px;">ينتهي الرابط تلقائياً بعد فترة قصيرة ولأمانك لا تشاركه مع أي شخص.</p>
-              </div>`,
+              subject: emailSubject,
+              html: emailHtml,
             }),
           })
         } catch {
