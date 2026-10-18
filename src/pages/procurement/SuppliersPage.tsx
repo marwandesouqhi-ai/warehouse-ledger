@@ -281,7 +281,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       <ProcurementSubNav activeTab="suppliers" />
 
       {/* Page Header */}
-      <div className="section-head movement-heading" style={{ marginTop: '14px', marginBottom: '16px' }}>
+      <div className="section-head movement-heading mt-3 mb-4">
         <div>
           <h2>
             <Building2 size={20} />
@@ -293,9 +293,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
         <div className="headline-actions">
           <button
             type="button"
-            className="primary-btn"
+            className="primary-btn inline-flex items-center gap-1"
             onClick={openAddModal}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
             <Plus size={17} /> إضافة مورد جديد
           </button>
@@ -303,13 +302,16 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       </div>
 
       {successMessage && (
-        <div className="inline-message success" style={{ marginBottom: '16px' }}>
-          <CheckCircle2 size={17} />
-          <span>{successMessage}</span>
+        <div className="inline-message success mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={17} />
+            <span>{successMessage}</span>
+          </div>
           <button
             type="button"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', marginInlineStart: 'auto' }}
+            className="cursor-pointer text-muted"
             onClick={() => setSuccessMessage('')}
+            aria-label="إغلاق رسالة النجاح"
           >
             <X size={15} />
           </button>
@@ -317,45 +319,45 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       )}
 
       {/* KPI Cards */}
-      <div className="purchases-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(14, 124, 134, 0.07)', border: '1px solid rgba(14, 124, 134, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent)' }}>
+      <div className="purchases-kpis">
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-accent">
             <Building2 size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>إجمالي الموردين</span>
+            <span className="purchases-kpi-label">إجمالي الموردين</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {kpis.total.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>سجل الموردين المعتمدين</span>
+          <span className="purchases-kpi-sub">سجل الموردين المعتمدين</span>
         </div>
 
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.07)', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#059669' }}>
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-ok">
             <CheckCircle2 size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>موردون نشطون</span>
+            <span className="purchases-kpi-label">موردون نشطون</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {kpis.active.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>مؤهلون لأوامر الشراء والعروض</span>
+          <span className="purchases-kpi-sub">مؤهلون لأوامر الشراء والعروض</span>
         </div>
 
-        <div className="kpi-card" style={{ padding: '16px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.07)', border: '1px solid rgba(245, 158, 11, 0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#d97706' }}>
+        <div className="purchases-kpi-card">
+          <div className="purchases-kpi-head text-warn">
             <Clock size={20} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>بانتظار الاعتماد</span>
+            <span className="purchases-kpi-label">بانتظار الاعتماد</span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: '8px', color: 'var(--ink)' }}>
+          <div className="purchases-kpi-val">
             {kpis.underReview.toLocaleString('ar-EG')}
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>موردون تحت المراجعة الفنية</span>
+          <span className="purchases-kpi-sub">موردون تحت المراجعة الفنية</span>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="movements-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
+      <div className="suppliers-filter-controls">
         {/* Status Pills */}
-        <div className="filter-pills" style={{ display: 'flex', gap: '6px' }}>
+        <div className="suppliers-pills">
           <button
             type="button"
             className={`filter-pill ${statusFilter === 'all' ? 'active' : ''}`}
@@ -388,11 +390,12 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
         {/* Category Dropdown */}
         {categories.length > 0 && (
-          <div style={{ minWidth: '160px' }}>
+          <div className="suppliers-cat-select-wrap">
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}
+              className="suppliers-cat-select"
+              aria-label="تصفية حسب التصنيف"
             >
               <option value="all">كافة التصنيفات</option>
               {categories.map((cat) => (
@@ -403,142 +406,142 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
         )}
 
         {/* Search */}
-        <div style={{ flex: '1', minWidth: '220px', position: 'relative' }}>
-          <Search size={16} style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', right: '10px', color: 'var(--muted)' }} />
+        <div className="suppliers-search-wrap">
+          <Search size={16} className="suppliers-search-icon" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="ابحث باسم المورد أو السجل التجاري أو جهة الاتصال..."
-            style={{ width: '100%', padding: '8px 32px 8px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}
+            className="suppliers-search-input"
+            aria-label="بحث في الموردين"
           />
         </div>
       </div>
 
       {/* Main Table Content */}
       {loading ? (
-        <div className="table-loading" style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-          <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '8px' }} />
+        <div className="table-loading text-center p-8 text-muted">
+          <RefreshCw size={24} className="spin-icon mb-2" />
           <div>جارٍ تحميل سجل الموردين من السحابة...</div>
         </div>
       ) : error ? (
-        <div className="inline-message error" style={{ padding: '20px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="inline-message error p-5 rounded-lg flex flex-col gap-2">
+          <div className="flex items-center gap-2">
             <AlertTriangle size={20} />
             <strong>تعذر جلب بيانات الموردين</strong>
           </div>
-          <p style={{ margin: 0 }}>{error}</p>
+          <p className="m-0">{error}</p>
           <button
             type="button"
-            className="secondary-btn"
-            style={{ alignSelf: 'flex-start', marginTop: '6px' }}
+            className="secondary-btn self-start mt-2"
             onClick={() => loadData()}
           >
             <RefreshCw size={15} /> إعادة المحاولة
           </button>
         </div>
       ) : filteredSuppliers.length === 0 ? (
-        <div className="empty-state card-surface" style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--line)' }}>
-          <Building2 size={40} style={{ opacity: 0.35, marginBottom: '10px' }} />
+        <div className="empty-state card-surface text-center p-8 border border-dashed">
+          <Building2 size={40} className="opacity-35 mb-2" />
           <h3>لا توجد سجلات موردين مطابقة</h3>
-          <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+          <p className="text-muted font-sm">
             {searchTerm || statusFilter !== 'all' || categoryFilter !== 'all'
               ? 'لم يتم العثور على أي موردين يطابقون الفلاتر أو نص البحث الحالي.'
               : 'لم يتم تسجيل أي موردين بعد في النظام.'}
           </p>
         </div>
       ) : (
-        <div className="table-wrapper card-surface" style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--line)' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '960px', borderCollapse: 'collapse', textAlign: 'right' }}>
+        <div className="table-wrapper card-surface suppliers-table-wrap">
+          <table className="custom-table suppliers-table">
             <thead>
-              <tr style={{ background: 'rgba(0, 0, 0, 0.02)', borderBottom: '1px solid var(--line)' }}>
-                <th style={{ padding: '14px 16px', minWidth: '220px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>اسم المورد / الشركة</th>
-                <th style={{ padding: '14px 16px', minWidth: '140px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>التصنيف</th>
-                <th style={{ padding: '14px 16px', minWidth: '180px', textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>جهة الاتصال والهاتف</th>
-                <th style={{ padding: '14px 16px', minWidth: '110px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>أوامر الشراء</th>
-                <th style={{ padding: '14px 16px', minWidth: '100px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الفواتير</th>
-                <th style={{ padding: '14px 16px', minWidth: '100px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>التقييم</th>
-                <th style={{ padding: '14px 16px', minWidth: '110px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الحالة</th>
-                <th style={{ padding: '14px 16px', minWidth: '120px', textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>الإجراءات</th>
+              <tr>
+                <th>اسم المورد / الشركة</th>
+                <th>التصنيف</th>
+                <th>جهة الاتصال والهاتف</th>
+                <th className="suppliers-th-center">أوامر الشراء</th>
+                <th className="suppliers-th-center">الفواتير</th>
+                <th className="suppliers-th-center">التقييم</th>
+                <th className="suppliers-th-center">الحالة</th>
+                <th className="suppliers-th-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody>
               {paginatedSuppliers.map((supplier) => (
-                <tr key={supplier.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                  <td style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{supplier.name}</div>
+                <tr key={supplier.id}>
+                  <td>
+                    <div className="suppliers-name-col">{supplier.name}</div>
                     {supplier.commercial_register && (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '2px' }}>
+                      <div className="suppliers-sub-text">
                         س.ت: {supplier.commercial_register}
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span className="badge neutral" style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem' }}>{supplier.category || 'عام'}</span>
+                  <td>
+                    <span className="badge muted">{supplier.category || 'عام'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
+                  <td>
                     {supplier.contact_name || supplier.phone ? (
-                      <div style={{ fontSize: '0.85rem' }}>
-                        <div style={{ fontWeight: 500 }}>{supplier.contact_name || '—'}</div>
+                      <div className="font-sm">
+                        <div className="font-medium">{supplier.contact_name || '—'}</div>
                         {supplier.phone && (
-                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', direction: 'ltr', textAlign: 'right', marginTop: '2px' }}>
+                          <div className="suppliers-phone-text">
                             {supplier.phone}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <span style={{ color: 'var(--muted)' }}>—</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 600 }}>
+                  <td className="text-center font-semibold">
                     {supplier.po_count > 0 ? (
-                      <span className="badge info" style={{ padding: '4px 10px', borderRadius: '6px' }}>{supplier.po_count}</span>
+                      <span className="badge info">{supplier.po_count}</span>
                     ) : (
-                      <span style={{ color: 'var(--muted)' }}>0</span>
+                      <span className="text-muted">0</span>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 600 }}>
+                  <td className="text-center font-semibold">
                     {supplier.invoices_count > 0 ? (
-                      <span className="badge ok" style={{ padding: '4px 10px', borderRadius: '6px' }}>{supplier.invoices_count}</span>
+                      <span className="badge ok">{supplier.invoices_count}</span>
                     ) : (
-                      <span style={{ color: 'var(--muted)' }}>0</span>
+                      <span className="text-muted">0</span>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                  <td className="text-center">
                     {supplier.rating != null ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#d97706', fontWeight: 600 }}>
-                        <Star size={14} fill="#d97706" />
+                      <div className="suppliers-rating-box">
+                        <Star size={14} fill="var(--warn)" />
                         <span>{supplier.rating.toFixed(1)}</span>
                       </div>
                     ) : (
-                      <span style={{ color: 'var(--muted)' }}>—</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                  <td className="text-center">
                     {supplier.status === 'active' && (
-                      <span className="stock-status-pill ok" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                      <span className="badge ok">
                         نشط
                       </span>
                     )}
                     {supplier.status === 'under_review' && (
-                      <span className="stock-status-pill info" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                      <span className="badge info">
                         تحت التقييم
                       </span>
                     )}
                     {supplier.status === 'suspended' && (
-                      <span className="stock-status-pill danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                      <span className="badge bad">
                         موقوف
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                  <td className="text-center">
+                    <div className="suppliers-actions-group">
                       <button
                         type="button"
-                        className="icon-action-btn"
+                        className="suppliers-icon-btn"
                         title="تعديل المورد"
+                        aria-label={`تعديل المورد ${supplier.name}`}
                         onClick={() => openEditModal(supplier)}
-                        style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--surface)', cursor: 'pointer' }}
                       >
                         <Pencil size={15} />
                       </button>
@@ -547,9 +550,9 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       <select
                         value={supplier.status}
                         onChange={(e) => handleQuickStatusChange(supplier, e.target.value as SupplierStatus)}
-                        className="quick-status-select"
+                        className="suppliers-status-select"
                         title="تغيير حالة المورد"
-                        style={{ fontSize: '0.78rem', padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        aria-label={`تغيير حالة المورد ${supplier.name}`}
                       >
                         <option value="active">نشط</option>
                         <option value="under_review">تحت التقييم</option>
@@ -559,10 +562,10 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       {isSysAdmin && (
                         <button
                           type="button"
-                          className="icon-action-btn danger"
+                          className="suppliers-icon-btn danger"
                           title="حذف المورد نهائياً (متاح فقط إذا لم تكن له حركات)"
+                          aria-label={`حذف المورد ${supplier.name}`}
                           onClick={() => handleDeleteSupplier(supplier)}
-                          style={{ padding: '6px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', cursor: 'pointer' }}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -575,11 +578,11 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
           </table>
 
           {/* Pagination */}
-          <div className="table-pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 8px' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+          <div className="suppliers-pagination-bar">
+            <span className="font-sm text-muted">
               عرض {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredSuppliers.length)} من {filteredSuppliers.length} مورد
             </span>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="flex gap-2">
               <button
                 type="button"
                 className="secondary-btn"
@@ -605,16 +608,6 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       {(isAddModalOpen || editingSupplier) && (
         <div
           className="modal-backdrop"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.55)',
-            backdropFilter: 'blur(4px)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 1200,
-            padding: '16px',
-          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsAddModalOpen(false)
@@ -622,45 +615,33 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
             }
           }}
         >
-          <div
-            className="modal-surface card-surface"
-            style={{
-              maxWidth: '540px',
-              width: '100%',
-              padding: '24px',
-              borderRadius: '16px',
-              border: '1px solid var(--line)',
-              background: 'var(--surface)',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', color: 'var(--ink)' }}>
-                <Building2 size={22} style={{ color: 'var(--accent)' }} />
+          <div className="modal-surface card-surface suppliers-modal-card">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="m-0 flex items-center gap-2 text-xl text-ink">
+                <Building2 size={22} className="text-accent" />
                 {editingSupplier ? 'تعديل بيانات المورد' : 'إضافة مورد جديد'}
               </h3>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '4px' }}
+                className="cursor-pointer text-muted p-1 bg-none border-none"
                 onClick={() => { setIsAddModalOpen(false); setEditingSupplier(null) }}
+                aria-label="إغلاق النافذة"
               >
                 <X size={20} />
               </button>
             </div>
 
             {actionError && (
-              <div className="inline-message error" style={{ marginBottom: '16px' }}>
+              <div className="inline-message error mb-4">
                 <AlertTriangle size={16} />
                 <span>{actionError}</span>
               </div>
             )}
 
             <form onSubmit={editingSupplier ? handleEditSupplierSubmit : handleAddSupplierSubmit}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>
-                    اسم المورد / الشركة <span style={{ color: 'var(--bad)' }}>*</span>
-                  </label>
+              <div className="flex flex-col gap-3">
+                <label className="form-label-block">
+                  اسم المورد / الشركة <span className="text-bad">*</span>
                   <input
                     type="text"
                     value={formName}
@@ -668,130 +649,75 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                     placeholder="مثال: شركة النيل للتوريدات الطبية"
                     required
                     autoFocus
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--line)',
-                      background: 'var(--surface)',
-                      color: 'var(--ink)',
-                      fontSize: '0.9rem',
-                    }}
+                    className="form-input-themed"
                   />
-                </div>
+                </label>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>التصنيف</label>
+                <div className="form-grid-2col">
+                  <label className="form-label-block">
+                    التصنيف
                     <input
                       type="text"
                       value={formCategory}
                       onChange={(e) => setFormCategory(e.target.value)}
                       placeholder="مثال: أجهزة طبية، أدوات كتابية..."
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                      }}
+                      className="form-input-themed"
                     />
-                  </div>
+                  </label>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>السجل التجاري</label>
+                  <label className="form-label-block">
+                    السجل التجاري
                     <input
                       type="text"
                       value={formCr}
                       onChange={(e) => setFormCr(e.target.value)}
                       placeholder="رقم السجل التجاري"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                      }}
+                      className="form-input-themed"
                     />
-                  </div>
+                  </label>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>اسم مسؤول الاتصال</label>
+                <div className="form-grid-2col">
+                  <label className="form-label-block">
+                    اسم مسؤول الاتصال
                     <input
                       type="text"
                       value={formContact}
                       onChange={(e) => setFormContact(e.target.value)}
                       placeholder="اسم المندوب أو المدير"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                      }}
+                      className="form-input-themed"
                     />
-                  </div>
+                  </label>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>رقم الهاتف</label>
+                  <label className="form-label-block">
+                    رقم الهاتف
                     <input
                       type="text"
                       value={formPhone}
                       onChange={(e) => setFormPhone(e.target.value)}
                       placeholder="الهاتف أو الجوال"
                       dir="ltr"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                        textAlign: 'right',
-                      }}
+                      className="form-input-themed text-right"
                     />
-                  </div>
+                  </label>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>الحالة</label>
+                <div className="form-grid-2col">
+                  <label className="form-label-block">
+                    الحالة
                     <select
                       value={formStatus}
                       onChange={(e) => setFormStatus(e.target.value as SupplierStatus)}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                      }}
+                      className="form-input-themed"
                     >
                       <option value="active">نشط (معتمد للتوريد)</option>
                       <option value="under_review">تحت التقييم (مسودة / مراجعة)</option>
                       <option value="suspended">موقوف (محظور مؤقتاً)</option>
                     </select>
-                  </div>
+                  </label>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>التقييم (1 إلى 5)</label>
+                  <label className="form-label-block">
+                    التقييم (1 إلى 5)
                     <input
                       type="number"
                       min="1"
@@ -800,49 +726,29 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       value={formRating}
                       onChange={(e) => setFormRating(e.target.value)}
                       placeholder="اختياري (1 - 5)"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface)',
-                        color: 'var(--ink)',
-                        fontSize: '0.9rem',
-                      }}
+                      className="form-input-themed"
                     />
-                  </div>
+                  </label>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)' }}>ملاحظات إضافية</label>
+                <label className="form-label-block">
+                  ملاحظات إضافية
                   <textarea
                     rows={3}
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                     placeholder="شروط التوريد، العنوان، شروط الدفع السابقة..."
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--line)',
-                      background: 'var(--surface)',
-                      color: 'var(--ink)',
-                      fontSize: '0.9rem',
-                      resize: 'vertical',
-                    }}
+                    className="form-input-themed"
                   />
-                </div>
+                </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
+              <div className="flex justify-end gap-3 mt-5">
                 <button
                   type="button"
                   className="secondary-btn"
                   disabled={isSubmitting}
                   onClick={() => { setIsAddModalOpen(false); setEditingSupplier(null) }}
-                  style={{ padding: '9px 18px', borderRadius: '8px', fontWeight: 600 }}
                 >
                   إلغاء
                 </button>
@@ -850,7 +756,6 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                   type="submit"
                   className="primary-btn"
                   disabled={isSubmitting}
-                  style={{ padding: '9px 20px', borderRadius: '8px', fontWeight: 600 }}
                 >
                   {isSubmitting ? 'جارٍ الحفظ...' : editingSupplier ? 'حفظ التعديلات' : 'تسجيل المورد'}
                 </button>
