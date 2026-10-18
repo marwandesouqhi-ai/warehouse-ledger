@@ -34,7 +34,7 @@ function isValidIdentifier(identifier: string): boolean {
   return false
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -161,23 +161,12 @@ serve(async (req) => {
       })
     }
 
-    // 5. Resolve Auth Identity using getUserById (Never listUsers)
+    // 5. Resolve Auth Identity strictly via getUserById using appUser.auth_user_id
     let authUser = null
     if (appUser.auth_user_id) {
       const { data: authUserData, error: authUserErr } = await supabaseAdmin.auth.admin.getUserById(appUser.auth_user_id)
       if (!authUserErr && authUserData?.user) {
         authUser = authUserData.user
-      }
-    }
-
-    // If user has no auth_user_id linked yet: check if it's the intended system admin
-    if (!authUser && (normalizedIdentifier === "marwan-desouky" || appUser.email === "marwandesouqhi@gmail.com")) {
-      const { data: adminSearch } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10 })
-      const foundAdmin = (adminSearch?.users || []).find((u) => u.email?.toLowerCase() === "marwandesouqhi@gmail.com")
-      if (foundAdmin) {
-        authUser = foundAdmin
-        // Auto-link auth_user_id
-        await supabaseAdmin.from("app_users").update({ auth_user_id: foundAdmin.id }).eq("id", appUser.id)
       }
     }
 

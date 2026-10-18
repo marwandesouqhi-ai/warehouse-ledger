@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getAuthMode, isAuthSecureMode, isAuthTransitionalMode } from '../../src/lib/authMode'
 import { isProtectedUsername } from '../../src/lib/protectedAccounts'
@@ -143,4 +146,28 @@ describe('Zero Lockout & Login Bridge Suite', () => {
       expect(isTransitional).toBe(false)
     })
   })
+
+  describe('Login Bridge Architecture Security Invariants', () => {
+    it('asserts that listUsers is never used in login-bridge Edge Function', () => {
+      const bridgePath = path.resolve(__dirname, '../../supabase/functions/login-bridge/index.ts')
+      const bridgeSource = fs.readFileSync(bridgePath, 'utf8')
+      expect(bridgeSource).not.toContain('listUsers')
+    })
+
+    it('asserts that login-bridge resolves identities strictly through getUserById', () => {
+      const bridgePath = path.resolve(__dirname, '../../supabase/functions/login-bridge/index.ts')
+      const bridgeSource = fs.readFileSync(bridgePath, 'utf8')
+      expect(bridgeSource).toContain('getUserById(appUser.auth_user_id)')
+    })
+
+    it('confirms login-bridge does not compare or write legacy passwords', () => {
+      const bridgePath = path.resolve(__dirname, '../../supabase/functions/login-bridge/index.ts')
+      const bridgeSource = fs.readFileSync(bridgePath, 'utf8')
+      // Must not compare appUser.password directly
+      expect(bridgeSource).not.toContain('appUser.password')
+      // Must not call admin.updateUserById with password
+      expect(bridgeSource).not.toMatch(/updateUserById\([^)]*password/)
+    })
+  })
 })
+
