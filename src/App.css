@@ -7447,5 +7447,404 @@
   padding: 4px;
 }
 
+/* =====================================================================
+   DASHBOARDS: Procurement & Custody Analytics Design System Classes
+   ===================================================================== */
+.proc-dash-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.proc-dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.proc-dash-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--ink);
+}
+
+.proc-dash-subtitle {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 4px;
+  display: block;
+}
+
+.proc-dash-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.proc-dash-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink);
+  transition: all 0.18s ease;
+}
+
+.proc-dash-export-btn:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+}
+
+.proc-dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.proc-dash-kpi-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-top-width: 4px;
+  border-top-style: solid;
+}
+
+.proc-dash-kpi-card[data-tone='emerald'] {
+  border-top-color: var(--chart-3);
+}
+
+.proc-dash-kpi-card[data-tone='teal'] {
+  border-top-color: var(--chart-1);
+}
+
+.proc-dash-kpi-card[data-tone='blue'] {
+  border-top-color: var(--chart-2);
+}
+
+.proc-dash-kpi-card[data-tone='purple'] {
+  border-top-color: var(--chart-5);
+}
+
+.proc-dash-kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.proc-dash-kpi-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.proc-dash-kpi-val {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.proc-dash-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.proc-dash-kpi-icon[data-tone='emerald'] {
+  background: var(--badge-success-bg);
+  color: var(--chart-3);
+}
+
+.proc-dash-kpi-icon[data-tone='teal'] {
+  background: var(--surface-soft);
+  color: var(--chart-1);
+}
+
+.proc-dash-kpi-icon[data-tone='blue'] {
+  background: var(--badge-info-bg);
+  color: var(--chart-2);
+}
+
+.proc-dash-kpi-icon[data-tone='purple'] {
+  background: var(--surface-soft);
+  color: var(--chart-5);
+}
+
+.proc-dash-kpi-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: var(--sp-2);
+}
+
+.proc-dash-pipeline-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.proc-dash-pipeline-header {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.proc-dash-pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-3);
+}
+
+.proc-dash-pipeline-item {
+  padding: var(--sp-3) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-inline-start-width: 4px;
+  border-inline-start-style: solid;
+}
+
+.proc-dash-pipeline-item-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.proc-dash-pipeline-item-val {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.proc-dash-pipeline-item-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.proc-dash-recent-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.proc-dash-recent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.proc-dash-search-input {
+  width: 100%;
+  padding: 7px 30px 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  font-size: var(--text-xs);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.proc-dash-view-all-link {
+  font-size: var(--text-xs);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.proc-dash-empty-state {
+  text-align: center;
+  padding: var(--sp-6);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Custody Analytics Dashboard classes */
+.custody-dash-banner {
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.custody-dash-banner-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.custody-dash-icon-box {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(8, 127, 104, 0.25);
+}
+
+.custody-dash-banner-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.custody-dash-banner-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.custody-dash-split-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--sp-4);
+}
+
+.custody-dash-wh-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+}
+
+.custody-dash-wh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+
+.custody-dash-wh-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.custody-dash-wh-item {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.custody-dash-wh-item:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+}
+
+.custody-dash-wh-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.custody-dash-wh-hub-badge {
+  font-size: var(--text-xs);
+  background: var(--badge-success-bg);
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+}
+
+.custody-dash-bar-track {
+  width: 100%;
+  height: 8px;
+  background: var(--line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.custody-dash-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--chart-1));
+  border-radius: var(--r-pill);
+  transition: width 0.4s ease;
+}
+
+.custody-dash-cat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  font-size: var(--text-xs);
+}
+
+.custody-dash-condition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-2);
+}
+
+.custody-dash-condition-box {
+  padding: 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.custody-dash-condition-box[data-condition='excellent'] {
+  background: var(--badge-success-bg);
+  color: var(--badge-success-text);
+}
+
+.custody-dash-condition-box[data-condition='good'] {
+  background: var(--badge-info-bg);
+  color: var(--badge-info-text);
+}
+
+.custody-dash-condition-box[data-condition='maintenance'] {
+  background: var(--badge-warning-bg);
+  color: var(--badge-warning-text);
+}
+
+.custody-dash-condition-box[data-condition='damaged'] {
+  background: var(--badge-danger-bg);
+  color: var(--badge-danger-text);
+}
+
+
 
 

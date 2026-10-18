@@ -92,10 +92,10 @@ export function ProcurementAnalyticsDashboard({
     const avgVal = totalCount > 0 ? Math.round(kpis.totalSpend / totalCount) : 0
 
     return [
-      { name: '1. فواتير وتوريدات الشراء', count: totalCount, color: '#0e7c86', desc: 'إجمالي عمليات الشراء المقيدة' },
-      { name: '2. فواتير برقم رسمي', count: withInvoice, color: '#3b82f6', desc: 'حركات مسجلة برقم فاتورة معتمد' },
-      { name: '3. موردون معتمدون', count: withSupplier, color: '#10b981', desc: 'حركات مرتبطة بشركات وموردين' },
-      { name: '4. متوسط الفاتورة', count: avgVal, isCurrency: true, color: '#8b5cf6', desc: 'معدل الإنفاق لكل فاتورة شراء' },
+      { name: '1. فواتير وتوريدات الشراء', count: totalCount, color: 'var(--chart-1)', desc: 'إجمالي عمليات الشراء المقيدة' },
+      { name: '2. فواتير برقم رسمي', count: withInvoice, color: 'var(--chart-2)', desc: 'حركات مسجلة برقم فاتورة معتمد' },
+      { name: '3. موردون معتمدون', count: withSupplier, color: 'var(--chart-3)', desc: 'حركات مرتبطة بشركات وموردين' },
+      { name: '4. متوسط الفاتورة', count: avgVal, isCurrency: true, color: 'var(--chart-5)', desc: 'معدل الإنفاق لكل فاتورة شراء' },
     ]
   }, [purchaseMovements, kpis.totalSpend])
 
@@ -142,46 +142,24 @@ export function ProcurementAnalyticsDashboard({
   }
 
   return (
-    <div className={`procurement-analytics-wrapper ${isDashboardEmbed ? 'dashboard-embed' : ''}`}>
+    <div className={`proc-dash-wrapper ${isDashboardEmbed ? 'dashboard-embed' : ''}`}>
       {/* رأس القسم والإجراءات السريعة */}
-      <div
-        className="analytics-top-header"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '20px',
-        }}
-      >
+      <div className="proc-dash-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: isDashboardEmbed ? '1.25rem' : '1.45rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--ink)' }}>
+          <h2 className="proc-dash-title" style={{ fontSize: isDashboardEmbed ? 'var(--text-md)' : 'var(--text-lg)' }}>
             <Receipt size={22} style={{ color: 'var(--accent)' }} />
             تحليلات وبيانات قسم المشتريات والتوريدات
           </h2>
-          <span style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+          <span className="proc-dash-subtitle">
             مؤشرات الإنفاق المالي، متابعة فواتير الشراء المسجلة، وحسابات الموردين في قاعدة البيانات الحقيقية
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="proc-dash-actions">
           <button
             type="button"
             onClick={() => void handleExportExcel()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid var(--line)',
-              background: 'var(--surface)',
-              cursor: 'pointer',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              color: 'var(--ink)',
-            }}
+            className="proc-dash-export-btn"
           >
             <Download size={15} />
             تصدير تقرير المشتريات Excel
@@ -190,16 +168,7 @@ export function ProcurementAnalyticsDashboard({
           <NavLink
             to="/purchases?tab=add"
             className="primary-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              textDecoration: 'none',
-            }}
+            style={{ textDecoration: 'none' }}
           >
             <Plus size={16} />
             فاتورة وتوريد جديد
@@ -208,111 +177,71 @@ export function ProcurementAnalyticsDashboard({
       </div>
 
       {/* بطاقات المؤشرات الـ 4 الرئيسية */}
-      <div
-        className="kpi-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-          gap: '14px',
-          marginBottom: '22px',
-        }}
-      >
-        <div
-          className="kpi-card card-surface"
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid var(--line)',
-            borderTop: '4px solid #10b981',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="proc-dash-kpi-grid">
+        <div className="proc-dash-kpi-card card-surface" data-tone="emerald">
+          <div className="proc-dash-kpi-top">
             <div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>إجمالي الإنفاق الفعلي</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+              <div className="proc-dash-kpi-label">إجمالي الإنفاق الفعلي</div>
+              <div className="proc-dash-kpi-val">
                 {formatCurrency(kpis.totalSpend, currency)}
               </div>
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+            <div className="proc-dash-kpi-icon" data-tone="emerald">
               <DollarSign size={20} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+          <div className="proc-dash-kpi-sub">
             متوسط الفاتورة: {formatCurrency(kpis.avgInvoice, currency)}
           </div>
         </div>
 
-        <div
-          className="kpi-card card-surface"
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid var(--line)',
-            borderTop: '4px solid #0e7c86',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="proc-dash-kpi-card card-surface" data-tone="teal">
+          <div className="proc-dash-kpi-top">
             <div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>حركات وفواتير الشراء</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+              <div className="proc-dash-kpi-label">حركات وفواتير الشراء</div>
+              <div className="proc-dash-kpi-val">
                 {kpis.purchasesCount.toLocaleString('ar-EG')} فاتورة
               </div>
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(14, 124, 134, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0e7c86' }}>
+            <div className="proc-dash-kpi-icon" data-tone="teal">
               <Receipt size={20} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+          <div className="proc-dash-kpi-sub">
             مسجلة ومتزامنة مع قاعدة البيانات
           </div>
         </div>
 
-        <div
-          className="kpi-card card-surface"
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid var(--line)',
-            borderTop: '4px solid #3b82f6',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="proc-dash-kpi-card card-surface" data-tone="blue">
+          <div className="proc-dash-kpi-top">
             <div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>الإنفاق هذا الشهر</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+              <div className="proc-dash-kpi-label">الإنفاق هذا الشهر</div>
+              <div className="proc-dash-kpi-val">
                 {formatCurrency(kpis.monthSpend, currency)}
               </div>
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+            <div className="proc-dash-kpi-icon" data-tone="blue">
               <TrendingUp size={20} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+          <div className="proc-dash-kpi-sub">
             مشتريات دورة الشهر الجاري
           </div>
         </div>
 
-        <div
-          className="kpi-card card-surface"
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid var(--line)',
-            borderTop: '4px solid #8b5cf6',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="proc-dash-kpi-card card-surface" data-tone="purple">
+          <div className="proc-dash-kpi-top">
             <div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>الموردون والشركات</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)', marginTop: '4px' }}>
+              <div className="proc-dash-kpi-label">الموردون والشركات</div>
+              <div className="proc-dash-kpi-val">
                 {kpis.suppliersCount.toLocaleString('ar-EG')} مورد
               </div>
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'rgba(139, 92, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>
+            <div className="proc-dash-kpi-icon" data-tone="purple">
               <Building2 size={20} />
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+          <div className="proc-dash-kpi-sub">
             <NavLink to="/purchases/suppliers" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
               عرض سجل الموردين ←
             </NavLink>
@@ -321,76 +250,41 @@ export function ProcurementAnalyticsDashboard({
       </div>
 
       {/* مسار التوريد ومؤشرات العمليات */}
-      <div
-        className="card-surface"
-        style={{
-          padding: '18px',
-          borderRadius: '12px',
-          border: '1px solid var(--line)',
-          marginBottom: '22px',
-        }}
-      >
-        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="proc-dash-pipeline-card card-surface">
+        <div className="proc-dash-pipeline-header">
           <Truck size={18} style={{ color: 'var(--accent)' }} />
           مؤشرات دورة التوريد والعمليات المسجلة
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '12px',
-          }}
-        >
+        <div className="proc-dash-pipeline-grid">
           {pipeline.map((step) => (
             <div
               key={step.name}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '8px',
-                background: 'rgba(0, 0, 0, 0.02)',
-                border: '1px solid var(--line)',
-                borderInlineStart: `4px solid ${step.color}`,
-              }}
+              className="proc-dash-pipeline-item"
+              style={{ borderInlineStartColor: step.color }}
             >
-              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ink)' }}>{step.name}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: step.color, marginTop: '4px' }}>
+              <div className="proc-dash-pipeline-item-label">{step.name}</div>
+              <div className="proc-dash-pipeline-item-val" style={{ color: step.color }}>
                 {step.isCurrency ? formatCurrency(step.count, currency) : step.count.toLocaleString('ar-EG')}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '4px' }}>{step.desc}</div>
+              <div className="proc-dash-pipeline-item-sub">{step.desc}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* جدول أحدث فواتير وحركات الشراء الفعلية */}
-      <div
-        className="card-surface"
-        style={{
-          padding: '18px',
-          borderRadius: '12px',
-          border: '1px solid var(--line)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '12px',
-            marginBottom: '14px',
-          }}
-        >
+      <div className="proc-dash-recent-card card-surface">
+        <div className="proc-dash-recent-header">
           <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--ink)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--ink)' }}>
               أحدث فواتير وحركات الشراء والتوريد الفعلية
             </div>
-            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>
               معاينة سريعة لآخر {filteredPurchases.length} حركة شراء مسجلة في النظام
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
             <div style={{ position: 'relative', width: '220px' }}>
               <Search size={14} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
               <input
@@ -398,29 +292,12 @@ export function ProcurementAnalyticsDashboard({
                 placeholder="بحث برقم الفاتورة أو المورد أو الصنف..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '7px 30px 7px 10px',
-                  borderRadius: '7px',
-                  border: '1px solid var(--line)',
-                  fontSize: '0.82rem',
-                  background: 'var(--surface)',
-                  color: 'var(--ink)',
-                }}
+                className="proc-dash-search-input"
               />
             </div>
             <NavLink
               to="/purchases"
-              style={{
-                fontSize: '0.82rem',
-                color: 'var(--accent)',
-                fontWeight: 600,
-                textDecoration: 'none',
-                padding: '7px 12px',
-                borderRadius: '7px',
-                border: '1px solid var(--line)',
-                background: 'var(--surface)',
-              }}
+              className="proc-dash-view-all-link"
             >
               عرض كافة الفواتير ←
             </NavLink>
@@ -428,13 +305,13 @@ export function ProcurementAnalyticsDashboard({
         </div>
 
         {filteredPurchases.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)', fontSize: '0.9rem' }}>
+          <div className="proc-dash-empty-state">
             <Package size={36} style={{ margin: '0 auto 8px', opacity: 0.4, display: 'block' }} />
             لا توجد فواتير أو حركات شراء تطابق بحثك حالياً.
           </div>
         ) : (
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <table className="custom-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+          <div className="table-responsive">
+            <table className="custom-table" style={{ width: '100%', fontSize: 'var(--text-xs)' }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: 'right' }}>التاريخ</th>
@@ -458,12 +335,12 @@ export function ProcurementAnalyticsDashboard({
                         <strong style={{ color: 'var(--ink)' }}>{m.inv || '—'}</strong>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 600, color: '#0e7c86' }}>{m.from || '—'}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--chart-1)' }}>{m.from || '—'}</span>
                       </td>
                       <td>{m.item || '—'}</td>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{q.toLocaleString('ar-EG')}</td>
                       <td style={{ textAlign: 'center' }}>{p > 0 ? formatCurrency(p, currency) : '—'}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--chart-3)' }}>
                         {total > 0 ? formatCurrency(total, currency) : '—'}
                       </td>
                     </tr>

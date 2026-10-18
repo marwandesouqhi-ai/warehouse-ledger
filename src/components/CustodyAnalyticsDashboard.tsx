@@ -87,43 +87,18 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
   }, [items])
 
   return (
-    <div className="custody-analytics-dashboard animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="custody-analytics-dashboard animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
       {/* 1. Header Banner */}
-      <div
-        className="card-surface"
-        style={{
-          padding: '20px 24px',
-          borderRadius: '16px',
-          background: 'linear-gradient(135deg, rgba(8, 127, 104, 0.12), rgba(14, 124, 134, 0.06))',
-          border: '1px solid rgba(8, 127, 104, 0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '46px',
-              height: '46px',
-              borderRadius: '12px',
-              background: 'var(--accent)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(8, 127, 104, 0.3)',
-            }}
-          >
+      <div className="custody-dash-banner card-surface">
+        <div className="custody-dash-banner-lead">
+          <div className="custody-dash-icon-box">
             <BarChart3 size={24} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--ink)' }}>
+            <h3 className="custody-dash-banner-title">
               لوحة التقارير والتحليلات الإحصائية لأصول وعهد المؤسسة
             </h3>
-            <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            <span className="custody-dash-banner-sub">
               تحليل مركزي مباشر يوضح توزيع القيمة المالية ونسب الصلاحية الفنية عبر كافة الكليات والمخازن الـ 8
             </span>
           </div>
@@ -133,7 +108,7 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
           type="button"
           className="highlight-action-btn"
           onClick={onExportAllExcel}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: 'var(--text-sm)' }}
           title="تصدير ملف Excel متعدد الصفحات يحتوي على صفحة لكل كلية + صفحة ملخص عام"
         >
           <FileSpreadsheet size={17} />
@@ -187,62 +162,53 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
       </div>
 
       {/* 3. Main Chart Sections: Warehouses Financial Breakdown */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '20px' }}>
+      <div className="custody-dash-split-grid">
         {/* Warehouses Comparative Chart */}
-        <div className="card-surface" style={{ padding: '20px', borderRadius: '16px', border: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div className="card-surface custody-dash-wh-card">
+          <div className="custody-dash-wh-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)' }}>
               <Building2 size={18} style={{ color: 'var(--accent)' }} />
               <span>توزيع القيمة المالية للأصول بين الكليات والمخازن</span>
             </div>
-            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>مرتبة حسب القيمة</span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>مرتبة حسب القيمة</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="custody-dash-wh-list">
             {warehouseBreakdown.map((wh) => {
               const barWidth = Math.max(4, Math.round((wh.stats.totalValue / maxWarehouseValue) * 100))
               return (
                 <div
                   key={wh.id}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    background: 'var(--bg)',
-                    border: '1px solid var(--line)',
-                    cursor: 'pointer',
-                    transition: 'all 0.18s ease',
-                  }}
+                  className="custody-dash-wh-item"
                   onClick={() => onSelectWarehouse(wh.id)}
                   title={`انتقل لعرض عهدة ${wh.name}`}
                   role="button"
                   tabIndex={0}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div className="custody-dash-wh-top-row">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--ink)' }}>{wh.name}</span>
+                      <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--ink)' }}>{wh.name}</span>
                       {wh.isHub && (
-                        <span style={{ fontSize: '0.72rem', background: 'rgba(8, 127, 104, 0.15)', color: 'var(--accent)', padding: '2px 6px', borderRadius: '4px' }}>
+                        <span className="custody-dash-wh-hub-badge">
                           المغذي
                         </span>
                       )}
-                      <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>({wh.itemsCount} بند)</span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>({wh.itemsCount} بند)</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: '0.9rem', color: 'var(--ink)' }}>{formatMoney(wh.stats.totalValue, currency)}</strong>
-                      <span style={{ fontSize: '0.76rem', color: 'var(--accent)', fontWeight: 700 }}>{wh.sharePercentage}%</span>
+                      <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)' }}>{formatMoney(wh.stats.totalValue, currency)}</strong>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', fontWeight: 700 }}>{wh.sharePercentage}%</span>
                       <ArrowUpRight size={14} style={{ color: 'var(--muted)' }} />
                     </div>
                   </div>
 
                   {/* Visual Bar */}
-                  <div style={{ width: '100%', height: '8px', background: 'var(--line)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div className="custody-dash-bar-track">
                     <div
+                      className="custody-dash-bar-fill"
                       style={{
                         width: `${barWidth}%`,
-                        height: '100%',
-                        background: wh.stats.totalValue > 0 ? 'linear-gradient(90deg, var(--accent), #0e7c86)' : 'transparent',
-                        borderRadius: '4px',
-                        transition: 'width 0.4s ease',
+                        opacity: wh.stats.totalValue > 0 ? 1 : 0,
                       }}
                     />
                   </div>
@@ -253,31 +219,23 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
         </div>
 
         {/* Technical Condition Matrix & Categories */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
           {/* Categories Distribution */}
-          <div className="card-surface" style={{ padding: '20px', borderRadius: '16px', border: '1px solid var(--line)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px' }}>
+          <div className="card-surface custody-dash-wh-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: 'var(--sp-3)' }}>
               <Boxes size={18} style={{ color: 'var(--accent)' }} />
               <span>توزيع الأصول حسب التصنيفات الرئيسية</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
               {categoryStats.map((cat) => (
                 <div
                   key={cat.category}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    background: 'var(--bg)',
-                    fontSize: '0.86rem',
-                  }}
+                  className="custody-dash-cat-item"
                 >
                   <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{cat.category}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>{cat.count} صنف ({cat.units} وحدة)</span>
+                    <span style={{ color: 'var(--muted)', fontSize: 'var(--text-xs)' }}>{cat.count} صنف ({cat.units} وحدة)</span>
                     <strong style={{ color: 'var(--accent)' }}>{formatMoney(cat.value, currency)}</strong>
                   </div>
                 </div>
@@ -286,45 +244,45 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
           </div>
 
           {/* Condition Health Status */}
-          <div className="card-surface" style={{ padding: '20px', borderRadius: '16px', border: '1px solid var(--line)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px' }}>
+          <div className="card-surface custody-dash-wh-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: 'var(--sp-3)' }}>
               <PieChart size={18} style={{ color: 'var(--accent)' }} />
               <span>الحالة الفنية التراكمية لأصول المؤسسة</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-              <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '0.82rem', fontWeight: 600 }}>
+            <div className="custody-dash-condition-grid">
+              <div className="custody-dash-condition-box" data-condition="excellent">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
                   <CheckCircle2 size={16} /> ممتازة (جاهزة للعمل)
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
                   {overallStats.excellent.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
-              <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#3b82f6', fontSize: '0.82rem', fontWeight: 600 }}>
+              <div className="custody-dash-condition-box" data-condition="good">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
                   <ShieldCheck size={16} /> جيدة (تعمل بكفاءة)
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
                   {overallStats.good.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
-              <div style={{ padding: '12px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '10px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontSize: '0.82rem', fontWeight: 600 }}>
+              <div className="custody-dash-condition-box" data-condition="maintenance">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
                   <Wrench size={16} /> تتطلب صيانة / فحص
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
                   {overallStats.maintenance.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
-              <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontSize: '0.82rem', fontWeight: 600 }}>
+              <div className="custody-dash-condition-box" data-condition="damaged">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
                   <Ban size={16} /> تالفة / كهنة
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
                   {overallStats.damaged.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
@@ -334,15 +292,15 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
       </div>
 
       {/* 4. Top 5 Highest-Value Assets */}
-      <div className="card-surface" style={{ padding: '20px', borderRadius: '16px', border: '1px solid var(--line)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: '0.96rem' }}>
+      <div className="card-surface custody-dash-wh-card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
+          <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: 'var(--text-sm)' }}>
             🏆 أعلى الأصول قيمة دفترية مسجلة في المؤسسة
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>تحديد أولويات التأمين والمتابعة الدورية</span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>تحديد أولويات التأمين والمتابعة الدورية</span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive">
           <table className="custody-table" style={{ margin: 0 }}>
             <thead>
               <tr>
