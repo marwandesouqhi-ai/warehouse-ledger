@@ -9,7 +9,7 @@ const corsHeaders = {
 }
 
 // ─── Arabic Messages & Texts (Mandatory Exact Specifications) ────────────────
-const WELCOME_MESSAGE = `أهلًا بك في نظام تسجيل الموظفين الخاص بحركة المخزن.
+const WELCOME_MESSAGE = `أهلًا بك في نظام تسجيل الموظفين الخاص ب ZNU-Warehouse-Ledger .
 
 يمكنك تقديم طلب إنشاء حساب جديد من خلال البوت.
 
@@ -298,50 +298,129 @@ interface UserSession {
 const memorySessions = new Map<number, UserSession>()
 
 async function getUserSession(supabaseAdmin: any, tgUserId: number): Promise<UserSession | null> {
+  // 1. Try dedicated table first (supports both jsonb session_data and flat columns)
   try {
     const { data, error } = await supabaseAdmin
       .from("telegram_user_sessions")
       .select("*")
       .eq("telegram_user_id", tgUserId)
       .maybeSingle()
-    if (!error && data && data.step) {
-      return {
-        step: data.step,
-        fullName: data.full_name,
-        email: data.email,
-        department: data.department,
-        role: data.role,
+    if (!error && data) {
+      // Schema A: jsonb session_data column
+      if (data.session_data && typeof data.session_data === "object" && data.session_data.step) {
+        return data.session_data as UserSession
+      }
+      // Schema B: flat columns
+      if (data.step) {
+        return {
+          step: data.step,
+          fullName: data.full_name,
+          email: data.email,
+          department: data.department,
+          role: data.role,
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("telegram_user_sessions read warning:", e)
+  }
+
+  // 2. Fallback: try reading from telegram_rate_events (guaranteed on remote database)
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("telegram_rate_events")
+      .select("identifier, created_at")
+      .eq("event_type", `session:${tgUserId}`)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!error && data?.identifier) {
+      const parsed = JSON.parse(data.identifier) as UserSession
+      if (parsed && parsed.step) {
+        return parsed
       }
     }
   } catch {
-    // fallback to memory
+    // fallback
   }
+
+  // 3. Fallback to in-memory map
   return memorySessions.get(tgUserId) || null
 }
 
 async function saveUserSession(supabaseAdmin: any, tgUserId: number, session: UserSession): Promise<void> {
   memorySessions.set(tgUserId, session)
+
+  // 1. Save to telegram_user_sessions: resilient to both session_data JSONB and flat columns schemas
   try {
-    // Age-bounded cleanup: prune abandoned sessions older than 24 hours
     const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     await supabaseAdmin
       .from("telegram_user_sessions")
       .delete()
       .lt("updated_at", staleThreshold)
 
-    await supabaseAdmin
+    // Attempt A: flat columns + session_data jsonb combined
+    const fullPayload = {
+      telegram_user_id: tgUserId,
+      step: session.step,
+      full_name: session.fullName || null,
+      email: session.email || null,
+      department: session.department || null,
+      role: session.role || null,
+      session_data: session,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error: errA } = await supabaseAdmin
       .from("telegram_user_sessions")
-      .upsert({
+      .upsert(fullPayload, { onConflict: "telegram_user_id" })
+
+    if (errA) {
+      // Attempt B: session_data JSONB column only
+      const jsonPayload = {
         telegram_user_id: tgUserId,
-        step: session.step,
-        full_name: session.fullName || null,
-        email: session.email || null,
-        department: session.department || null,
-        role: session.role || null,
+        session_data: session,
         updated_at: new Date().toISOString(),
+      }
+      const { error: errB } = await supabaseAdmin
+        .from("telegram_user_sessions")
+        .upsert(jsonPayload, { onConflict: "telegram_user_id" })
+
+      if (errB) {
+        // Attempt C: flat columns only (without session_data column)
+        const flatPayload = {
+          telegram_user_id: tgUserId,
+          step: session.step,
+          full_name: session.fullName || null,
+          email: session.email || null,
+          department: session.department || null,
+          role: session.role || null,
+          updated_at: new Date().toISOString(),
+        }
+        await supabaseAdmin
+          .from("telegram_user_sessions")
+          .upsert(flatPayload, { onConflict: "telegram_user_id" })
+      }
+    }
+  } catch (err) {
+    console.warn("telegram_user_sessions save exception:", err)
+  }
+
+  // 2. Always persist fallback in telegram_rate_events so stateless Edge Functions never lose wizard state
+  try {
+    await supabaseAdmin
+      .from("telegram_rate_events")
+      .delete()
+      .eq("event_type", `session:${tgUserId}`)
+
+    await supabaseAdmin
+      .from("telegram_rate_events")
+      .insert({
+        event_type: `session:${tgUserId}`,
+        identifier: JSON.stringify(session),
       })
-  } catch {
-    // fallback to memory
+  } catch (err) {
+    console.warn("telegram_rate_events session backup notice:", err)
   }
 }
 
@@ -352,6 +431,14 @@ async function clearUserSession(supabaseAdmin: any, tgUserId: number): Promise<v
       .from("telegram_user_sessions")
       .delete()
       .eq("telegram_user_id", tgUserId)
+  } catch {
+    // ignore
+  }
+  try {
+    await supabaseAdmin
+      .from("telegram_rate_events")
+      .delete()
+      .eq("event_type", `session:${tgUserId}`)
   } catch {
     // ignore
   }
@@ -385,101 +472,74 @@ async function executeRegistration(params: {
     emailConfig,
   } = params
 
-  // 1. Rate limit registration submissions: max 3 per hour per TG user and per email
-  const rateTg = await checkAndRecordRateLimit(supabaseAdmin, "register", String(tgUserId), 3, 3600)
-  const rateEmail = await checkAndRecordRateLimit(supabaseAdmin, "register", email, 3, 3600)
+  const cleanEmail = email.trim().toLowerCase()
+
+  // 1. Rate limit registration submissions: max 15 per hour per TG user and 3 per email
+  const rateTg = await checkAndRecordRateLimit(supabaseAdmin, "register", String(tgUserId), 15, 3600)
+  const rateEmail = await checkAndRecordRateLimit(supabaseAdmin, "register", cleanEmail, 3, 3600)
 
   if (!rateTg.allowed || !rateEmail.allowed) {
     await sendTelegramMessage(botToken, chatId, "تم تجاوز الحد الأقصى لطلبات التسجيل في الساعة الواحدة. يرجى الانتظار والمحاولة لاحقاً.")
     return
   }
 
-  // 2. Duplicate Check with Parameterized Queries
+  // 2. Duplicate Check: only check if this exact email is already registered in app_users
   const { data: userByEmail } = await supabaseAdmin
     .from("app_users")
-    .select("id")
-    .eq("email", email)
+    .select("id, email")
+    .ilike("email", cleanEmail)
     .maybeSingle()
 
-  const { data: userByTg } = await supabaseAdmin
-    .from("app_users")
-    .select("id")
-    .eq("telegram_user_id", tgUserId)
-    .maybeSingle()
-
-  if (userByEmail || userByTg) {
-    await sendTelegramMessage(botToken, chatId, "تعذر إنشاء الطلب: توجد بيانات مسجلة مسبقاً تطابق هذا الحساب. يرجى مراجعة إدارة النظام.")
+  if (userByEmail) {
+    await sendTelegramMessage(botToken, chatId, `⚠️ تعذر إنشاء الطلب: البريد الإلكتروني (${email}) مسجل وموجود بالفعل في قاعدة بيانات النظام لموظف سابق أو حالي. يرجى مراجعة إدارة النظام.`)
     return
   }
 
-  // 3. Check active pending registration requests
+  // 3. Check active pending registration requests strictly by email
   const { data: pendingByEmail } = await supabaseAdmin
     .from("registration_requests")
-    .select("id")
-    .eq("email", email)
+    .select("id, full_name, email")
+    .ilike("email", cleanEmail)
     .eq("approval_status", "pending")
     .maybeSingle()
 
-  const { data: pendingByTg } = await supabaseAdmin
-    .from("registration_requests")
-    .select("id")
-    .eq("telegram_user_id", tgUserId)
-    .eq("approval_status", "pending")
-    .maybeSingle()
-
-  if (pendingByEmail || pendingByTg) {
-    await sendTelegramMessage(botToken, chatId, "يوجد طلب تسجيل معلق قيد المعالجة بالفعل لهذا الحساب أو البريد. يمكنك متابعة حالة الطلب عبر الأمر /status.")
+  if (pendingByEmail) {
+    await sendTelegramMessage(botToken, chatId, `⏳ يوجد طلب تسجيل معلق قيد المراجعة والاعتماد بالفعل لهذا البريد الإلكتروني (${email}). فور موافقة الإدارة ستصلك رسالة دعوة لتفعيل حسابك على هذا البريد.`)
     return
   }
 
-  // 4. Generate Uniform 6-digit OTP and Hash with server pepper
-  const otp = generateUniform6DigitOtp()
-  const tokenHash = await hashTokenWithPepper(otp, otpPepper)
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
-
-  // 5. Send OTP via Gmail SMTP or Resend API (NEVER in Telegram message!)
-  const emailRes = await sendOtpEmail(emailConfig, email, fullName, otp)
-
-  const emailSendStatus = emailRes.accepted ? "sent" : "failed"
-  const verificationStatus = emailRes.accepted ? "pending" : "delivery_failed"
-
-  // 6. Insert registration request
-  const { error: insertErr } = await supabaseAdmin.from("registration_requests").insert({
+  // 4. Insert registration request directly for Admin review (NO Telegram OTP)
+  // verification_status is set to 'verified' so it is immediately eligible for Admin review & invitation sending
+  // (Legacy note: previously verificationStatus = emailRes.accepted ? "pending" : "delivery_failed" with "تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً")
+  const insertPayload: Record<string, any> = {
     full_name: fullName,
     email: email,
     telegram_user_id: tgUserId,
     telegram_username: tgUsername || "",
     requested_department: requestedDept,
     requested_role: requestedRole,
-    verification_status: verificationStatus,
-    verification_token_hash: tokenHash,
-    verification_token_expires_at: expiresAt,
+    verification_status: "verified",
     approval_status: "pending",
-    email_send_status: emailSendStatus,
-    email_sent_at: emailRes.accepted ? new Date().toISOString() : null,
-  })
+  }
+
+  const { error: insertErr } = await supabaseAdmin.from("registration_requests").insert(insertPayload)
 
   if (insertErr) {
     console.error("Insert registration error:", insertErr)
-    await sendTelegramMessage(botToken, chatId, "حدث خطأ أثناء حفظ الطلب في قاعدة البيانات. يرجى المحاولة مرة أخرى لاحقاً.")
+    await sendTelegramMessage(botToken, chatId, `حدث خطأ أثناء حفظ الطلب في قاعدة البيانات (${insertErr.message || "فشل الإدراج"}). يرجى المحاولة مرة أخرى لاحقاً.`)
     return
   }
 
-  if (!emailRes.accepted) {
-    const errorMsg = `تم استلام بياناتك بنجاح ولكن تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً بسبب عدم اكتمال تهيئة مزود البريد.\n\nالاسم: <b>${fullName}</b>\nالبريد: <b>${email}</b>\nالقسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\nالدور: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\nتم تسجيل طلبك بحالة (تعذر التسليم). يمكنك إعادة طلب إرسال الرمز لاحقاً عبر /resend.`
-    await sendTelegramMessage(botToken, chatId, errorMsg)
-  } else {
-    const confirmMsg = `📩 <b>تم استلام بياناتك وإرسال رمز التحقق بنجاح!</b>\n\n` +
-      `• الاسم: <b>${fullName}</b>\n` +
-      `• البريد الإلكتروني: <b>${email}</b>\n` +
-      `• القسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\n` +
-      `• الدور المطلوب: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\n` +
-      `تم إرسال رمز التحقق المكون من 6 أرقام إلى بريدك الإلكتروني (صالح لمدة 10 دقائق).\n` +
-      `يرجى فحص صندوق الوارد (أو مجلد Spam)، ثم كتابة الرمز هنا عبر الأمر:\n` +
-      `<code>/verify الرمز</code>\n\n` +
-      `مثال: <code>/verify 123456</code>`
-    await sendTelegramMessage(botToken, chatId, confirmMsg)
-  }
+  const confirmMsg = `✅ <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n` +
+    `• الاسم: <b>${fullName}</b>\n` +
+    `• البريد الإلكتروني: <b>${email}</b>\n` +
+    `• القسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\n` +
+    `• الدور المطلوب: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\n` +
+    `طلبك الآن قيد المراجعة لدى إدارة النظام.\n` +
+    `فور موافقة الإدارة، ستصلك رسالة دعوة رسمية على بريدك الإلكتروني تحتوي على رابط تفعيل حسابك واختيار اسم المستخدم وكلمة المرور.\n\n` +
+    `يمكنك متابعة حالة طلبك في أي وقت عبر الأمر /status.`
+
+  await sendTelegramMessage(botToken, chatId, confirmMsg)
 }
 
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
@@ -564,6 +624,7 @@ serve(async (req: Request) => {
       // Step 1: Start registration wizard
       if (data === "register_start") {
         await answerCallbackQuery(botToken, query.id)
+        await clearUserSession(supabaseAdmin, tgUserId)
         await saveUserSession(supabaseAdmin, tgUserId, { step: "awaiting_name" })
         const promptMsg = `👤 <b>الخطوة 1 من 4: الاسم بالكامل</b>\n\nيرجى كتابة اسمك الكامل (ثلاثي أو رباعي) في رسالة نصية:`
         const keyboard = {
@@ -587,12 +648,25 @@ serve(async (req: Request) => {
       if (data.startsWith("set_dept:")) {
         const dept = data.replace("set_dept:", "")
         await answerCallbackQuery(botToken, query.id)
-        const session = await getUserSession(supabaseAdmin, tgUserId)
-        if (!session || !session.fullName || !session.email) {
-          await sendTelegramMessage(botToken, chatId, "انتهت الجلسة أو بيانات التسجيل غير مكتملة. يرجى البدء مجدداً عبر /start.")
-          return new Response("ok", { headers: corsHeaders })
+        let session = await getUserSession(supabaseAdmin, tgUserId)
+
+        // Resilient self-healing: Extract name & email from message text if session lost in DB/isolate
+        const msgText = query.message?.text || ""
+        const extractedName = session?.fullName || msgText.match(/الاسم:\s*([^\n\r•]+)/)?.[1]?.trim()
+        const extractedEmail = session?.email || msgText.match(/البريد:\s*([^\n\r•]+)/)?.[1]?.trim()
+
+        const fullName = extractedName || session?.fullName || "الموظف"
+        const email = extractedEmail || session?.email || ""
+
+        session = {
+          ...(session || {}),
+          fullName,
+          email,
+          department: dept,
+          step: "awaiting_role",
         }
-        await saveUserSession(supabaseAdmin, tgUserId, { ...session, department: dept, step: "awaiting_role" })
+        await saveUserSession(supabaseAdmin, tgUserId, session)
+
         const deptTitle = dept === "warehouse" ? "المخازن" : "المشتريات"
         let roleButtons = []
         if (dept === "warehouse") {
@@ -610,7 +684,11 @@ serve(async (req: Request) => {
           { text: "🔙 تغيير القسم", callback_data: "back_to_dept" },
           { text: "❌ إلغاء", callback_data: "reg_cancel" },
         ])
-        const roleMsg = `💼 <b>الخطوة 4 من 4: الدور الوظيفي (${deptTitle})</b>\n\nاختر الدور الوظيفي المطلوب بالضغط على أحد الأزرار أدناه:`
+        const roleMsg = `💼 <b>الخطوة 4 من 4: الدور الوظيفي (${deptTitle})</b>\n\n` +
+          `• <b>الاسم:</b> ${fullName}\n` +
+          `• <b>البريد:</b> ${email}\n` +
+          `• <b>القسم:</b> ${deptTitle}\n\n` +
+          `اختر الدور الوظيفي المطلوب بالضغط على أحد الأزرار أدناه:`
         await sendTelegramMessage(botToken, chatId, roleMsg, { inline_keyboard: roleButtons })
         return new Response("ok", { headers: corsHeaders })
       }
@@ -618,13 +696,21 @@ serve(async (req: Request) => {
       // Back to Department selection
       if (data === "back_to_dept") {
         await answerCallbackQuery(botToken, query.id)
-        const session = await getUserSession(supabaseAdmin, tgUserId)
-        if (!session) {
-          await sendTelegramMessage(botToken, chatId, "يرجى البدء من جديد عبر /start.")
-          return new Response("ok", { headers: corsHeaders })
-        }
-        await saveUserSession(supabaseAdmin, tgUserId, { ...session, step: "awaiting_dept" })
-        const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\nاختر القسم التابع له من الخيارات التالية 👇`
+        let session = await getUserSession(supabaseAdmin, tgUserId)
+        const msgText = query.message?.text || ""
+        const extractedName = session?.fullName || msgText.match(/الاسم:\s*([^\n\r•]+)/)?.[1]?.trim()
+        const extractedEmail = session?.email || msgText.match(/البريد:\s*([^\n\r•]+)/)?.[1]?.trim()
+
+        const fullName = extractedName || session?.fullName || "الموظف"
+        const email = extractedEmail || session?.email || ""
+
+        session = { ...(session || {}), fullName, email, step: "awaiting_dept" }
+        await saveUserSession(supabaseAdmin, tgUserId, session)
+
+        const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\n` +
+          `• <b>الاسم:</b> ${fullName}\n` +
+          `• <b>البريد:</b> ${email}\n\n` +
+          `اختر القسم التابع له من الخيارات التالية 👇`
         const keyboard = {
           inline_keyboard: [
             [
@@ -642,21 +728,39 @@ serve(async (req: Request) => {
       if (data.startsWith("set_role:")) {
         const role = data.replace("set_role:", "")
         await answerCallbackQuery(botToken, query.id)
-        const session = await getUserSession(supabaseAdmin, tgUserId)
-        if (!session || !session.fullName || !session.email || !session.department) {
-          await sendTelegramMessage(botToken, chatId, "البيانات غير مكتملة. يرجى البدء من جديد عبر /start.")
-          return new Response("ok", { headers: corsHeaders })
+        let session = await getUserSession(supabaseAdmin, tgUserId)
+        const msgText = query.message?.text || ""
+        const extractedName = session?.fullName || msgText.match(/الاسم:\s*([^\n\r•]+)/)?.[1]?.trim()
+        const extractedEmail = session?.email || msgText.match(/البريد:\s*([^\n\r•]+)/)?.[1]?.trim()
+        let extractedDept = session?.department
+        if (!extractedDept) {
+          if (role.startsWith("warehouse")) extractedDept = "warehouse"
+          else if (role.startsWith("procurement")) extractedDept = "procurement"
         }
-        await saveUserSession(supabaseAdmin, tgUserId, { ...session, role, step: "confirm" })
+
+        const fullName = extractedName || session?.fullName || "الموظف"
+        const email = extractedEmail || session?.email || ""
+        const department = extractedDept || "warehouse"
+
+        session = {
+          ...(session || {}),
+          fullName,
+          email,
+          department,
+          role,
+          step: "confirm",
+        }
+        await saveUserSession(supabaseAdmin, tgUserId, session)
+
         const summaryMsg = `📋 <b>مراجعة وتأكيد بيانات طلب التسجيل:</b>\n\n` +
-          `• <b>الاسم الكامل:</b> ${session.fullName}\n` +
-          `• <b>البريد الإلكتروني:</b> ${session.email}\n` +
-          `• <b>القسم المختار:</b> ${DEPT_LABELS[session.department] || session.department}\n` +
+          `• <b>الاسم الكامل:</b> ${fullName}\n` +
+          `• <b>البريد الإلكتروني:</b> ${email}\n` +
+          `• <b>القسم المختار:</b> ${DEPT_LABELS[department] || department}\n` +
           `• <b>الدور المطلوب:</b> ${ROLE_LABELS[role] || role}\n\n` +
-          `هل البيانات صحيحة؟ اضغط على زر <b>تأكيد وإرسال الرمز</b> لإنشاء الطلب وإرسال رمز التحقق (OTP) إلى بريدك الإلكتروني 👇`
+          `هل البيانات صحيحة؟ اضغط على زر <b>تأكيد وإرسال الطلب</b> لتقديم طلبك لإدارة النظام 👇`
         const keyboard = {
           inline_keyboard: [
-            [{ text: "✅ تأكيد وإرسال رمز التحقق", callback_data: "submit_registration" }],
+            [{ text: "✅ تأكيد وإرسال الطلب", callback_data: "submit_registration" }],
             [
               { text: "🔄 البدء من جديد", callback_data: "register_start" },
               { text: "❌ إلغاء", callback_data: "reg_cancel" },
@@ -670,11 +774,34 @@ serve(async (req: Request) => {
       // Final Step: Submit registration
       if (data === "submit_registration") {
         await answerCallbackQuery(botToken, query.id, "جارٍ معالجة الطلب...")
-        const session = await getUserSession(supabaseAdmin, tgUserId)
-        if (!session || !session.fullName || !session.email || !session.department || !session.role) {
+        let session = await getUserSession(supabaseAdmin, tgUserId)
+        const msgText = query.message?.text || ""
+        const extractedName = session?.fullName || msgText.match(/الاسم الكامل:\s*([^\n\r•]+)/)?.[1]?.trim()
+        const extractedEmail = session?.email || msgText.match(/البريد الإلكتروني:\s*([^\n\r•]+)/)?.[1]?.trim()
+
+        const fullName = extractedName || session?.fullName || "الموظف"
+        const email = extractedEmail || session?.email || ""
+        let department = session?.department
+        let role = session?.role
+
+        if (!department || !role) {
+          const deptMatch = msgText.match(/القسم المختار:\s*([^\n\r•]+)/)?.[1]?.trim()
+          const roleMatch = msgText.match(/الدور المطلوب:\s*([^\n\r•]+)/)?.[1]?.trim()
+          if (deptMatch?.includes("مشتريات")) department = "procurement"
+          else if (deptMatch?.includes("مخازن")) department = "warehouse"
+
+          if (roleMatch?.includes("مشرف")) {
+            role = department === "procurement" ? "procurement_admin" : "warehouse_admin"
+          } else {
+            role = department === "procurement" ? "procurement_employee" : "warehouse_employee"
+          }
+        }
+
+        if (!fullName || !email || !department || !role) {
           await sendTelegramMessage(botToken, chatId, "البيانات غير مكتملة أو انتهت صلاحية الجلسة. يرجى البدء من جديد عبر /start.")
           return new Response("ok", { headers: corsHeaders })
         }
+
         await clearUserSession(supabaseAdmin, tgUserId)
         await executeRegistration({
           supabaseAdmin,
@@ -682,10 +809,10 @@ serve(async (req: Request) => {
           chatId,
           tgUserId,
           tgUsername: tgUser.username || "",
-          fullName: session.fullName,
-          email: session.email,
-          requestedDept: session.department,
-          requestedRole: session.role,
+          fullName,
+          email,
+          requestedDept: department,
+          requestedRole: role,
           otpPepper,
           emailConfig,
         })
@@ -989,7 +1116,10 @@ serve(async (req: Request) => {
     const activeSession = await getUserSession(supabaseAdmin, tgUserId)
 
     // Step 1: Receiving Full Name
-    if (activeSession && activeSession.step === "awaiting_name" && !text.startsWith("/")) {
+    const isStep1 = (activeSession && activeSession.step === "awaiting_name") ||
+      (!activeSession && !text.startsWith("/") && !text.includes("@") && text.trim().length >= 3 && text.trim().length <= 100 && !/\d/.test(text))
+
+    if (isStep1 && !text.startsWith("/")) {
       if (text.length < 3 || text.length > 100 || text.includes("@")) {
         await sendTelegramMessage(
           botToken,
@@ -998,8 +1128,8 @@ serve(async (req: Request) => {
         )
         return new Response("ok", { headers: corsHeaders })
       }
-      await saveUserSession(supabaseAdmin, tgUserId, { ...activeSession, fullName: text, step: "awaiting_email" })
-      const nextMsg = `📧 <b>الخطوة 2 من 4: البريد الإلكتروني</b>\n\nأهلاً بك يا <b>${text}</b>! 👋\nيرجى كتابة بريدك الإلكتروني المؤسسي أو الشخصي (سنرسل إليه رمز التحقق OTP):`
+      await saveUserSession(supabaseAdmin, tgUserId, { ...(activeSession || {}), fullName: text, step: "awaiting_email" })
+      const nextMsg = `📧 <b>الخطوة 2 من 4: البريد الإلكتروني</b>\n\nأهلاً بك يا <b>${text}</b>! 👋\nيرجى كتابة بريدك الإلكتروني (سنرسل إليه رابط دعوة تفعيل الحساب فور موافقة الإدارة):`
       const keyboard = {
         inline_keyboard: [
           [{ text: "❌ إلغاء", callback_data: "reg_cancel" }],
@@ -1010,7 +1140,10 @@ serve(async (req: Request) => {
     }
 
     // Step 2: Receiving Email
-    if (activeSession && activeSession.step === "awaiting_email" && !text.startsWith("/")) {
+    const isStep2 = (activeSession && activeSession.step === "awaiting_email") ||
+      (isValidEmail(text.trim().toLowerCase()) && !text.startsWith("/"))
+
+    if (isStep2 && !text.startsWith("/")) {
       const cleanEmail = text.trim().toLowerCase()
       if (!isValidEmail(cleanEmail)) {
         await sendTelegramMessage(
@@ -1020,8 +1153,21 @@ serve(async (req: Request) => {
         )
         return new Response("ok", { headers: corsHeaders })
       }
-      await saveUserSession(supabaseAdmin, tgUserId, { ...activeSession, email: cleanEmail, step: "awaiting_dept" })
-      const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\nاختر القسم التابع له بالضغط على أحد الأزرار التالية 👇`
+      const tgFullName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ").trim()
+      const fullName = (activeSession?.fullName && activeSession.fullName !== "الموظف")
+        ? activeSession.fullName
+        : (tgFullName.length >= 3 ? tgFullName : "الموظف")
+      const updatedSession: UserSession = {
+        ...(activeSession || {}),
+        fullName,
+        email: cleanEmail,
+        step: "awaiting_dept",
+      }
+      await saveUserSession(supabaseAdmin, tgUserId, updatedSession)
+      const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\n` +
+        `• <b>الاسم:</b> ${fullName}\n` +
+        `• <b>البريد:</b> ${cleanEmail}\n\n` +
+        `اختر القسم التابع له بالضغط على أحد الأزرار التالية 👇`
       const keyboard = {
         inline_keyboard: [
           [
