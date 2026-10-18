@@ -211,7 +211,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
                 const isTransfer = evt.type === 'transfer'
                 const isMaintenance = evt.type === 'maintenance'
 
-                const dotColor = isCreation ? '#10b981' : isTransfer ? '#3b82f6' : isMaintenance ? '#f59e0b' : 'var(--accent)'
+                const dotColor = isCreation ? 'var(--chart-3)' : isTransfer ? 'var(--chart-2)' : isMaintenance ? 'var(--chart-4)' : 'var(--accent)'
                 const Icon = isCreation ? CheckCircle2 : isTransfer ? Package : isMaintenance ? Wrench : FileText
 
                 return (
