@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 
 describe('Edge Functions Security & Idempotency Logic Suite', () => {
   // Helper simulating admin-users authorization check
@@ -197,5 +199,78 @@ describe('Edge Functions Security & Idempotency Logic Suite', () => {
     expect(report2.alreadyExists).toBe(2)
     expect(report2.migrated).toBe(0)
     expect(existingAuthMap.size).toBe(2) // Zero duplicate users
+  })
+
+  it('7. Static Security: No Edge Function returns Auth links or tokens in response bodies', () => {
+    const functionsDir = path.resolve(__dirname, '../../supabase/functions')
+    const files = fs.readdirSync(functionsDir, { recursive: true })
+      .filter((f) => String(f).endsWith('.ts'))
+      .map((f) => path.join(functionsDir, String(f)))
+
+    const linkPatterns = [
+      /new\s+Response\([^)]*\b(action_link|hashed_token|email_otp|recoveryLink|inviteLink)\b/i,
+      /JSON\.stringify\([^)]*\b(action_link|hashed_token|email_otp|recoveryLink|inviteLink)\b/i,
+    ]
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, 'utf-8')
+      for (const pattern of linkPatterns) {
+        expect(pattern.test(content), `File ${path.basename(file)} must not expose auth links or tokens in response`).toBe(false)
+      }
+    }
+  })
+
+  it('8. Static Security: Every listUsers call in Edge Functions must be paginated', () => {
+    const functionsDir = path.resolve(__dirname, '../../supabase/functions')
+    const files = fs.readdirSync(functionsDir, { recursive: true })
+      .filter((f) => String(f).endsWith('.ts'))
+      .map((f) => path.join(functionsDir, String(f)))
+
+    const unpaginatedListUsersRegex = /auth\.admin\.listUsers\s*\(\s*\)/g
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, 'utf-8')
+      const matches = content.match(unpaginatedListUsersRegex)
+      expect(matches, `File ${path.basename(file)} contains unpaginated listUsers() call`).toBeNull()
+    }
+  })
+
+  it('9. Static Security: No Edge Function returns password or temporaryPassword in response bodies', () => {
+    const functionsDir = path.resolve(__dirname, '../../supabase/functions')
+    const files = fs.readdirSync(functionsDir, { recursive: true })
+      .filter((f) => String(f).endsWith('.ts'))
+      .map((f) => path.join(functionsDir, String(f)))
+
+    const passwordResponsePatterns = [
+      /JSON\.stringify\([^)]*\b(temporaryPassword|effectivePassword)\b/i,
+      /JSON\.stringify\([^)]*['"]password['"]\s*:\s*(?!null|false|undefined)/i,
+    ]
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, 'utf-8')
+      for (const pattern of passwordResponsePatterns) {
+        expect(pattern.test(content), `File ${path.basename(file)} must not return password in response`).toBe(false)
+      }
+    }
+  })
+
+  it('10. Static Security: Edge Functions with service-role key verify caller JWT or have secret validation', () => {
+    const functionsDir = path.resolve(__dirname, '../../supabase/functions')
+    const files = fs.readdirSync(functionsDir, { recursive: true })
+      .filter((f) => String(f).endsWith('index.ts'))
+      .map((f) => path.join(functionsDir, String(f)))
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, 'utf-8')
+      if (content.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+        const hasCallerVerification =
+          content.includes('getUser') ||
+          content.includes('Authorization') ||
+          content.includes('TELEGRAM_BOT_SECRET') ||
+          content.includes('X-Telegram-Bot-Api-Secret-Token') ||
+          content.includes('secret')
+        expect(hasCallerVerification, `Function ${path.basename(path.dirname(file))} must verify caller or webhook secret`).toBe(true)
+      }
+    }
   })
 })

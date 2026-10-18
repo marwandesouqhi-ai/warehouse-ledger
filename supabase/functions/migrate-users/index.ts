@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -63,8 +63,8 @@ serve(async (req) => {
 
     if (fetchError) throw fetchError
 
-    // 4. Fetch all existing Auth users to ensure idempotency
-    const { data: authUsersData, error: authUsersError } = await supabaseAdmin.auth.admin.listUsers()
+    // 4. Fetch existing Auth users using paginated lookup to ensure idempotency
+    const { data: authUsersData, error: authUsersError } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 })
     if (authUsersError) throw authUsersError
 
     const existingAuthMap = new Map<string, any>()

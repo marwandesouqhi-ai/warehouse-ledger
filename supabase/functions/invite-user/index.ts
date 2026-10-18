@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -76,9 +76,11 @@ serve(async (req) => {
 
     // 1. Action: List all registered system users (for admin management)
     if (action === "list-users") {
-      const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+      const page = Math.max(1, Number(body.page) || 1)
+      const perPage = Math.min(100, Math.max(1, Number(body.perPage) || 50))
+      const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
       if (listError) throw listError
-      const users = (listData?.users || []).map((u) => ({
+      const users = (listData?.users || []).map((u: any) => ({
         id: u.id,
         email: u.email ?? "",
         role: u.app_metadata?.role || "viewer",
@@ -103,10 +105,14 @@ serve(async (req) => {
       }
 
       const trimmedEmail = email.trim().toLowerCase()
-      const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
-      if (listError) throw listError
-      const targetUser = listData?.users?.find((u) => u.email?.toLowerCase() === trimmedEmail)
-      if (!targetUser) {
+      const { data: dbUser } = await supabaseAdmin
+        .from("app_users")
+        .select("auth_user_id")
+        .ilike("email", trimmedEmail)
+        .maybeSingle()
+
+      const targetUserId = dbUser?.auth_user_id
+      if (!targetUserId) {
         return new Response(JSON.stringify({
           error: `لم يتم العثور على مستخدم مسجل بالبريد: ${trimmedEmail}`,
         }), {
@@ -123,22 +129,20 @@ serve(async (req) => {
           })
         }
         const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          targetUser.id,
+          targetUserId,
           { password: newPassword }
         )
         if (updateError) throw updateError
       }
 
-      let recoveryLink: string | null = null
       try {
-        const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+        await supabaseAdmin.auth.admin.generateLink({
           type: "recovery",
           email: trimmedEmail,
           options: {
             redirectTo: siteUrl ? `${siteUrl}/#type=recovery` : undefined,
           },
         })
-        recoveryLink = linkData?.properties?.action_link ?? null
       } catch (err) {
         console.warn("generate recovery link warning:", err)
       }
@@ -149,11 +153,10 @@ serve(async (req) => {
         user_email: user.email,
         action: `إعادة تعيين كلمة مرور للمستخدم: ${trimmedEmail}`,
         entity_type: "user_management",
-        entity_id: targetUser.id,
+        entity_id: targetUserId,
         details: {
           target_email: trimmedEmail,
           password_updated_directly: Boolean(newPassword),
-          has_recovery_link: Boolean(recoveryLink),
         },
         ip_address: ip,
         user_agent: userAgent,
@@ -163,103 +166,18 @@ serve(async (req) => {
         success: true,
         message: newPassword
           ? `تم تحديث وحفظ كلمة المرور بنجاح للمستخدم (${trimmedEmail})`
-          : `تم توليد رابط إعادة التعيين بنجاح للمستخدم (${trimmedEmail})`,
-        recoveryLink,
+          : `تم إرسال رابط إعادة التعيين بنجاح للمستخدم (${trimmedEmail})`,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
-    // 3. Action: Invite new user (default)
-    const { email, role = "viewer" } = body
-    if (!email || typeof email !== "string" || !email.includes("@")) {
-      return new Response(JSON.stringify({ error: "البريد الإلكتروني غير صالح" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    const trimmedEmail = email.trim().toLowerCase()
-    const allowedRoles = ["viewer", "editor", "admin"]
-    const safeRole = allowedRoles.includes(role) ? role : "viewer"
-
-    let emailSent = false
-    let inviteLink: string | null = null
-    let userId: string | null = null
-    let responseMessage = ""
-
-    // Try sending official email invite first
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      trimmedEmail,
-      {
-        data: { role: safeRole, invited_by: user.id },
-        redirectTo: siteUrl ? `${siteUrl}/#type=invite` : undefined,
-      }
-    )
-
-    if (!inviteError && inviteData?.user) {
-      emailSent = true
-      userId = inviteData.user.id
-      responseMessage = `تم إرسال إيميل الدعوة بنجاح إلى ${trimmedEmail}`
-    } else {
-      console.log("inviteUserByEmail failed with:", inviteError?.message, "Falling back to generateLink...")
-
-      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "invite",
-        email: trimmedEmail,
-        options: {
-          redirectTo: siteUrl ? `${siteUrl}/#type=invite` : undefined,
-          data: { role: safeRole, invited_by: user.id },
-        },
-      })
-
-      if (linkError) {
-        return new Response(JSON.stringify({ error: linkError.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
-      }
-
-      inviteLink = linkData.properties?.action_link ?? null
-      userId = linkData.user?.id ?? null
-      responseMessage = `تم إنشاء دعوة المستخدم بنجاح! نظراً لحد رسائل Supabase المجانية، يمكنك نسخ الرابط المباشر للدعوة أدناه وإرساله للمستخدم.`
-    }
-
-    // Record invitation in user_invitations table
-    await supabaseAdmin.from("user_invitations").insert({
-      email: trimmedEmail,
-      role: safeRole,
-      invited_by: user.id,
-      invited_by_email: user.email,
-      status: "pending",
-    })
-
-    // Record in audit_logs
-    await supabaseAdmin.from("audit_logs").insert({
-      user_id: user.id,
-      user_email: user.email,
-      action: "دعوة مستخدم جديد من النظام",
-      entity_type: "invitation",
-      entity_id: userId || "",
-      details: {
-        invited_email: trimmedEmail,
-        role: safeRole,
-        email_sent: emailSent,
-        has_direct_link: Boolean(inviteLink),
-      },
-      ip_address: ip,
-      user_agent: userAgent,
-    })
-
+    // 3. Action: Invite new user (deprecated legacy path restricted)
     return new Response(JSON.stringify({
-      success: true,
-      emailSent,
-      inviteLink,
-      emailErrorDetail: inviteError ? inviteError.message : null,
-      message: responseMessage,
+      error: "تم إيقاف مسار الدعوات القديم بالأدوار الملغاة (viewer/editor/admin). يُرجى توجيه الموظف للتقديم عبر بوت تيليجرام واعتماد طلبه من صفحة إدارة المستخدمين لإصدار الرقم الوظيفي ودعوة التفعيل الرسمية.",
     }), {
-      status: 200,
+      status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
