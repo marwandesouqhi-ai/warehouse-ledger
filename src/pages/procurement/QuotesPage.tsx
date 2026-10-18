@@ -322,7 +322,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       {/* Sub navigation connecting the 5 procurement sub-pages */}
       <ProcurementSubNav activeTab="quotes" />
 
-      <div className="section-head movement-heading" style={{ marginTop: '14px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="section-head movement-heading quotes-header-row">
         <div>
           <h2>
             <FileSpreadsheet size={20} />
@@ -335,7 +335,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           type="button"
           onClick={() => void loadInitialData()}
           disabled={loading}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+          className="quotes-refresh-btn"
+          aria-label="تحديث بيانات عروض الأسعار"
         >
           <RefreshCw size={14} className={loading ? 'spin' : ''} />
           <span>{loading ? 'جاري التحميل...' : 'تحديث البيانات'}</span>
@@ -343,13 +344,16 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       </div>
 
       {successMessage && (
-        <div className="inline-message success" style={{ marginBottom: '16px' }}>
-          <CheckCircle2 size={17} />
-          <span>{successMessage}</span>
+        <div className="inline-message success mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={17} />
+            <span>{successMessage}</span>
+          </div>
           <button
             type="button"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', marginInlineStart: 'auto' }}
+            className="cursor-pointer text-muted bg-none border-none p-1"
             onClick={() => setSuccessMessage('')}
+            aria-label="إغلاق التنبيه"
           >
             <X size={15} />
           </button>
@@ -357,13 +361,16 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       )}
 
       {error && (
-        <div className="inline-message error" style={{ marginBottom: '16px' }}>
-          <AlertTriangle size={17} />
-          <span>{error}</span>
+        <div className="inline-message error mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={17} />
+            <span>{error}</span>
+          </div>
           <button
             type="button"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', marginInlineStart: 'auto' }}
+            className="cursor-pointer text-muted bg-none border-none p-1"
             onClick={() => setError('')}
+            aria-label="إغلاق الخطأ"
           >
             <X size={15} />
           </button>
@@ -371,68 +378,67 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       )}
 
       {/* Request Selector and Summary Card */}
-      <div className="card-surface" style={{ padding: '16px', borderRadius: '10px', border: '1px solid var(--line)', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ minWidth: '280px', flex: '1' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px', display: 'block' }}>
+      <div className="card-surface quotes-selector-card">
+        <div className="quotes-selector-layout">
+          <div className="quotes-select-wrap">
+            <label className="form-label-block">
               اختر طلب الشراء للمقارنة:
+              <select
+                value={selectedRequestId}
+                onChange={(e) => setSelectedRequestId(e.target.value)}
+                className="quotes-select-input"
+                aria-label="اختر طلب الشراء للمقارنة"
+              >
+                <option value="">-- اختر طلب شراء --</option>
+                {requests.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.request_no} • {r.department} • {r.status === 'approved' ? '✅ معتمد' : r.status === 'pending' ? '⏳ قيد الموافقة' : r.status} • {r.items_summary}
+                  </option>
+                ))}
+              </select>
             </label>
-            <select
-              value={selectedRequestId}
-              onChange={(e) => setSelectedRequestId(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)', fontWeight: 600 }}
-            >
-              <option value="">-- اختر طلب شراء --</option>
-              {requests.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.request_no} • {r.department} • {r.status === 'approved' ? '✅ معتمد' : r.status === 'pending' ? '⏳ قيد الموافقة' : r.status} • {r.items_summary}
-                </option>
-              ))}
-            </select>
           </div>
 
           {selectedRequest && (
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="quotes-req-summary">
               <div>
-                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>العروض المستلمة:</span>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--ink)' }}>
+                <span className="font-xs text-muted">العروض المستلمة:</span>
+                <div className="font-bold text-lg text-ink">
                   {quotes.length} عروض
                 </div>
               </div>
 
               <div>
-                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>نوع الشراء:</span>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                <span className="font-xs text-muted">نوع الشراء:</span>
+                <div className="font-semibold text-sm">
                   {selectedRequest.purchase_type === 'direct' ? 'أمر مباشر' : selectedRequest.purchase_type === 'practice' ? 'ممارسة' : 'مناقصة'}
                 </div>
               </div>
 
               <div>
-                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>حالة الطلب:</span>
+                <span className="font-xs text-muted">حالة الطلب:</span>
                 <div>
                   {selectedRequest.status === 'approved' ? (
-                    <span className="stock-status-pill ok">معتمد ومؤهل للتعاقد</span>
+                    <span className="badge ok">معتمد ومؤهل للتعاقد</span>
                   ) : (
-                    <span className="stock-status-pill info">قيد المراجعة / مسودة</span>
+                    <span className="badge info">قيد المراجعة / مسودة</span>
                   )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  className="primary-btn"
+                  className="primary-btn inline-flex items-center gap-1"
                   onClick={() => setIsAddQuoteModalOpen(true)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Plus size={16} /> إضافة عرض سعر
                 </button>
                 {quotes.length > 0 && (
                   <button
                     type="button"
-                    className="secondary-btn"
+                    className="secondary-btn inline-flex items-center gap-1"
                     onClick={handleExportQuotesExcel}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
                     <Download size={15} /> تصدير المقارنة
                   </button>
@@ -470,23 +476,22 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           </button>
         </div>
       ) : (
-        <div style={{ marginBottom: '30px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '1.05rem', margin: 0, color: 'var(--ink)' }}>
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+            <h3 className="text-base m-0 text-ink">
               جدول المقارنة الذكية للعروض المستلمة ({quotes.length} عروض)
             </h3>
             {selectedQuote && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 600 }}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-sm text-ok font-semibold">
                   العرض المختار: «{selectedQuote.supplier_name}» ({formatCurrency(selectedQuote.total_price, currency)})
                 </span>
                 {!existingPoForRequest && selectedRequest?.status === 'approved' && (
                   <button
                     type="button"
-                    className="primary-btn"
+                    className="primary-btn inline-flex items-center gap-1"
                     onClick={handleCreatePurchaseOrder}
                     disabled={isSubmitting}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
                     <PackageCheck size={16} /> إنشاء أمر شراء من العرض المختار
                   </button>
@@ -500,17 +505,17 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
             )}
           </div>
 
-          <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+          <div className="table-wrapper overflow-x-auto">
             <table className="movements-table responsive-table">
               <thead>
                 <tr>
                   <th>المورد والتقييم</th>
-                  <th style={{ textAlign: 'center' }}>السعر الإجمالي</th>
-                  <th style={{ textAlign: 'center' }}>مدة التوريد</th>
+                  <th className="text-center">السعر الإجمالي</th>
+                  <th className="text-center">مدة التوريد</th>
                   <th>شروط الدفع</th>
-                  <th style={{ textAlign: 'center' }}>فترة الضمان</th>
+                  <th className="text-center">فترة الضمان</th>
                   <th>الملاحظات</th>
-                  <th style={{ textAlign: 'center' }}>قرار الاختيار</th>
+                  <th className="text-center">قرار الاختيار</th>
                 </tr>
               </thead>
               <tbody>
@@ -521,64 +526,60 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                   return (
                     <tr
                       key={q.id}
-                      style={{
-                        background: q.is_selected ? 'rgba(16, 185, 129, 0.04)' : undefined,
-                        borderRight: q.is_selected ? '4px solid #059669' : undefined,
-                      }}
+                      className={q.is_selected ? 'quotes-table-tr-selected' : undefined}
                     >
                       <td>
-                        <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{q.supplier_name}</div>
+                        <div className="font-bold text-ink">{q.supplier_name}</div>
                         {q.supplier_rating != null && (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.78rem', color: '#d97706' }}>
-                            <Star size={13} fill="#d97706" />
+                          <div className="suppliers-rating-box font-xs">
+                            <Star size={13} fill="var(--warn)" />
                             <span>{q.supplier_rating.toFixed(1)}</span>
                           </div>
                         )}
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ fontWeight: 700, fontSize: '1rem', color: isLowestPrice ? '#059669' : 'var(--ink)' }}>
+                      <td className="text-center">
+                        <div className={`font-bold text-base ${isLowestPrice ? 'text-ok' : 'text-ink'}`}>
                           {formatCurrency(q.total_price, currency)}
                         </div>
                         {isLowestPrice && (
-                          <span className="badge ok" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                          <span className="badge ok font-xs inline-flex items-center gap-1 mt-1">
                             <Zap size={11} /> الأقل سعراً
                           </span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ fontWeight: 600 }}>{q.delivery_days} أيام</div>
+                      <td className="text-center">
+                        <div className="font-semibold">{q.delivery_days} أيام</div>
                         {isFastestDelivery && (
-                          <span className="badge info" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                          <span className="badge info font-xs inline-flex items-center gap-1 mt-1">
                             <Truck size={11} /> الأسرع توريداً
                           </span>
                         )}
                       </td>
                       <td>
-                        <span style={{ fontSize: '0.85rem' }}>{q.payment_terms || '—'}</span>
+                        <span className="font-sm">{q.payment_terms || '—'}</span>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontSize: '0.85rem' }}>
+                      <td className="text-center">
+                        <span className="font-sm">
                           {q.warranty_months > 0 ? `${q.warranty_months} شهراً` : 'بدون ضمان'}
                         </span>
                       </td>
                       <td>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{q.notes || '—'}</span>
+                        <span className="font-xs text-muted">{q.notes || '—'}</span>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td className="text-center">
                         {q.is_selected ? (
                           <button
                             type="button"
-                            className="primary-btn"
+                            className="primary-btn quotes-btn-winner"
                             disabled
                             aria-pressed="true"
-                            style={{ padding: '5px 12px', fontSize: '0.82rem', background: '#059669', borderColor: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
                             <Check size={14} /> العرض الفائز
                           </button>
                         ) : (
                           <button
                             type="button"
-                            className="secondary-btn"
+                            className="secondary-btn quotes-btn-choose"
                             disabled={Boolean(existingPoForRequest) || selectedRequest?.status !== 'approved'}
                             aria-pressed="false"
                             onClick={() => handleSelectQuote(q)}
@@ -589,7 +590,6 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                                 ? 'تم إصدار أمر الشراء بالفعل'
                                 : 'اعتماد هذا العرض كعرض فائز'
                             }
-                            style={{ padding: '5px 12px', fontSize: '0.82rem' }}
                           >
                             اختيار هذا العرض
                           </button>
@@ -605,76 +605,76 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       )}
 
       {/* Section: Purchase Orders Registry */}
-      <div className="card-surface" style={{ padding: '20px', borderRadius: '10px', border: '1px solid var(--line)', marginTop: '20px' }}>
-        <h3 style={{ fontSize: '1.05rem', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="card-surface mt-5 p-5 rounded-lg border border-line">
+        <h3 className="text-base m-0 mb-3 flex items-center gap-2">
           <PackageCheck size={20} />
           أوامر الشراء الصادرة للموردين ({purchaseOrders.length})
         </h3>
 
         {purchaseOrders.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)', fontSize: '0.9rem' }}>
+          <div className="text-center p-8 text-muted font-sm">
             لا توجد أوامر شراء صادرة حتى الآن. يمكنك إصدار أمر شراء بمجرد اعتماد العرض الفائز.
           </div>
         ) : (
-          <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+          <div className="table-wrapper overflow-x-auto">
             <table className="movements-table responsive-table">
               <thead>
                 <tr>
                   <th>رقم أمر الشراء</th>
                   <th>طلب الشراء والجهة</th>
                   <th>المورد المتعاقد معه</th>
-                  <th style={{ textAlign: 'center' }}>القيمة الإجمالية</th>
-                  <th style={{ textAlign: 'center' }}>التسليم المتوقع</th>
-                  <th style={{ textAlign: 'center' }}>الحالة</th>
-                  <th style={{ textAlign: 'center' }}>متابعة الإجراءات</th>
+                  <th className="text-center">القيمة الإجمالية</th>
+                  <th className="text-center">التسليم المتوقع</th>
+                  <th className="text-center">الحالة</th>
+                  <th className="text-center">متابعة الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {purchaseOrders.map((po) => (
                   <tr key={po.id}>
                     <td>
-                      <div style={{ fontWeight: 700, color: 'var(--accent)', direction: 'ltr', textAlign: 'right' }}>
+                      <div className="font-bold text-accent text-right font-mono">
                         {po.po_no}
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+                      <div className="font-xs text-muted">
                         حرر بتاريخ: {po.created_at?.slice(0, 10)}
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{po.request_no}</div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{po.department}</div>
+                      <div className="font-semibold">{po.request_no}</div>
+                      <div className="font-xs text-muted">{po.department}</div>
                     </td>
                     <td>
-                      <span style={{ fontWeight: 600 }}>{po.supplier_name}</span>
+                      <span className="font-semibold">{po.supplier_name}</span>
                     </td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>
+                    <td className="text-center font-bold">
                       {formatCurrency(po.total, currency)}
                     </td>
-                    <td style={{ textAlign: 'center', fontSize: '0.85rem' }}>
+                    <td className="text-center font-sm">
                       {po.expected_delivery_date || '—'}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td className="text-center">
                       {po.status === 'open' && (
-                        <span className="stock-status-pill info">مفتوح (بانتظار التوريد)</span>
+                        <span className="badge info">مفتوح (بانتظار التوريد)</span>
                       )}
                       {po.status === 'received' && (
-                        <span className="stock-status-pill ok">تم الاستلام والفحص</span>
+                        <span className="badge ok">تم الاستلام والفحص</span>
                       )}
                       {po.status === 'invoiced' && (
-                        <span className="stock-status-pill neutral">تمت الفوترة</span>
+                        <span className="badge muted">تمت الفوترة</span>
                       )}
                       {po.status === 'cancelled' && (
-                        <span className="stock-status-pill danger">ملغي</span>
+                        <span className="badge bad">ملغي</span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: '6px' }}>
+                    <td className="text-center">
+                      <div className="inline-flex gap-2">
                         {po.status === 'open' && (
                           <button
                             type="button"
-                            className="secondary-btn"
-                            style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            className="secondary-btn quotes-btn-choose"
                             onClick={() => handleMarkReceived(po)}
+                            aria-label={`تأكيد استلام أمر الشراء ${po.po_no}`}
                           >
                             تأكيد الاستلام
                           </button>
@@ -682,15 +682,15 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                         {po.status === 'received' && (
                           <button
                             type="button"
-                            className="secondary-btn"
-                            style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            className="secondary-btn quotes-btn-choose"
                             onClick={() => handleMarkInvoiced(po)}
+                            aria-label={`تأكيد فاتورة أمر الشراء ${po.po_no}`}
                           >
                             تأكيد الفاتورة
                           </button>
                         )}
                         {po.status === 'invoiced' && (
-                          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>مكتمل التوريد والفوترة</span>
+                          <span className="font-xs text-muted">مكتمل التوريد والفوترة</span>
                         )}
                       </div>
                     </td>
@@ -705,36 +705,37 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       {/* Add Supplier Quote Modal */}
       {isAddQuoteModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal-surface card-surface" style={{ maxWidth: '520px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="modal-surface card-surface quotes-modal-surface">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="m-0 flex items-center gap-2">
                 <Plus size={20} /> إضافة عرض سعر للمقارنة
               </h3>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                className="cursor-pointer text-muted bg-none border-none p-1"
                 onClick={() => setIsAddQuoteModalOpen(false)}
+                aria-label="إغلاق النافذة"
               >
                 <X size={18} />
               </button>
             </div>
 
             {modalError && (
-              <div className="inline-message error" style={{ marginBottom: '14px' }}>
+              <div className="inline-message error mb-3">
                 <AlertTriangle size={16} />
                 <span>{modalError}</span>
               </div>
             )}
 
             <form onSubmit={handleAddQuoteSubmit}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <label>
+              <div className="flex flex-col gap-3">
+                <label className="form-label-block">
                   المورد المتقدم بالعرض *
                   <select
                     value={quoteSupplierId}
                     onChange={(e) => setQuoteSupplierId(e.target.value)}
                     required
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}
+                    className="form-input-themed"
                   >
                     <option value="">-- اختر مورداً معتمداً --</option>
                     {suppliers.map((s) => (
@@ -745,8 +746,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                   </select>
                 </label>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label>
+                <div className="form-grid-2col">
+                  <label className="form-label-block">
                     السعر الإجمالي للعرض *
                     <input
                       type="number"
@@ -756,10 +757,11 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                       onChange={(e) => setQuotePrice(e.target.value)}
                       placeholder="السعر الإجمالي شامل الضريبة"
                       required
+                      className="form-input-themed"
                     />
                   </label>
 
-                  <label>
+                  <label className="form-label-block">
                     مدة التوريد (أيام) *
                     <input
                       type="number"
@@ -768,22 +770,24 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                       onChange={(e) => setQuoteDeliveryDays(e.target.value)}
                       placeholder="أيام التوريد"
                       required
+                      className="form-input-themed"
                     />
                   </label>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label>
+                <div className="form-grid-2col">
+                  <label className="form-label-block">
                     شروط وطريقة الدفع
                     <input
                       type="text"
                       value={quotePaymentTerms}
                       onChange={(e) => setQuotePaymentTerms(e.target.value)}
                       placeholder="مثال: دفع بعد الاستلام والفحص"
+                      className="form-input-themed"
                     />
                   </label>
 
-                  <label>
+                  <label className="form-label-block">
                     فترة الضمان (بالشهور)
                     <input
                       type="number"
@@ -791,22 +795,24 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                       value={quoteWarrantyMonths}
                       onChange={(e) => setQuoteWarrantyMonths(e.target.value)}
                       placeholder="عدد شهور الضمان"
+                      className="form-input-themed"
                     />
                   </label>
                 </div>
 
-                <label>
+                <label className="form-label-block">
                   ملاحظات أو شروط إضافية
                   <textarea
                     rows={2}
                     value={quoteNotes}
                     onChange={(e) => setQuoteNotes(e.target.value)}
                     placeholder="العنوان، رقم السجل، شروط التركيب والتوصيل..."
+                    className="form-input-themed"
                   />
                 </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '18px' }}>
+              <div className="flex justify-end gap-2 mt-4">
                 <button
                   type="button"
                   className="secondary-btn"

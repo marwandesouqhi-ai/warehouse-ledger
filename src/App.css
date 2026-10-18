@@ -7212,6 +7212,98 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
+/* Quotes Page Classes */
+.quotes-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.quotes-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.quotes-selector-card {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  margin-bottom: var(--sp-5);
+}
+
+.quotes-selector-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quotes-select-wrap {
+  min-width: 280px;
+  flex: 1;
+}
+
+.quotes-select-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.quotes-req-summary {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.quotes-table-tr-selected {
+  background: rgba(16, 185, 129, 0.04);
+  border-inline-end: 4px solid var(--ok);
+}
+
+.quotes-btn-winner {
+  padding: 5px 12px;
+  font-size: var(--text-xs);
+  background: var(--ok) !important;
+  border-color: var(--ok) !important;
+  color: #fff !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quotes-btn-choose {
+  padding: 5px 12px;
+  font-size: var(--text-xs);
+}
+
+.quotes-modal-surface {
+  max-width: 520px;
+  width: 100%;
+  padding: var(--sp-6);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .users-tag-pill-danger {
   background: var(--bad) !important;
   color: #fff !important;
