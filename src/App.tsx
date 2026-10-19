@@ -53,7 +53,7 @@ import { fixtureMovements, type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
 import { deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
-import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, type AppSettings } from './lib/settings'
+import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings } from './lib/settings'
 import { supabase } from './lib/supabase'
 import {
   isSystemAdmin as permsIsSystemAdmin,
@@ -260,8 +260,9 @@ function App() {
   const [isInviteFlow, setIsInviteFlow] = useState(() => {
     if (typeof window === 'undefined') return false
     const hash = window.location.hash || ''
+    const search = window.location.search || ''
     if (hash.includes('error=')) return false
-    return hash.includes('type=invite')
+    return hash.includes('type=invite') || search.includes('type=invite')
   })
   const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(supabase ? 'loading' : 'local')
   const [syncError, setSyncError] = useState('')
@@ -299,12 +300,34 @@ function App() {
     function handleSettingsSync() {
       setSettings(loadAppSettings())
     }
+    function handleLedgerSync() {
+      try {
+        const raw = localStorage.getItem(storageKey)
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown
+          if (Array.isArray(parsed)) {
+            setMovements(parsed as FixtureMovement[])
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    function handleCustodySync() {
+      setCustodyItems(loadCustodyItems())
+    }
     window.addEventListener('settings-changed', handleSettingsSync)
     window.addEventListener('storage', handleSettingsSync)
+    window.addEventListener('warehouse-ledger-updated', handleLedgerSync)
+    window.addEventListener('custody-changed', handleCustodySync)
+    window.addEventListener('custody-items-changed', handleCustodySync)
     return () => {
       active = false
       window.removeEventListener('settings-changed', handleSettingsSync)
       window.removeEventListener('storage', handleSettingsSync)
+      window.removeEventListener('warehouse-ledger-updated', handleLedgerSync)
+      window.removeEventListener('custody-changed', handleCustodySync)
+      window.removeEventListener('custody-items-changed', handleCustodySync)
     }
   }, [])
   
@@ -383,7 +406,17 @@ function App() {
   const effectiveRole = getEffectiveRole(session)
   const isSystemAdmin = permsIsSystemAdmin(session)
   const canManageRecords = isSystemAdmin || can(session, 'manage_records')
-  const canEdit = canManageRecords || ['system_admin', 'admin', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(effectiveRole)
+  const canEdit = canManageRecords || [
+    'system_admin',
+    'admin',
+    'warehouse_admin',
+    'warehouse_employee',
+    'procurement_admin',
+    'procurement_employee',
+    'warehouse_staff',
+    'purchasing_staff',
+    'editor',
+  ].includes(effectiveRole)
   const activeUserDisplayName = (
     session?.user?.user_metadata?.displayName ||
     session?.user?.user_metadata?.name ||
@@ -545,6 +578,12 @@ function App() {
     }
   }, [movements])
 
+  const systemDisplayName = useMemo(() => getSystemDisplayName(settings), [settings])
+
+  useEffect(() => {
+    document.title = `${systemDisplayName} | ${settings.organization || 'إدارة المخازن'}`
+  }, [systemDisplayName, settings.organization])
+
   useEffect(() => {
     function handleLocalAuth() {
       const local = getLocalSession()
@@ -567,6 +606,7 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
 
       const isActivation = window.location.hash.includes('type=invite') ||
+        window.location.search.includes('type=invite') ||
         (nextSession?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
 
       if (event === 'PASSWORD_RECOVERY') {
@@ -578,7 +618,7 @@ function App() {
           setIsInviteFlow(false)
         }
       }
-      if (window.location.hash.includes('type=invite') && !window.location.hash.includes('error=')) {
+      if ((window.location.hash.includes('type=invite') || window.location.search.includes('type=invite')) && !window.location.hash.includes('error=')) {
         setIsInviteFlow(true)
       }
       if (event === 'SIGNED_IN' && nextSession?.user) {
@@ -1305,11 +1345,11 @@ function App() {
               )}
             </div>
             <div>
-              <div className="brand-title" title={settings.organization || 'حركة المخزن'}>
-                {settings.organization || 'حركة المخزن'}
+              <div className="brand-title" title={systemDisplayName}>
+                {systemDisplayName}
               </div>
-              <small title={settings.department || 'إدارة ومتابعة المخزون'}>
-                {settings.department || 'إدارة ومتابعة المخزون'}
+              <small title={`${settings.organization || 'المؤسسة'} • ${settings.department || 'المخازن'}`}>
+                {settings.organization || 'المؤسسة'} • {settings.department || 'المخازن'}
               </small>
             </div>
           </div>
@@ -1328,12 +1368,6 @@ function App() {
               </div>
             ))}
           </nav>
-        </div>
-
-        <div className="mini-card">
-          <div className="mini-label">إجمالي الوارد المسجل</div>
-          <div className="mini-value">{summary.total_value.toLocaleString('ar-EG', { maximumFractionDigits: 3 })}</div>
-          <div className="mini-foot">{movements.length.toLocaleString('ar-EG')} حركة في السجل</div>
         </div>
 
         {!isInstalled ? (
@@ -1367,7 +1401,7 @@ function App() {
               ) : (
                 <Warehouse size={14} />
               )}
-              {settings.organization} <span>›</span> {settings.department}
+              {systemDisplayName} <span>›</span> {settings.organization} <span>›</span> {settings.department}
             </div>
             <h1>لوحة إدارة المخزن</h1>
             <p className="topbar-subtitle">نظرة واضحة على الوارد والصرف وحالة الأصناف</p>
@@ -2119,29 +2153,71 @@ function App() {
           <Route
             path="/custody"
             element={
-              <CustodyPage
-                settings={settings}
-                session={session}
-                globalSearchTerm={searchTerm}
-                movements={movements}
-                onSaveMovement={addMovement}
-              />
+              canAccessRoute(session, '/custody') ? (
+                <CustodyPage
+                  settings={settings}
+                  session={session}
+                  globalSearchTerm={searchTerm}
+                  movements={movements}
+                  onSaveMovement={addMovement}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="عهدة المخازن"
+                  subtitle="صلاحية مقيدة"
+                  message="سجل وإدارة عهدة المخازن مقتصر حصرياً على موظفي ومشرفي المخازن وإدارة النظام."
+                />
+              )
             }
           />
           <Route
             path="/reports"
             element={
-              <ReportsPage
-                movements={movements}
-                settings={settings}
-                currency={settings.currency}
-                session={session}
-                onExportMovements={() => exportMovements(movements)}
-              />
+              canAccessRoute(session, '/reports') ? (
+                <ReportsPage
+                  movements={movements}
+                  settings={settings}
+                  currency={settings.currency}
+                  session={session}
+                  onExportMovements={() => exportMovements(movements)}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="التقارير الرسمية"
+                  subtitle="صلاحية مقيدة"
+                  message="التقارير الرسمية وكشوف الجرد مقتصرة على موظفي المخازن والمشتريات وإدارة النظام."
+                />
+              )
             }
           />
-          <Route path="/imports" element={<ImportPage onImport={mergeImportedMovements} session={session} />} />
-          <Route path="/quality" element={<QualityPage movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />} />
+          <Route
+            path="/imports"
+            element={
+              canAccessRoute(session, '/imports') ? (
+                <ImportPage onImport={mergeImportedMovements} session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="استيراد Excel"
+                  subtitle="صلاحية مقيدة"
+                  message="استيراد البيانات وتحديث السجلات مقتصر حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/quality"
+            element={
+              canAccessRoute(session, '/quality') ? (
+                <QualityPage movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />
+              ) : (
+                <RestrictedScreen
+                  title="فحص الجودة"
+                  subtitle="صلاحية مقيدة"
+                  message="فحص الجودة وتدقيق البيانات مقتصر حصرياً على مسؤولي المخازن وإدارة النظام."
+                />
+              )
+            }
+          />
           <Route
             path="/audit"
             element={
@@ -2159,13 +2235,13 @@ function App() {
           <Route
             path="/users"
             element={
-              isSystemAdmin ? (
+              (isSystemAdmin || canAccessRoute(session, '/users')) ? (
                 <UsersPage session={session} />
               ) : (
                 <RestrictedScreen
                   title="المستخدمون والصلاحيات"
                   subtitle="إدارة الحسابات والأمان"
-                  message="إدارة الحسابات والصلاحيات وكلمات المرور مخصصة حصرياً لمدير النظام (System Admin)."
+                  message="إدارة الحسابات والصلاحيات وكلمات المرور مخصصة حصرياً لمدير النظام (System Admin) ومشرفي الأقسام."
                 />
               )
             }

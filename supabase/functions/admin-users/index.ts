@@ -164,8 +164,14 @@ ${actionLink}
         يُرجى الضغط على الزر أدناه لتفعيل حسابك واختيار اسم المستخدم وكلمة المرور الخاصة بك:
       </p>
 
-      <div class="btn-container" style="text-align: center; margin: 30px 0 15px 0;">
-        <a href="${actionLink}" class="btn" target="_blank" style="display: inline-block; background-color: #0d9488; color: #ffffff !important; padding: 14px 34px; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3); text-align: center;">تفعيل الحساب وتعيين كلمة المرور</a>
+      <div style="text-align: center; margin: 30px 0 20px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto; text-align: center;">
+          <tr>
+            <td align="center" bgcolor="#0d9488" style="border-radius: 8px; background-color: #0d9488;">
+              <a href="${actionLink}" target="_blank" style="display: inline-block; padding: 14px 34px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 16px; font-weight: 700; color: #ffffff !important; text-decoration: none; border-radius: 8px; background-color: #0d9488; -webkit-text-size-adjust: none;">تفعيل الحساب وتعيين كلمة المرور</a>
+            </td>
+          </tr>
+        </table>
       </div>
 
       <div style="margin-top: 15px; margin-bottom: 25px; text-align: center; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
@@ -211,6 +217,107 @@ ${actionLink}
     const msg = err instanceof Error ? err.message : String(err)
     console.error("sendActivationInviteEmail error:", err)
     return { success: false, error: msg }
+  }
+}
+
+function escapeTelegramHtml(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+}
+
+async function sendActivationInviteTelegram(options: {
+  telegramUserId?: number | string | null
+  email: string
+  fullName: string
+  employeeId: string
+  role: string
+  department: string
+  actionLink: string
+}): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
+  try {
+    const { telegramUserId, email, fullName, employeeId, role, department, actionLink } = options
+
+    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")?.trim()
+    if (!botToken || !telegramUserId) {
+      return { success: false, skipped: true }
+    }
+
+    const roleNameMap: Record<string, string> = {
+      warehouse_employee: "موظف مخازن",
+      warehouse_admin: "مدير مخازن",
+      procurement_employee: "موظف مشتريات",
+      procurement_admin: "مدير مشتريات",
+      system_admin: "مدير نظام رئيسي",
+    }
+    const displayRole = roleNameMap[role] || role
+    const displayDept = department === "warehouse" ? "إدارة المخازن" : department === "procurement" ? "إدارة المشتريات" : department
+
+    const safeName = escapeTelegramHtml(fullName)
+    const safeEmpId = escapeTelegramHtml(employeeId)
+    const safeRole = escapeTelegramHtml(displayRole)
+    const safeDept = escapeTelegramHtml(displayDept)
+    const safeEmail = escapeTelegramHtml(email)
+
+    const isHttps = typeof actionLink === "string" && actionLink.startsWith("https://")
+
+    let messageText = `تهانينا يا <b>${safeName}</b>! 🎉\n\n` +
+      `تمت الموافقة على طلب انضمامك إلى منظومة إدارة المخازن والمشتريات وتخصيص رقمك الوظيفي الرسمي.\n\n` +
+      `📋 <b>البيانات الوظيفية:</b>\n` +
+      `• الاسم: ${safeName}\n` +
+      `• الرقم الوظيفي: <b>${safeEmpId}</b>\n` +
+      `• القسم: ${safeDept}\n` +
+      `• الدور الوظيفي: ${safeRole}\n\n` +
+      `يرجى الضغط على زر «تفعيل الحساب» أدناه لتفعيل حسابك وتعيين اسم المستخدم وكلمة المرور الخاصة بك.\n\n` +
+      `⚠️ <b>ملاحظة أمنية هامة:</b>\n` +
+      `هذا الرابط شخصي وخاص بك ومخصص للاستخدام لمرة واحدة فقط ومحدد الصلاحية زمنياً، ويُحظر تماماً مشاركته مع أي شخص آخر.\n\n` +
+      `📧 <b>تنويه:</b> تم إرسال نفس دعوة التفعيل أيضاً إلى بريدك الإلكتروني (${safeEmail}).`
+
+    if (!isHttps) {
+      messageText += `\n\n🔗 <b>رابط التفعيل:</b>\n${escapeTelegramHtml(actionLink)}`
+    }
+
+    const payload: Record<string, unknown> = {
+      chat_id: telegramUserId,
+      text: messageText,
+      parse_mode: "HTML",
+      protect_content: true,
+      link_preview_options: { is_disabled: true },
+    }
+
+    if (isHttps) {
+      payload.reply_markup = {
+        inline_keyboard: [
+          [
+            {
+              text: "تفعيل الحساب",
+              url: actionLink,
+            },
+          ],
+        ],
+      }
+    }
+
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) {
+      const errorMsg = (typeof data?.description === "string" && data.description.trim())
+        ? data.description.trim()
+        : `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`
+      return { success: false, error: errorMsg }
+    }
+
+    return { success: true }
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    return { success: false, error: errorMsg }
   }
 }
 
@@ -648,7 +755,17 @@ ${recoveryLink}
         })
       }
 
-      const allowedRoles = ["admin", "warehouse_staff", "purchasing_staff", "editor", "viewer"]
+      const allowedRoles = [
+        "admin",
+        "warehouse_admin",
+        "warehouse_employee",
+        "procurement_admin",
+        "procurement_employee",
+        "warehouse_staff",
+        "purchasing_staff",
+        "editor",
+        "viewer",
+      ]
       if (!allowedRoles.includes(role)) {
         return new Response(JSON.stringify({ error: "الدور المحدد غير صالح." }), {
           status: 400,
@@ -683,6 +800,7 @@ ${recoveryLink}
         app_metadata: {
           username: cleanUsername,
           role,
+          department: body.department || (role.startsWith('procurement') ? 'المشتريات' : role.startsWith('warehouse') ? 'المخازن' : 'المخازن'),
           system_admin: false,
           permissions: permissions || [],
           must_change_password: Boolean(requirePasswordChange),
@@ -701,6 +819,8 @@ ${recoveryLink}
         username: cleanUsername,
         display_name: displayName?.trim() || cleanUsername,
         role,
+        department: body.department || (role.startsWith('procurement') ? 'المشتريات' : role.startsWith('warehouse') ? 'المخازن' : 'المخازن'),
+        email: body.email || null,
         status: "active",
         permissions: permissions || [],
         auth_user_id: createData.user?.id,
@@ -930,6 +1050,7 @@ ${recoveryLink}
         ? ["view_audit", "view_settings", "manage_records"]
         : (permissions ?? targetUser.user.app_metadata?.permissions ?? [])
 
+      const newDepartment = body.department || targetUser.user.app_metadata?.department
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: {
           ...targetUser.user.user_metadata,
@@ -938,6 +1059,7 @@ ${recoveryLink}
         app_metadata: {
           ...targetUser.user.app_metadata,
           role: newRole,
+          department: newDepartment,
           system_admin: isTargetProtected,
           permissions: newPermissions,
         },
@@ -949,6 +1071,7 @@ ${recoveryLink}
       await supabaseAdmin.from("app_users").update({
         display_name: displayName || targetUser.user.user_metadata?.displayName,
         role: newRole,
+        department: newDepartment,
         permissions: newPermissions,
       }).eq("username", targetUsername.toLowerCase())
 
@@ -1373,7 +1496,7 @@ ${recoveryLink}
 
       const targetEmail = regReq.email.trim().toLowerCase()
       // Generate invitation link (Custom SMTP delivery instead of default inviteUserByEmail)
-      let actionLink = `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`
+      let actionLink = `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`
       let targetAuthUser = null
 
       try {
@@ -1381,7 +1504,7 @@ ${recoveryLink}
           type: "invite",
           email: targetEmail,
           options: {
-            redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+            redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             data: {
               name: regReq.full_name,
               displayName: regReq.full_name,
@@ -1404,7 +1527,7 @@ ${recoveryLink}
             type: "recovery",
             email: targetEmail,
             options: {
-              redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             },
           })
           if (recData?.properties?.action_link) {
@@ -1423,7 +1546,7 @@ ${recoveryLink}
             type: "magiclink",
             email: targetEmail,
             options: {
-              redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             },
           })
           if (magicData?.properties?.action_link) {
@@ -1506,25 +1629,21 @@ ${recoveryLink}
         })
         .eq("id", requestId)
 
-      // Notify Telegram user without secrets (no password, link token, or OTP in Telegram!)
-      const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")
-      if (botToken && regReq.telegram_user_id) {
-        const notifyUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
-        const notifyMsg = `تهانينا! تمت الموافقة على طلب اعتماد حسابك وتخصيص الرقم الوظيفي: <b>${allocatedEmployeeId}</b>.\nالدور: ${roleToAssign}\nالقسم: ${regReq.requested_department}\n\nتم إرسال رابط الدعوة لتفعيل حسابك وتعيين اسم المستخدم وكلمة المرور إلى بريدك الإلكتروني (${regReq.email}) عبر Google SMTP. يُرجى مراجعة صندوق الوارد أو مجلد البريد غير الهام (Spam) لإكمال تفعيل الحساب.`
-        try {
-          await fetch(notifyUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: regReq.telegram_user_id,
-              text: notifyMsg,
-              parse_mode: "HTML",
-            }),
-          })
-        } catch {
-          // ignore notification failure
-        }
-      }
+      // Deliver activation invitation via Telegram
+      const tgRes = await sendActivationInviteTelegram({
+        telegramUserId: regReq.telegram_user_id,
+        email: regReq.email,
+        fullName: regReq.full_name,
+        employeeId: allocatedEmployeeId,
+        role: roleToAssign,
+        department: regReq.requested_department,
+        actionLink,
+      })
+      const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
+        ? "sent"
+        : tgRes.skipped
+        ? "skipped"
+        : "failed"
 
       // Record audit log
       await supabaseAdmin.from("audit_logs").insert({
@@ -1533,15 +1652,30 @@ ${recoveryLink}
         action: `اعتماد طلب تسجيل الموظف وإرسال دعوة التفعيل بالبريد عبر Google SMTP: ${regReq.email}`,
         entity_type: "employee_approval",
         entity_id: allocatedEmployeeId,
-        details: { requestId, employee_id: allocatedEmployeeId, role: roleToAssign, email: regReq.email },
+        details: {
+          requestId,
+          employee_id: allocatedEmployeeId,
+          role: roleToAssign,
+          email: regReq.email,
+          telegram_invitation: telegramInvitation,
+          telegram_error: tgRes.error || null,
+        },
       })
+
+      let successMessage = "تم اعتماد الموظف وتخصيص الرقم الوظيفي وإرسال رابط الدعوة إلى البريد الإلكتروني عبر Google SMTP بنجاح."
+      if (telegramInvitation === "sent") {
+        successMessage = "تم اعتماد الموظف وتخصيص الرقم الوظيفي وإرسال رابط الدعوة إلى البريد الإلكتروني وتليجرام بنجاح."
+      } else if (telegramInvitation === "failed") {
+        successMessage = `تم اعتماد الموظف وتخصيص الرقم الوظيفي وإرسال رابط الدعوة إلى البريد الإلكتروني بنجاح (تعذر إرسال دعوة تليجرام: ${tgRes.error || "خطأ غير معروف"}).`
+      }
 
       return new Response(JSON.stringify({
         success: true,
-        message: "تم اعتماد الموظف وتخصيص الرقم الوظيفي وإرسال رابط الدعوة إلى البريد الإلكتروني عبر Google SMTP بنجاح.",
+        message: successMessage,
         employeeId: allocatedEmployeeId,
         role: roleToAssign,
         invitationStatus: "sent",
+        telegramInvitation,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1599,7 +1733,7 @@ ${recoveryLink}
 
       const appBaseUrl = resolveAppBaseUrl(req)
       const targetEmail = regReq.email.trim().toLowerCase()
-      let actionLink = `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`
+      let actionLink = `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`
       let targetAuthUser: any = null
 
       try {
@@ -1607,7 +1741,7 @@ ${recoveryLink}
           type: "invite",
           email: targetEmail,
           options: {
-            redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+            redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             data: {
               name: regReq.full_name,
               displayName: regReq.full_name,
@@ -1630,7 +1764,7 @@ ${recoveryLink}
             type: "recovery",
             email: targetEmail,
             options: {
-              redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             },
           })
           if (recData?.properties?.action_link) {
@@ -1649,7 +1783,7 @@ ${recoveryLink}
             type: "magiclink",
             email: targetEmail,
             options: {
-              redirectTo: `${appBaseUrl}/#type=invite&email=${encodeURIComponent(targetEmail)}`,
+              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             },
           })
           if (magicData?.properties?.action_link) {
@@ -1710,19 +1844,48 @@ ${recoveryLink}
         })
         .eq("id", requestId)
 
+      // Deliver activation invitation via Telegram
+      const tgRes = await sendActivationInviteTelegram({
+        telegramUserId: regReq.telegram_user_id,
+        email: regReq.email,
+        fullName: regReq.full_name,
+        employeeId: regReq.employee_id || "WH-EMP-NEW",
+        role: regReq.approved_role || regReq.requested_role,
+        department: regReq.requested_department,
+        actionLink,
+      })
+      const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
+        ? "sent"
+        : tgRes.skipped
+        ? "skipped"
+        : "failed"
+
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
         user_email: caller.email,
         action: `إعادة إرسال دعوة تفعيل الموظف بالبريد عبر Google SMTP: ${regReq.email}`,
         entity_type: "employee_approval",
         entity_id: regReq.employee_id || requestId,
-        details: { requestId, email: regReq.email },
+        details: {
+          requestId,
+          email: regReq.email,
+          telegram_invitation: telegramInvitation,
+          telegram_error: tgRes.error || null,
+        },
       })
+
+      let resendMessage = "تمت إعادة إرسال رابط الدعوة إلى البريد الإلكتروني عبر Google SMTP بنجاح."
+      if (telegramInvitation === "sent") {
+        resendMessage = "تمت إعادة إرسال رابط الدعوة إلى البريد الإلكتروني وتليجرام بنجاح."
+      } else if (telegramInvitation === "failed") {
+        resendMessage = `تمت إعادة إرسال رابط الدعوة إلى البريد الإلكتروني بنجاح (تعذر إرسال دعوة تليجرام: ${tgRes.error || "خطأ غير معروف"}).`
+      }
 
       return new Response(JSON.stringify({
         success: true,
-        message: "تمت إعادة إرسال رابط الدعوة إلى البريد الإلكتروني عبر Google SMTP بنجاح.",
+        message: resendMessage,
         invitationStatus: "sent",
+        telegramInvitation,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

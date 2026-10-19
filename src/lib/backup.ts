@@ -23,21 +23,23 @@ export type SystemBackupPayload = {
     organization: string
     department: string
     currency: string
-    counts: {
-      movements: number
-      custody: number
-      users: number
-      auditLogs: number
+      counts: {
+        movements: number
+        custody: number
+        users: number
+        auditLogs: number
+        suppliers?: number
+      }
+    }
+    data: {
+      settings: AppSettings
+      movements: FixtureMovement[]
+      custody: CustodyItem[]
+      users: LocalUser[]
+      auditLogs: AuditLogEntry[]
+      suppliers?: Record<string, unknown>[]
     }
   }
-  data: {
-    settings: AppSettings
-    movements: FixtureMovement[]
-    custody: CustodyItem[]
-    users: LocalUser[]
-    auditLogs: AuditLogEntry[]
-  }
-}
 
 export type BackupResult = {
   success: boolean
@@ -58,15 +60,7 @@ export function getStoredMovements(): FixtureMovement[] {
     if (raw) {
       const parsed = JSON.parse(raw) as unknown
       if (Array.isArray(parsed)) {
-        return (parsed as FixtureMovement[])
-          .filter((m) => (Number(m.qin) || 0) > 0)
-          .map((m) => ({
-            ...m,
-            to: '',
-            permit: '',
-            issue: '',
-            qout: '',
-          }))
+        return parsed as FixtureMovement[]
       }
     }
   } catch {
@@ -121,6 +115,17 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
   const auditLogs = getLocalAuditLogs()
   const timestamp = new Date().toISOString()
 
+  let suppliers: Record<string, unknown>[] = []
+  try {
+    const rawSuppliers = localStorage.getItem('warehouse_custom_suppliers')
+    if (rawSuppliers) {
+      const parsed = JSON.parse(rawSuppliers)
+      if (Array.isArray(parsed)) suppliers = parsed
+    }
+  } catch {
+    // ignore
+  }
+
   const payload: SystemBackupPayload = {
     app: 'warehouse-ledger',
     version: '1.0.0',
@@ -139,6 +144,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
         custody: custody.length,
         users: users.length,
         auditLogs: auditLogs.length,
+        suppliers: suppliers.length,
       },
     },
     data: {
@@ -147,6 +153,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
       custody,
       users,
       auditLogs,
+      suppliers,
     },
   }
 
@@ -325,6 +332,7 @@ export function validateBackupPayload(jsonString: string): {
           custody: Array.isArray(candidate.data.custody) ? candidate.data.custody.length : 0,
           users: Array.isArray(candidate.data.users) ? candidate.data.users.length : 0,
           auditLogs: Array.isArray(candidate.data.auditLogs) ? candidate.data.auditLogs.length : 0,
+          suppliers: Array.isArray(candidate.data.suppliers) ? candidate.data.suppliers.length : 0,
         },
       },
       data: {
@@ -333,6 +341,7 @@ export function validateBackupPayload(jsonString: string): {
         custody: Array.isArray(candidate.data.custody) ? candidate.data.custody : [],
         users: Array.isArray(candidate.data.users) ? candidate.data.users : [],
         auditLogs: Array.isArray(candidate.data.auditLogs) ? candidate.data.auditLogs : [],
+        suppliers: Array.isArray(candidate.data.suppliers) ? candidate.data.suppliers : [],
       },
     }
 
@@ -402,14 +411,35 @@ export async function restoreLocalBackup(
     usersCount = payload.data.users.length
   }
 
+  // 5. Custom Suppliers restoration
+  if (Array.isArray(payload.data.suppliers) && payload.data.suppliers.length > 0) {
+    try {
+      localStorage.setItem('warehouse_custom_suppliers', JSON.stringify(payload.data.suppliers))
+    } catch (err) {
+      console.warn('Error syncing suppliers during restore:', err)
+    }
+  }
+
+  // 6. Audit logs restoration
+  if (Array.isArray(payload.data.auditLogs) && payload.data.auditLogs.length > 0) {
+    try {
+      localStorage.setItem('warehouse-ledger-audit-logs', JSON.stringify(payload.data.auditLogs))
+    } catch (err) {
+      console.warn('Error syncing audit logs during restore:', err)
+    }
+  }
+
   const timestamp = new Date().toISOString()
 
-  // Dispatch global events so active UI views react
+  // Dispatch global events so active UI views react immediately
   try {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('local-users-changed'))
       window.dispatchEvent(new CustomEvent('warehouse-ledger-updated'))
+      window.dispatchEvent(new CustomEvent('custody-changed'))
       window.dispatchEvent(new CustomEvent('custody-items-changed'))
+      window.dispatchEvent(new CustomEvent('settings-changed'))
+      window.dispatchEvent(new CustomEvent('suppliers-changed'))
     }
   } catch {
     // ignore
@@ -501,7 +531,10 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('local-users-changed'))
       window.dispatchEvent(new CustomEvent('warehouse-ledger-updated'))
+      window.dispatchEvent(new CustomEvent('custody-changed'))
       window.dispatchEvent(new CustomEvent('custody-items-changed'))
+      window.dispatchEvent(new CustomEvent('settings-changed'))
+      window.dispatchEvent(new CustomEvent('suppliers-changed'))
     }
   } catch {
     // ignore

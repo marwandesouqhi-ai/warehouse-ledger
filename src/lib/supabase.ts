@@ -58,8 +58,16 @@ export function getUserRole(sessionOrUser: Session | User | null | undefined): A
     const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
     const role = (appMeta.role || 'viewer') as string
 
-    if (role === 'admin') return 'admin'
-    if (role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff') return 'editor'
+    if (role === 'admin' || role === 'warehouse_admin' || role === 'procurement_admin') return 'admin'
+    if (
+        role === 'editor' ||
+        role === 'warehouse_staff' ||
+        role === 'purchasing_staff' ||
+        role === 'warehouse_employee' ||
+        role === 'procurement_employee'
+    ) {
+        return 'editor'
+    }
     return 'viewer'
 }
 
@@ -71,6 +79,15 @@ export function canEditInventory(sessionOrUser: Session | User | null | undefine
 
     const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
     const role = (appMeta.role || '') as string
-    return role === 'admin' || role === 'editor' || role === 'warehouse_staff' || role === 'purchasing_staff'
+    return [
+        'admin',
+        'editor',
+        'warehouse_admin',
+        'warehouse_employee',
+        'procurement_admin',
+        'procurement_employee',
+        'warehouse_staff',
+        'purchasing_staff',
+    ].includes(role)
 }
 

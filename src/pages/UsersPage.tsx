@@ -66,8 +66,16 @@ import {
     fetchIdentityConsistencyReport,
     type IdentityConsistencyReport,
 } from '../lib/registrationService'
-import type { RegistrationRequest } from '../lib/employeeIdentity'
-import { formatEmployeeId } from '../lib/employeeIdentity'
+import { formatEmployeeId, type RegistrationRequest } from '../lib/employeeIdentity'
+
+const DEPT_DISPLAY_NAMES: Record<string, string> = {
+    warehouse: 'المخازن',
+    'المخازن': 'المخازن',
+    procurement: 'المشتريات',
+    'المشتريات': 'المشتريات',
+    admin: 'الإدارة العامة',
+    'الإدارة العامة': 'الإدارة العامة',
+}
 
 type UsersPageProps = {
     session?: Session | null
@@ -89,8 +97,9 @@ export default function UsersPage({ session }: UsersPageProps) {
     const isCallerProtected = isProtectedUsername(activeUserEmail) || isProtectedUsername(session?.user?.email)
 
     const activeUserRole = ((session?.user?.app_metadata as any)?.role as string) || ((localSess?.user?.app_metadata as any)?.role as string) || ''
-    const isDepartmentAdmin = activeUserRole === 'admin'
-    const userDepartment = ((session?.user?.app_metadata as any)?.department as string) || ((localSess?.user?.app_metadata as any)?.department as string) || ''
+    const isDepartmentAdmin = activeUserRole === 'admin' || activeUserRole === 'warehouse_admin' || activeUserRole === 'procurement_admin'
+    const rawDept = ((session?.user?.app_metadata as any)?.department as string) || ((localSess?.user?.app_metadata as any)?.department as string) || ''
+    const userDepartment = rawDept || (activeUserRole === 'warehouse_admin' ? 'المخازن' : activeUserRole === 'procurement_admin' ? 'المشتريات' : '')
 
     // Navigation Tab & Filter States
     const [mainTab, setMainTab] = useState<'employees' | 'add_employee' | 'requests' | 'security'>('employees')
@@ -121,14 +130,19 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [userSearchTerm, setUserSearchTerm] = useState('')
 
     // Layer 1: Hide protected System Admin marwan-desouky from all other callers
+    // Layer 2: Filter by department for department admins
     const visibleLocalUsers = useMemo(() => {
         return localUsers.filter((u) => {
             if (isProtectedUsername(u.username)) {
                 return isCallerProtected
             }
+            if (!isSystemAdmin && isDepartmentAdmin && userDepartment) {
+                const uDept = u.department || (u.role.startsWith('procurement') ? 'المشتريات' : 'المخازن')
+                if (uDept !== userDepartment) return false
+            }
             return true
         })
-    }, [localUsers, isCallerProtected])
+    }, [localUsers, isCallerProtected, isSystemAdmin, isDepartmentAdmin, userDepartment])
 
     // Add User Form State
     const [newUsername, setNewUsername] = useState('')
@@ -150,6 +164,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [editingUser, setEditingUser] = useState<LocalUser | null>(null)
     const [editDisplayName, setEditDisplayName] = useState('')
     const [editRole, setEditRole] = useState<UserRole>('editor')
+    const [editDepartment, setEditDepartment] = useState<'المخازن' | 'المشتريات' | 'الإدارة العامة'>('المخازن')
     const [editPermissions, setEditPermissions] = useState<string[]>([])
     const [editPassword, setEditPassword] = useState('')
     const [showEditPassword, setShowEditPassword] = useState(false)
@@ -272,6 +287,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                             displayName: newDisplayName,
                             password: newPassword,
                             role: newRole,
+                            department: newDepartment,
+                            email: newEmail || undefined,
                             permissions: newPermissions,
                             requirePasswordChange: newRequirePasswordChange,
                         },
@@ -290,6 +307,8 @@ export default function UsersPage({ session }: UsersPageProps) {
                 displayName: newDisplayName,
                 password: newPassword,
                 role: newRole,
+                department: newDepartment,
+                email: newEmail || undefined,
                 activationCode: newActivationCode,
                 requireActivation: false,
                 notes: newNotes,
@@ -324,6 +343,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setEditingUser(user)
         setEditDisplayName(user.displayName)
         setEditRole(user.role)
+        setEditDepartment((user.department as any) || (user.role.startsWith('procurement') ? 'المشتريات' : 'المخازن'))
         setEditPermissions(user.permissions || [])
         setEditPassword('')
         setEditActivationCode(user.activationCode)
@@ -379,6 +399,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             username: editingUser.username,
                             displayName: editDisplayName,
                             role: editRole,
+                            department: editDepartment,
                             permissions: editPermissions,
                         },
                     })
@@ -390,6 +411,7 @@ export default function UsersPage({ session }: UsersPageProps) {
             updateLocalUser(editingUser.id, {
                 displayName: editDisplayName,
                 role: editRole,
+                department: editDepartment,
                 permissions: editPermissions,
                 activationCode: editActivationCode.trim(),
                 status: editStatus,
@@ -1158,56 +1180,56 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </h3>
                             <span className="users-section-subtitle">قائمة الحسابات، الأقسام، أكواد الموظفين الفريدة (Unique ID)، وحالة التفعيل</span>
                         </div>
+                    </div>
 
-                        {/* Search & Actions */}
-                        <div className="users-filter-row">
-                            <div className="users-filter-group">
-                                <select
-                                    value={deptFilter}
-                                    onChange={(e) => setDeptFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب القسم"
-                                >
-                                    <option value="all">كل الأقسام</option>
-                                    <option value="المخازن">المخازن</option>
-                                    <option value="المشتريات">المشتريات</option>
-                                    <option value="الإدارة العامة">الإدارة العامة</option>
-                                </select>
+                    {/* Search & Actions Toolbar */}
+                    <div className="users-filter-row">
+                        <div className="users-filter-group">
+                            <select
+                                value={deptFilter}
+                                onChange={(e) => setDeptFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب القسم"
+                            >
+                                <option value="all">كل الأقسام</option>
+                                <option value="المخازن">المخازن</option>
+                                <option value="المشتريات">المشتريات</option>
+                                <option value="الإدارة العامة">الإدارة العامة</option>
+                            </select>
 
-                                <select
-                                    value={roleFilter}
-                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب الصلاحية"
-                                >
-                                    <option value="all">كل الصلاحيات</option>
-                                    {ASSIGNABLE_ROLES.map((r) => (
-                                        <option key={r.value} value={r.value}>{r.label}</option>
-                                    ))}
-                                </select>
+                            <select
+                                value={roleFilter}
+                                onChange={(e) => setRoleFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب الصلاحية"
+                            >
+                                <option value="all">كل الصلاحيات</option>
+                                {ASSIGNABLE_ROLES.map((r) => (
+                                    <option key={r.value} value={r.value}>{r.label}</option>
+                                ))}
+                            </select>
 
-                                <select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب حالة الحساب"
-                                >
-                                    <option value="all">كل الحالات</option>
-                                    <option value="active">نشط ومفعل</option>
-                                    <option value="pending_activation">معلق / بانتظار التفعيل</option>
-                                    <option value="suspended">موقوف مؤقتاً</option>
-                                </select>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب حالة الحساب"
+                            >
+                                <option value="all">كل الحالات</option>
+                                <option value="active">نشط ومفعل</option>
+                                <option value="pending_activation">معلق / بانتظار التفعيل</option>
+                                <option value="suspended">موقوف مؤقتاً</option>
+                            </select>
 
-                                <div className="toolbar-search">
-                                    <input
-                                        type="search"
-                                        placeholder="بحث بالاسم، الكود، المعرف..."
-                                        value={userSearchTerm}
-                                        onChange={(e) => setUserSearchTerm(e.target.value)}
-                                        aria-label="بحث في دليل الموظفين"
-                                    />
-                                    <Search size={15} />
-                                </div>
+                            <div className="toolbar-search">
+                                <input
+                                    type="search"
+                                    placeholder="بحث بالاسم، الكود، المعرف..."
+                                    value={userSearchTerm}
+                                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                                    aria-label="بحث في دليل الموظفين"
+                                />
+                                <Search size={15} />
                             </div>
                         </div>
                     </div>
@@ -1404,70 +1426,70 @@ export default function UsersPage({ session }: UsersPageProps) {
                             </h3>
                             <span className="users-section-subtitle">مراجعة بيانات الموظفين المتقدمين، التحقق من البريد الإلكتروني، والاعتماد وتخصيص كود فريد</span>
                         </div>
+                    </div>
 
-                        <div className="users-filter-row">
-                            <div className="users-filter-group">
-                                <select
-                                    value={requestStatusFilter}
-                                    onChange={(e) => setRequestStatusFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب حالة الطلب"
-                                >
-                                    <option value="all">كل الحالات ({registrationRequests.length})</option>
-                                    <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
-                                    <option value="approved">المعتمدة</option>
-                                    <option value="rejected">المرفوضة</option>
-                                    <option value="cancelled">الملغاة</option>
-                                </select>
+                    <div className="users-filter-row">
+                        <div className="users-filter-group">
+                            <select
+                                value={requestStatusFilter}
+                                onChange={(e) => setRequestStatusFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب حالة الطلب"
+                            >
+                                <option value="all">كل الحالات ({registrationRequests.length})</option>
+                                <option value="pending_approval">بانتظار الاعتماد ({pendingRequestsCount})</option>
+                                <option value="approved">المعتمدة</option>
+                                <option value="rejected">المرفوضة</option>
+                                <option value="cancelled">الملغاة</option>
+                            </select>
 
-                                <select
-                                    value={requestDeptFilter}
-                                    onChange={(e) => setRequestDeptFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب القسم"
-                                >
-                                    <option value="all">كل الأقسام</option>
-                                    <option value="المخازن">المخازن</option>
-                                    <option value="المشتريات">المشتريات</option>
-                                </select>
+                            <select
+                                value={requestDeptFilter}
+                                onChange={(e) => setRequestDeptFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب القسم"
+                            >
+                                <option value="all">كل الأقسام</option>
+                                <option value="المخازن">المخازن</option>
+                                <option value="المشتريات">المشتريات</option>
+                            </select>
 
-                                <select
-                                    value={requestRoleFilter}
-                                    onChange={(e) => setRequestRoleFilter(e.target.value)}
-                                    className="user-field-input users-filter-select"
-                                    aria-label="تصفية حسب الدور المطلوب"
-                                >
-                                    <option value="all">كل الأدوار المطلوبة</option>
-                                    <option value="warehouse_employee">موظف مخازن</option>
-                                    <option value="warehouse_admin">مدير مخازن</option>
-                                    <option value="procurement_employee">موظف مشتريات</option>
-                                    <option value="procurement_admin">مدير مشتريات</option>
-                                </select>
+                            <select
+                                value={requestRoleFilter}
+                                onChange={(e) => setRequestRoleFilter(e.target.value)}
+                                className="user-field-input users-filter-select"
+                                aria-label="تصفية حسب الدور المطلوب"
+                            >
+                                <option value="all">كل الأدوار المطلوبة</option>
+                                <option value="warehouse_employee">موظف مخازن</option>
+                                <option value="warehouse_admin">مدير مخازن</option>
+                                <option value="procurement_employee">موظف مشتريات</option>
+                                <option value="procurement_admin">مدير مشتريات</option>
+                            </select>
 
+                            <button
+                                type="button"
+                                className="secondary-btn users-action-btn"
+                                onClick={() => void loadRequests()}
+                                disabled={requestsLoading}
+                                aria-label="تحديث قائمة الطلبات"
+                            >
+                                <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
+                                تحديث
+                            </button>
+
+                            {isSystemAdmin && (
                                 <button
                                     type="button"
                                     className="secondary-btn users-action-btn"
-                                    onClick={() => void loadRequests()}
-                                    disabled={requestsLoading}
-                                    aria-label="تحديث قائمة الطلبات"
+                                    onClick={() => void handleOpenConsistencyReport()}
+                                    title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
+                                    aria-label="تقرير مطابقة وتكامل الهويات الوظيفية"
                                 >
-                                    <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
-                                    تحديث
+                                    <ShieldCheck size={14} color="var(--accent)" />
+                                    تقرير تكامل الهويات
                                 </button>
-
-                                {isSystemAdmin && (
-                                    <button
-                                        type="button"
-                                        className="secondary-btn users-action-btn"
-                                        onClick={() => void handleOpenConsistencyReport()}
-                                        title="فحص تشخيصي للقراءة فقط لتكامل حسابات الموظفين والهويات"
-                                        aria-label="تقرير مطابقة وتكامل الهويات الوظيفية"
-                                    >
-                                        <ShieldCheck size={14} color="var(--accent)" />
-                                        تقرير تكامل الهويات
-                                    </button>
-                                )}
-                            </div>
+                            )}
                         </div>
                     </div>
 
@@ -1506,135 +1528,139 @@ export default function UsersPage({ session }: UsersPageProps) {
                         <table className="custody-table">
                             <thead>
                                 <tr>
-                                    <th>م</th>
-                                    <th>معرف الطلب (ID)</th>
-                                    <th>اسم المتقدم</th>
-                                    <th>البريد الإلكتروني</th>
-                                    <th>التحقق (OTP)</th>
-                                    <th>القسم المطلوب</th>
-                                    <th>الدور المطلوب / المعتمد</th>
+                                    <th style={{ width: '40px' }}>م</th>
+                                    <th>بيانات المتقدم والاتصال</th>
+                                    <th>القسم والدور الوظيفي</th>
+                                    <th>حالة الطلب والاعتماد</th>
                                     <th>مسار التفعيل</th>
-                                    <th>حالة الدعوة</th>
-                                    <th>تيليجرام ID</th>
-                                    <th>تاريخ التقديم</th>
-                                    <th>حالة الطلب</th>
                                     <th className="actions-header">الإجراءات والقرار</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredRequests.length === 0 ? (
                                     <tr>
-                                        <td colSpan={13} className="empty-message-cell">
+                                        <td colSpan={6} className="empty-message-cell">
                                             {requestsLoading ? 'جارٍ تحميل طلبات التسجيل...' : 'لا توجد طلبات تسجيل مطابقة لهذا الفلتر حالياً.'}
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredRequests.map((req, idx) => (
                                         <tr key={req.id}>
-                                            <td className="tabular-nums text-muted">{idx + 1}</td>
-                                            <td className="font-mono text-muted text-xs" title={req.id}>
-                                                {req.id.slice(0, 8)}...
-                                            </td>
+                                            <td className="tabular-nums text-muted" style={{ verticalAlign: 'top', paddingTop: '16px' }}>{idx + 1}</td>
+                                            
+                                            {/* 1. بيانات المتقدم والاتصال */}
                                             <td>
-                                                <strong className="user-fullname">{req.fullName}</strong>
-                                            </td>
-                                            <td className="user-email-text">
-                                                {req.email}
-                                            </td>
-                                            <td>
-                                                {req.verificationStatus === 'verified' ? (
-                                                    <span className="badge badge--ok">
-                                                        <CheckCircle2 size={12} /> تم التحقق
-                                                    </span>
-                                                ) : (
-                                                    <span className="badge badge--warn">
-                                                        <Clock size={12} /> بانتظار OTP
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <span className="users-dept-chip">
-                                                    {req.requestedDepartment}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div className="users-role-wrap">
-                                                    <span className="users-role-chip">
-                                                        {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
-                                                    </span>
-                                                    {req.approvedRole && req.approvedRole !== req.requestedRole && (
-                                                        <strong className="users-role-approved">
-                                                            ← {ROLE_LABELS[req.approvedRole as EffectiveRole] || req.approvedRole}
-                                                        </strong>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="users-progress-track" title="مسار حالة تفعيل الحساب">
-                                                    <span className="users-progress-step done">طلب</span>
-                                                    <span className="users-progress-arrow">←</span>
-                                                    <span className={`users-progress-step ${req.verificationStatus === 'verified' ? 'done' : 'current'}`}>
-                                                        تحقق
-                                                    </span>
-                                                    <span className="users-progress-arrow">←</span>
-                                                    <span className={`users-progress-step ${req.approvalStatus === 'approved' ? 'done' : req.verificationStatus === 'verified' ? 'current' : ''}`}>
-                                                        موافقة
-                                                    </span>
-                                                    <span className="users-progress-arrow">←</span>
-                                                    <span className={`users-progress-step ${(req.invitationStatus === 'sent' || req.invitationStatus === 'accepted') ? 'done' : req.approvalStatus === 'approved' ? 'current' : ''}`}>
-                                                        دعوة
-                                                    </span>
-                                                    <span className="users-progress-arrow">←</span>
-                                                    <span className={`users-progress-step ${req.invitationStatus === 'accepted' ? 'done' : req.invitationStatus === 'sent' ? 'current' : ''}`}>
-                                                        تفعيل
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                {req.invitationStatus === 'accepted' ? (
-                                                    <span className="badge badge--ok">
-                                                        <CheckCircle2 size={12} /> تم التفعيل
-                                                    </span>
-                                                ) : req.invitationStatus === 'sent' ? (
-                                                    <div className="users-invite-sent-wrap">
-                                                        <span className="badge badge--info">
-                                                            <Mail size={12} /> تم الإرسال
+                                                <div className="user-stack-cell">
+                                                    <strong className="user-fullname">{req.fullName}</strong>
+                                                    <span className="user-email-text">{req.email}</span>
+                                                    <div className="user-meta-sub">
+                                                        <span className="font-mono text-xs" title={`معرف الطلب: ${req.id}`}>
+                                                            ID: {req.id.slice(0, 8)}...
                                                         </span>
-                                                        {req.invitationSentAt && (
-                                                            <span className="tabular-nums text-muted text-xs">
-                                                                {new Date(req.invitationSentAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                                        {req.telegramUserId && (
+                                                            <span className="user-tg-id-pill" title="معرف حساب تيليجرام">
+                                                                TG: {req.telegramUserId}
                                                             </span>
                                                         )}
                                                     </div>
-                                                ) : req.invitationStatus === 'failed' ? (
-                                                    <span className="badge badge--bad">
-                                                        <ShieldAlert size={12} /> فشل الإرسال
-                                                    </span>
-                                                ) : req.invitationStatus === 'cancelled' ? (
-                                                    <span className="badge badge--muted">
-                                                        دعوة ملغاة
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-muted text-xs">
-                                                        {req.approvalStatus === 'approved' ? 'بانتظار الإرسال' : '—'}
-                                                    </span>
-                                                )}
+                                                </div>
                                             </td>
-                                            <td className="font-mono text-muted text-xs">
-                                                {req.telegramUserId || '—'}
-                                            </td>
-                                            <td className="tabular-nums text-muted text-xs">
-                                                {new Date(req.createdAt).toLocaleDateString('ar-EG')}
-                                            </td>
+
+                                            {/* 2. القسم والدور الوظيفي */}
                                             <td>
-                                                <span className={`badge ${req.approvalStatus === 'approved' ? 'badge--ok' : req.approvalStatus === 'rejected' ? 'badge--bad' : 'badge--info'}`}>
-                                                    {req.approvalStatus === 'approved'
-                                                        ? 'معتمد'
-                                                        : req.approvalStatus === 'rejected'
-                                                            ? 'مرفوض'
-                                                            : 'بانتظار الاعتماد'}
-                                                </span>
+                                                <div className="user-stack-cell">
+                                                    <div>
+                                                        <span className="users-dept-chip">
+                                                            {DEPT_DISPLAY_NAMES[req.requestedDepartment] || req.requestedDepartment}
+                                                        </span>
+                                                    </div>
+                                                    <div className="users-role-wrap">
+                                                        <span className="users-role-chip">
+                                                            {ROLE_LABELS[req.requestedRole as EffectiveRole] || req.requestedRole}
+                                                        </span>
+                                                        {req.approvedRole && req.approvedRole !== req.requestedRole && (
+                                                            <strong className="users-role-approved">
+                                                                ← {ROLE_LABELS[req.approvedRole as EffectiveRole] || req.approvedRole}
+                                                            </strong>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </td>
+
+                                            {/* 3. حالة الطلب والاعتماد وتاريخ التقديم */}
+                                            <td>
+                                                <div className="user-stack-cell">
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                        <span className={`badge ${req.approvalStatus === 'approved' ? 'badge--ok' : req.approvalStatus === 'rejected' ? 'badge--bad' : 'badge--info'}`}>
+                                                            {req.approvalStatus === 'approved'
+                                                                ? 'معتمد'
+                                                                : req.approvalStatus === 'rejected'
+                                                                    ? 'مرفوض'
+                                                                    : 'بانتظار الاعتماد'}
+                                                        </span>
+                                                        {req.verificationStatus === 'verified' ? (
+                                                            <span className="badge badge--ok" title="تم التحقق من البريد بنجاح">
+                                                                <CheckCircle2 size={11} /> تحقق البريد
+                                                            </span>
+                                                        ) : (
+                                                            <span className="badge badge--warn" title="بانتظار رمز OTP">
+                                                                <Clock size={11} /> بانتظار OTP
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="user-invite-info-row">
+                                                        {req.invitationStatus === 'accepted' ? (
+                                                            <span className="badge badge--ok">
+                                                                <CheckCircle2 size={11} /> تم التفعيل والدخول
+                                                            </span>
+                                                        ) : req.invitationStatus === 'sent' ? (
+                                                            <span className="badge badge--info" title={req.invitationSentAt ? `تاريخ الإرسال: ${new Date(req.invitationSentAt).toLocaleString('ar-EG')}` : ''}>
+                                                                <Mail size={11} /> أُرسلت الدعوة {req.invitationSentAt ? new Date(req.invitationSentAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                            </span>
+                                                        ) : req.invitationStatus === 'failed' ? (
+                                                            <span className="badge badge--bad">
+                                                                <ShieldAlert size={11} /> فشل الإرسال
+                                                            </span>
+                                                        ) : req.invitationStatus === 'cancelled' ? (
+                                                            <span className="badge badge--muted">دعوة ملغاة</span>
+                                                        ) : (
+                                                            <span className="text-muted text-xs">
+                                                                {req.approvalStatus === 'approved' ? 'بانتظار إرسال الرابط' : '—'}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-muted text-xs tabular-nums" style={{ marginInlineStart: '4px' }}>
+                                                            بتاريخ: {new Date(req.createdAt).toLocaleDateString('ar-EG')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* 4. مسار التفعيل */}
+                                            <td>
+                                                <div className="user-stack-cell">
+                                                    <div className="users-progress-track" title="مسار حالة تفعيل الحساب">
+                                                        <span className="users-progress-step done">طلب</span>
+                                                        <span className="users-progress-arrow">←</span>
+                                                        <span className={`users-progress-step ${req.verificationStatus === 'verified' ? 'done' : 'current'}`}>
+                                                            تحقق
+                                                        </span>
+                                                        <span className="users-progress-arrow">←</span>
+                                                        <span className={`users-progress-step ${req.approvalStatus === 'approved' ? 'done' : req.verificationStatus === 'verified' ? 'current' : ''}`}>
+                                                            موافقة
+                                                        </span>
+                                                        <span className="users-progress-arrow">←</span>
+                                                        <span className={`users-progress-step ${(req.invitationStatus === 'sent' || req.invitationStatus === 'accepted') ? 'done' : req.approvalStatus === 'approved' ? 'current' : ''}`}>
+                                                            دعوة
+                                                        </span>
+                                                        <span className="users-progress-arrow">←</span>
+                                                        <span className={`users-progress-step ${req.invitationStatus === 'accepted' ? 'done' : req.invitationStatus === 'sent' ? 'current' : ''}`}>
+                                                            تفعيل
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
                                             <td className="actions-cell">
                                                 {req.approvalStatus === 'pending' || req.approvalStatus === 'pending_approval' || !req.approvalStatus ? (
                                                     <div className="users-action-btn-group">
@@ -1849,6 +1875,19 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         {ASSIGNABLE_ROLES.map((r) => (
                                             <option key={r.value} value={r.value}>{r.label}</option>
                                         ))}
+                                    </select>
+                                </label>
+
+                                <label className="form-label-block">
+                                    القسم التابع له
+                                    <select
+                                        value={editDepartment}
+                                        onChange={(e) => setEditDepartment(e.target.value as any)}
+                                        className="form-input-themed"
+                                    >
+                                        <option value="المخازن">المخازن (Warehouse)</option>
+                                        <option value="المشتريات">المشتريات (Procurement)</option>
+                                        <option value="الإدارة العامة">الإدارة العامة (General Admin)</option>
                                     </select>
                                 </label>
 

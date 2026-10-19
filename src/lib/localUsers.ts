@@ -388,6 +388,9 @@ export function addLocalUser(data: {
   displayName?: string
   password: string
   role: UserRole
+  department?: string
+  employeeId?: string
+  email?: string
   activationCode?: string
   requireActivation?: boolean
   notes?: string
@@ -420,6 +423,12 @@ export function addLocalUser(data: {
     throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
   }
 
+  const defaultDept = data.department || (
+    data.role.startsWith('procurement') ? 'المشتريات' :
+    data.role.startsWith('warehouse') ? 'المخازن' :
+    'المخازن'
+  )
+
   const activationCode = data.activationCode?.trim() || generateActivationPin()
   const newUser: LocalUser = {
     id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -427,6 +436,9 @@ export function addLocalUser(data: {
     displayName: data.displayName?.trim() || cleanUsername,
     password: data.password,
     role: data.role,
+    department: defaultDept,
+    employeeId: data.employeeId,
+    email: data.email,
     activationCode,
     status: data.requireActivation ? 'pending_activation' : 'active',
     createdAt: new Date().toISOString(),

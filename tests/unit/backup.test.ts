@@ -171,5 +171,75 @@ describe('System Backup Suite', () => {
     expect(storedMovements.length).toBe(1)
     expect(storedMovements[0].item).toBe('كابلات شبكة')
   })
+
+  it('preserves outward movements with qout, to, permit, and restores custom suppliers', async () => {
+    // 1. Seed movements with both inward and outward (disbursement) records
+    const testMovements = [
+      { id: 'm-in', item: 'طابعة ليزر', qin: '5', price: '2000', from: 'شركة النيل' },
+      { id: 'm-out', item: 'طابعة ليزر', qout: '2', to: 'كلية حاسبات', permit: 'DSP-2026-001', issue: '2026-10-15' },
+    ]
+    localStorage.setItem('warehouse-ledger-movements', JSON.stringify(testMovements))
+
+    const testSuppliers = [
+      { id: 'sup-1', name: 'شركة الأهرام للتوريدات', name_key: 'الأهرام', status: 'active' },
+    ]
+    localStorage.setItem('warehouse_custom_suppliers', JSON.stringify(testSuppliers))
+
+    const createObjectUrlMock = vi.fn().mockReturnValue('blob:mock-url')
+    globalThis.URL.createObjectURL = createObjectUrlMock
+    globalThis.URL.revokeObjectURL = vi.fn()
+
+    const backupResult = await exportLocalBackup(adminSession)
+    expect(backupResult.success).toBe(true)
+    expect(backupResult.counts.movements).toBe(2)
+
+    // Clear localStorage to simulate restore on a new browser/machine
+    localStorage.clear()
+
+    const payload = {
+      app: 'warehouse-ledger' as const,
+      version: '1.0.0' as const,
+      backupDate: new Date().toISOString(),
+      generator: { role: 'admin' },
+      metadata: { organization: 'ZNU', department: 'المخازن', currency: 'EGP', counts: { movements: 2, custody: 0, users: 0, auditLogs: 0, suppliers: 1 } },
+      data: {
+        settings: { organization: 'ZNU', department: 'المخازن', currency: 'EGP' as const },
+        movements: testMovements as any,
+        custody: [],
+        users: [],
+        auditLogs: [],
+        suppliers: testSuppliers as any,
+      },
+    }
+
+    const eventsFired: string[] = []
+    const trackEvent = (e: Event) => eventsFired.push(e.type)
+    window.addEventListener('warehouse-ledger-updated', trackEvent)
+    window.addEventListener('custody-changed', trackEvent)
+    window.addEventListener('suppliers-changed', trackEvent)
+
+    const restoreResult = await restoreLocalBackup(payload, adminSession)
+    expect(restoreResult.success).toBe(true)
+    expect(restoreResult.counts.movements).toBe(2)
+
+    // Check restored movements in storage
+    const restoredMovements = JSON.parse(localStorage.getItem('warehouse-ledger-movements') || '[]')
+    expect(restoredMovements.length).toBe(2)
+    const outMv = restoredMovements.find((m: any) => m.id === 'm-out')
+    expect(outMv).toBeTruthy()
+    expect(outMv.qout).toBe('2')
+    expect(outMv.to).toBe('كلية حاسبات')
+    expect(outMv.permit).toBe('DSP-2026-001')
+
+    // Check restored suppliers in storage
+    const restoredSuppliers = JSON.parse(localStorage.getItem('warehouse_custom_suppliers') || '[]')
+    expect(restoredSuppliers.length).toBe(1)
+    expect(restoredSuppliers[0].name).toBe('شركة الأهرام للتوريدات')
+
+    // Verify UI synchronization events were fired
+    expect(eventsFired).toContain('warehouse-ledger-updated')
+    expect(eventsFired).toContain('custody-changed')
+    expect(eventsFired).toContain('suppliers-changed')
+  })
 })
 
