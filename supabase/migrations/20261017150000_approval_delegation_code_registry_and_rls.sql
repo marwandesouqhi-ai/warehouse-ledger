@@ -471,6 +471,8 @@ CREATE POLICY "Admins can view registration requests"
   );
 
 -- Safe administrative view that excludes OTP secret tokens and counters
+DROP VIEW IF EXISTS public.registration_requests_admin_view CASCADE;
+
 CREATE OR REPLACE VIEW public.registration_requests_admin_view
 WITH (security_invoker = true)
 AS

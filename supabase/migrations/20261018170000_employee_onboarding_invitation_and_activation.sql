@@ -27,6 +27,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_auth_user_id
   WHERE auth_user_id IS NOT NULL;
 
 -- 3. Update registration_requests_admin_view to include invitation tracking fields
+DROP VIEW IF EXISTS public.registration_requests_admin_view CASCADE;
+
 CREATE OR REPLACE VIEW public.registration_requests_admin_view
 WITH (security_invoker = true)
 AS
@@ -318,6 +320,8 @@ GRANT EXECUTE ON FUNCTION public.approve_employee_registration(UUID, TEXT, UUID)
 
 -- 6. Atomic Finalize Activation Procedure
 -- Validates username, checks password existence, transitions status to active, and updates requests
+DROP FUNCTION IF EXISTS public.complete_employee_activation;
+
 CREATE OR REPLACE FUNCTION public.complete_employee_activation(
   p_auth_user_id UUID,
   p_chosen_username TEXT
