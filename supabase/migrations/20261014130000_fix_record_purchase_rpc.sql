@@ -5,6 +5,9 @@
 --              on custody_items, JWT identity enforcement, and race-safe ON CONFLICT.
 -- ==============================================================================
 
+DROP FUNCTION IF EXISTS public.record_purchase(TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.record_purchase;
+
 CREATE OR REPLACE FUNCTION public.record_purchase(
   p_fingerprint TEXT,
   p_item TEXT,

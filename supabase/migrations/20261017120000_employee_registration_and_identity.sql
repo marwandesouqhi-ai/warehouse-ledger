@@ -145,6 +145,8 @@ GRANT SELECT, INSERT, UPDATE ON public.registration_requests TO authenticated, s
 
 -- 4. Initial System Administrator Bootstrap Procedure
 -- Provisions marwan-desouky / marwandesouqhi@gmail.com with SYS-ADM-000001
+DROP FUNCTION IF EXISTS public.bootstrap_system_admin;
+
 CREATE OR REPLACE FUNCTION public.bootstrap_system_admin(
   p_email TEXT DEFAULT 'marwandesouqhi@gmail.com',
   p_username TEXT DEFAULT 'marwan-desouky',

@@ -117,6 +117,9 @@ $$;
 -- 5. Atomic RPC: record_purchase(...)
 -- Allows purchasing_staff to atomically record a purchase movement and increment main warehouse custody
 -- without needing direct write permission on custody_items table.
+DROP FUNCTION IF EXISTS public.record_purchase(TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.record_purchase;
+
 CREATE OR REPLACE FUNCTION public.record_purchase(
   p_fingerprint TEXT,
   p_item TEXT,
