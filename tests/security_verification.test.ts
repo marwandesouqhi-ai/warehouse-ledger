@@ -107,3 +107,152 @@ describe('Security & Authorization Hardening Audit', { timeout: 30000 }, () => {
     expect(error).toBeDefined()
   })
 })
+
+// ─── RLS Hardening Tests (P3) ─────────────────────────────────────────────────
+// These tests verify that the anon client (no session) cannot access sensitive
+// columns or perform mutations on protected tables.
+// NOTE: Some tests may show "data: []" (empty) instead of error when RLS is
+// enabled with restrictive SELECT policies — both outcomes are correct (no leak).
+describe('RLS Hardening — anon client cannot access sensitive data (P3)', { timeout: 30000 }, () => {
+  const anonClient = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
+
+  // ── app_users: password column must never be exposed to anon ──────────────
+  it('P3-1. anon cannot read password column from app_users', async () => {
+    const { data, error } = await anonClient
+      .from('app_users')
+      .select('password')
+      .limit(5)
+
+    // Either returns an error OR returns no data (RLS blocks the rows entirely)
+    const isBlocked = error !== null || (Array.isArray(data) && data.length === 0)
+    expect(isBlocked).toBe(true)
+  })
+
+  it('P3-2. anon cannot read activation_code column from app_users', async () => {
+    const { data, error } = await anonClient
+      .from('app_users')
+      .select('activation_code')
+      .limit(5)
+
+    const isBlocked = error !== null || (Array.isArray(data) && data.length === 0)
+    expect(isBlocked).toBe(true)
+  })
+
+  // ── app_users: anon cannot INSERT ─────────────────────────────────────────
+  it('P3-3. anon cannot INSERT into app_users', async () => {
+    const { error } = await anonClient
+      .from('app_users')
+      .insert({ username: 'anon-injected', role: 'system_admin', display_name: 'Injected' })
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── app_users: anon cannot UPDATE ─────────────────────────────────────────
+  it('P3-4. anon cannot UPDATE app_users', async () => {
+    const { error } = await anonClient
+      .from('app_users')
+      .update({ role: 'system_admin' })
+      .eq('username', 'any-user')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── app_users: anon cannot DELETE ─────────────────────────────────────────
+  it('P3-5. anon cannot DELETE from app_users', async () => {
+    const { error } = await anonClient
+      .from('app_users')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── movements: anon cannot INSERT ─────────────────────────────────────────
+  it('P3-6. anon cannot INSERT into movements', async () => {
+    const { error } = await anonClient
+      .from('movements')
+      .insert({ item: 'injected', qty_in: '100', kind: 'purchase' })
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── movements: anon cannot UPDATE ─────────────────────────────────────────
+  it('P3-7. anon cannot UPDATE movements', async () => {
+    const { error } = await anonClient
+      .from('movements')
+      .update({ item: 'tampered' })
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── movements: anon cannot DELETE ─────────────────────────────────────────
+  it('P3-8. anon cannot DELETE from movements', async () => {
+    const { error } = await anonClient
+      .from('movements')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── custody_items: anon cannot INSERT ────────────────────────────────────
+  it('P3-9. anon cannot INSERT into custody_items', async () => {
+    const { error } = await anonClient
+      .from('custody_items')
+      .insert({ name: 'injected-item', warehouseId: 'main', quantity: 999 })
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── custody_items: anon cannot UPDATE ────────────────────────────────────
+  it('P3-10. anon cannot UPDATE custody_items', async () => {
+    const { error } = await anonClient
+      .from('custody_items')
+      .update({ quantity: 0 })
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── custody_items: anon cannot DELETE ────────────────────────────────────
+  it('P3-11. anon cannot DELETE from custody_items', async () => {
+    const { error } = await anonClient
+      .from('custody_items')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  // ── app_settings: anon cannot UPDATE/modify ───────────────────────────────
+  it('P3-12. anon cannot UPDATE app_settings', async () => {
+    const { error } = await anonClient
+      .from('app_settings')
+      .update({ organization: 'Hacked Org' })
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+
+  it('P3-13. anon cannot DELETE from app_settings', async () => {
+    const { error } = await anonClient
+      .from('app_settings')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    expect(error).toBeDefined()
+    expect(error).not.toBeNull()
+  })
+})
+
