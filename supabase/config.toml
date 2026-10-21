@@ -1,0 +1,35 @@
+[project]
+project_id = "agfvwyycgqhzjbywyzqi"
+
+# ─── Edge Function JWT verification settings ──────────────────────────────────
+# SECURITY: All sensitive admin functions MUST have verify_jwt = true.
+# Exceptions must be explicitly listed below with a documented reason.
+
+[functions.admin-users]
+verify_jwt = true
+
+[functions.invite-user]
+verify_jwt = true
+
+[functions.migrate-users]
+verify_jwt = true
+
+[functions.complete-activation]
+verify_jwt = true
+
+# ── Intentional exceptions (with documented reason) ──────────────────────────
+
+# login-bridge: Called before auth session exists (user is logging in).
+# Identity is verified internally by looking up username+password in app_users.
+[functions.login-bridge]
+verify_jwt = false
+
+# telegram-bot: Called by Telegram webhook server (no Supabase JWT).
+# Identity verified via TELEGRAM_WEBHOOK_SECRET HMAC signature check.
+[functions.telegram-bot]
+verify_jwt = false
+
+# verify-email: Called by unauthenticated users clicking an email link.
+# Token is validated internally against a time-limited one-time code.
+[functions.verify-email]
+verify_jwt = false
