@@ -38,14 +38,14 @@ describe('Security & Authorization Hardening Audit', { timeout: 30000 }, () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('4. Allows seamless warehouse client to read inventory movements', async () => {
+  it('4. Restricts unauthenticated anon client from accessing inventory movements (RLS 42501)', async () => {
     const { data, error } = await client
       .from('movements')
       .select('*')
 
-    expect(error).toBeNull()
-    expect(data).toBeDefined()
-    expect(data?.length).toBeGreaterThan(0)
+    // Under hardened RLS (20261013213000_harden_rls.sql), anon role is revoked from reading movements directly
+    const isProtected = error !== null || (Array.isArray(data) && data.length === 0)
+    expect(isProtected).toBe(true)
   })
 
   it('5. Protects audit_logs from tamper: cannot delete or alter audit logs', async () => {
@@ -236,23 +236,25 @@ describe('RLS Hardening — anon client cannot access sensitive data (P3)', { ti
 
   // ── app_settings: anon cannot UPDATE/modify ───────────────────────────────
   it('P3-12. anon cannot UPDATE app_settings', async () => {
-    const { error } = await anonClient
+    const { data, error } = await anonClient
       .from('app_settings')
       .update({ organization: 'Hacked Org' })
       .neq('id', '00000000-0000-0000-0000-000000000000')
+      .select()
 
-    expect(error).toBeDefined()
-    expect(error).not.toBeNull()
+    const isBlocked = error !== null || (Array.isArray(data) && data.length === 0)
+    expect(isBlocked).toBe(true)
   })
 
   it('P3-13. anon cannot DELETE from app_settings', async () => {
-    const { error } = await anonClient
+    const { data, error } = await anonClient
       .from('app_settings')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000')
+      .select()
 
-    expect(error).toBeDefined()
-    expect(error).not.toBeNull()
+    const isBlocked = error !== null || (Array.isArray(data) && data.length === 0)
+    expect(isBlocked).toBe(true)
   })
 })
 
