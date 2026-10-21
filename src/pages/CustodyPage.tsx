@@ -1627,8 +1627,9 @@ export default function CustodyPage({
       {isPermitModalOpen && (
         <OfficialDisbursementPermitModal
           initialItems={permitInitialItems}
-          allWarehouseItems={activeWarehouseItems}
+          allWarehouseItems={items}
           settings={settings}
+          defaultWarehouseId={activeWarehouseId}
           onClose={() => setIsPermitModalOpen(false)}
         />
       )}
@@ -1645,6 +1646,11 @@ export default function CustodyPage({
 
       {/* 10. Official Printed Document Template (A4 Portrait - Certified Inventory Sheet) */}
       <div className="official-custody-print-document" aria-hidden="true">
+        {(settings.logoDataUrl || settings.logoUrl) && (
+          <div className="print-watermark" aria-hidden="true">
+            <img src={settings.logoDataUrl || settings.logoUrl} alt="" />
+          </div>
+        )}
         {/* Formal Institutional Letterhead */}
         <header className="print-letterhead">
           <div className="print-header-col print-header-right">
@@ -1666,7 +1672,9 @@ export default function CustodyPage({
                   if (parent && !parent.querySelector('.print-logo-fallback')) {
                     const fallback = document.createElement('div');
                     fallback.className = 'print-logo-emblem print-logo-fallback';
-                    fallback.innerHTML = '<span>' + (settings.organization || 'شعار المؤسسة') + '</span>';
+                    const span = document.createElement('span');
+                    span.textContent = settings.organization || 'شعار المؤسسة';
+                    fallback.appendChild(span);
                     parent.appendChild(fallback);
                   }
                 }}
@@ -1837,7 +1845,7 @@ export default function CustodyPage({
         {/* Print Document Footer */}
         <footer className="print-document-footer">
           <span>طُبع هذا المحضر آلياً عبر منظومة إدارة المخازن والعهدة — مستند رسمي صالح للتدقيق المالي والمخزني</span>
-          <span>صفحة 1 من 1</span>
+          <span>مستند رسمي معتمد</span>
         </footer>
       </div>
     </section>
