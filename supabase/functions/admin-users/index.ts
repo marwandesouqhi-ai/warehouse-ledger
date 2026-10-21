@@ -67,8 +67,10 @@ async function sendActivationInviteEmail(options: {
 }): Promise<{ success: boolean; error?: string }> {
   const { toEmail, fullName, employeeId, role, department, actionLink } = options
 
-  const smtpUser = (Deno.env.get("SMTP_USER") || "marwandesouqhi@gmail.com").trim()
-  const rawPass = Deno.env.get("SMTP_PASS") || "pizpvymhyagcghgt"
+  const smtpUser = Deno.env.get("SMTP_USER")?.trim()
+  if (!smtpUser) throw new Error("Server misconfigured: SMTP_USER environment variable is not set")
+  const rawPass = Deno.env.get("SMTP_PASS")
+  if (!rawPass) throw new Error("Server misconfigured: SMTP_PASS environment variable is not set")
   const smtpPass = rawPass.replace(/\s+/g, "")
   const smtpHost = Deno.env.get("SMTP_HOST") || "smtp.gmail.com"
   const smtpPort = Number(Deno.env.get("SMTP_PORT")) || 465
@@ -351,30 +353,8 @@ serve(async (req: Request) => {
       }
     }
 
-    if (!caller) {
-      // Lookup authoritative active system admin from app_users
-      const { data: sysAdmin } = await supabaseAdmin
-        .from("app_users")
-        .select("*")
-        .eq("role", "system_admin")
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle()
-
-      if (sysAdmin) {
-        caller = {
-          id: sysAdmin.auth_user_id || "324242da-d956-49c9-b970-df289ce6e59f",
-          email: sysAdmin.email || "marwandesouqhi@gmail.com",
-          app_metadata: {
-            role: "system_admin",
-            system_admin: true,
-          },
-          user_metadata: {
-            username: sysAdmin.username || "marwan-desouky",
-          },
-        }
-      }
-    }
+    // P5-FIX: Impersonation fallback removed. A missing or invalid JWT returns 401 immediately.
+    // No fallback to system_admin record lookup — this was an authentication bypass.
 
     if (!caller) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -524,8 +504,20 @@ serve(async (req: Request) => {
       }
 
       const recoveryLink = linkData.properties.action_link
-      const smtpUser = (Deno.env.get("SMTP_USER") || "marwandesouqhi@gmail.com").trim()
-      const rawPass = Deno.env.get("SMTP_PASS") || "pizpvymhyagcghgt"
+      const smtpUser = Deno.env.get("SMTP_USER")?.trim()
+      if (!smtpUser) {
+        return new Response(JSON.stringify({ error: "Server misconfigured: SMTP_USER environment variable is not set" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+      const rawPass = Deno.env.get("SMTP_PASS")
+      if (!rawPass) {
+        return new Response(JSON.stringify({ error: "Server misconfigured: SMTP_PASS environment variable is not set" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
       const smtpPass = rawPass.replace(/\s+/g, "")
       const smtpHost = Deno.env.get("SMTP_HOST") || "smtp.gmail.com"
       const smtpPort = Number(Deno.env.get("SMTP_PORT")) || 465
