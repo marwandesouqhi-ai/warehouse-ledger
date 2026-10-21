@@ -419,8 +419,8 @@ export function addLocalUser(data: {
     throw new Error(`اسم المستخدم "${cleanUsername}" مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر.`)
   }
 
-  if (!data.password || data.password.length < 12) {
-    throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
+  if (!data.password || data.password.length < 6) {
+    throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام للأمان.')
   }
 
   const defaultDept = data.department || (
@@ -582,8 +582,8 @@ export async function deleteUserPermanently(id: string): Promise<void> {
 }
 
 export function changeUserPassword(id: string, newPassword: string): LocalUser {
-  if (!newPassword || newPassword.length < 12) {
-    throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام للأمان.')
   }
   const updated = updateLocalUser(id, { password: newPassword })
   void logAuditEvent({

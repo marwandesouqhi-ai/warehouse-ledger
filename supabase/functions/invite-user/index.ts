@@ -122,8 +122,8 @@ serve(async (req: Request) => {
       }
 
       if (newPassword) {
-        if (typeof newPassword !== "string" || newPassword.length < 12) {
-          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 12 حرفاً ورموزاً لضمان أمان الحساب." }), {
+        if (typeof newPassword !== "string" || newPassword.length < 6) {
+          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام لضمان أمان الحساب." }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           })

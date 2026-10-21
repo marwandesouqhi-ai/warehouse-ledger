@@ -69,18 +69,18 @@ describe('Local Users Security & Password Storage Hardening Suite', () => {
     expect(target?.password).toBe('') // Stripped and empty in storage
   })
 
-  it('5. addLocalUser enforces minimum 12-character strong password policy', () => {
+  it('5. addLocalUser enforces minimum 6-character password policy', () => {
     expect(() => {
       addLocalUser({
         username: 'short_pass_user',
-        password: 'Short123', // < 12 chars
+        password: '12345', // < 6 chars
         role: 'viewer',
       })
-    }).toThrow(/كلمة المرور يجب ألا تقل عن 12/)
+    }).toThrow(/كلمة المرور يجب ألا تقل عن 6/)
 
     const valid = addLocalUser({
       username: 'valid_user',
-      password: 'StrongPassword2026!#',
+      password: 'Pass12',
       role: 'viewer',
     })
     expect(valid.username).toBe('valid_user')

@@ -78,16 +78,17 @@ describe('Edge Functions Security & Idempotency Logic Suite', () => {
     expect(validateDemoteOrDelete(false, 1, 'delete')).toBe(true)
   })
 
-  it('3. admin-users: enforces minimum 12-character strong password policy', () => {
+  it('3. admin-users: enforces minimum 6-character password policy', () => {
     function validatePasswordLength(password?: string): boolean {
-      if (!password || typeof password !== 'string' || password.length < 12) {
-        throw new Error('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف للأمان.')
       }
       return true
     }
 
-    expect(() => validatePasswordLength('12345678')).toThrow(/كلمة المرور يجب ألا تقل عن 12/)
-    expect(() => validatePasswordLength('short-pass')).toThrow(/كلمة المرور يجب ألا تقل عن 12/)
+    expect(() => validatePasswordLength('12345')).toThrow(/كلمة المرور يجب ألا تقل عن 6/)
+    expect(() => validatePasswordLength('short')).toThrow(/كلمة المرور يجب ألا تقل عن 6/)
+    expect(validatePasswordLength('123456')).toBe(true)
     expect(validatePasswordLength('StrongPassword2026!#')).toBe(true)
   })
 

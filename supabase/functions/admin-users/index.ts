@@ -771,8 +771,8 @@ ${recoveryLink}
       if (!effectivePassword || typeof effectivePassword !== "string" || effectivePassword.trim().length === 0) {
         effectivePassword = generateSecureTempPassword()
         isGeneratedPassword = true
-      } else if (effectivePassword.length < 12) {
-        return new Response(JSON.stringify({ error: "كلمة المرور يجب ألا تقل عن 12 حرفاً ورموزاً لضمان أمان النظام." }), {
+      } else if (effectivePassword.length < 6) {
+        return new Response(JSON.stringify({ error: "كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
@@ -911,8 +911,8 @@ ${recoveryLink}
       let effectivePassword = newPassword
       if (!effectivePassword || typeof effectivePassword !== "string" || effectivePassword.trim().length === 0) {
         effectivePassword = generateSecureTempPassword()
-      } else if (effectivePassword.length < 12) {
-        return new Response(JSON.stringify({ error: "كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً للأمان." }), {
+      } else if (effectivePassword.length < 6) {
+        return new Response(JSON.stringify({ error: "كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام للأمان." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })

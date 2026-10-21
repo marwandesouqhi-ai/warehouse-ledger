@@ -23,14 +23,27 @@ import { ROLE_LABELS } from '../lib/permissions'
 function getEmailFromUrl(): string {
     if (typeof window === 'undefined') return ''
     try {
-        const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : ''
-        const hashParams = new URLSearchParams(hash)
-        const emailFromHash = hashParams.get('email')
-        if (emailFromHash) return decodeURIComponent(emailFromHash).trim()
-
         const searchParams = new URLSearchParams(window.location.search)
-        const emailFromSearch = searchParams.get('email')
-        if (emailFromSearch) return decodeURIComponent(emailFromSearch).trim()
+        let emailFromSearch = searchParams.get('email')
+        if (emailFromSearch) {
+            emailFromSearch = decodeURIComponent(emailFromSearch).trim()
+            if (emailFromSearch.includes('#')) emailFromSearch = emailFromSearch.split('#')[0]
+            if (emailFromSearch.includes('?')) emailFromSearch = emailFromSearch.split('?')[0]
+            if (emailFromSearch) return emailFromSearch
+        }
+
+        const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : ''
+        const hashParts = hash.split('#')
+        for (const part of hashParts) {
+            const hashParams = new URLSearchParams(part)
+            let emailFromHash = hashParams.get('email')
+            if (emailFromHash) {
+                emailFromHash = decodeURIComponent(emailFromHash).trim()
+                if (emailFromHash.includes('#')) emailFromHash = emailFromHash.split('#')[0]
+                if (emailFromHash.includes('?')) emailFromHash = emailFromHash.split('?')[0]
+                if (emailFromHash) return emailFromHash
+            }
+        }
     } catch {
         // ignore
     }
@@ -95,7 +108,11 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
         if (!supabase) return
         setIsLoadingProfile(true)
         setProfileLoadError('')
-        const targetEmail = fallbackEmail || urlEmail || getEmailFromUrl()
+        let targetEmail = fallbackEmail || urlEmail || getEmailFromUrl()
+        if (targetEmail.includes('#')) targetEmail = targetEmail.split('#')[0]
+        if (targetEmail.includes('?')) targetEmail = targetEmail.split('?')[0]
+        targetEmail = targetEmail.trim()
+
         getInviteProfile(targetEmail)
             .then((res) => {
                 if (res.success && res.profile) {
@@ -119,6 +136,26 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
     // Load invite profile when in activateAccount mode
     useEffect(() => {
         if (mode === 'activateAccount' && supabase) {
+            // Recover session if URL has double-hash from legacy links
+            const hash = typeof window !== 'undefined' ? window.location.hash || '' : ''
+            if (hash.includes('access_token=') && hash.lastIndexOf('#') > 0) {
+                try {
+                    const secondHash = hash.substring(hash.lastIndexOf('#') + 1)
+                    const params = new URLSearchParams(secondHash)
+                    const access_token = params.get('access_token')
+                    const refresh_token = params.get('refresh_token')
+                    if (access_token && refresh_token) {
+                        void supabase.auth.setSession({ access_token, refresh_token }).then(({ data }) => {
+                            if (data.session?.user?.email) {
+                                loadInviteProfile(data.session.user.email)
+                            }
+                        })
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+
             loadInviteProfile()
 
             // Also listen to onAuthStateChange in case session tokens in hash are resolved shortly after mount
@@ -201,8 +238,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'setNewPassword') {
-                if (password.length < 12) {
-                    throw new Error('كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً ورموزاً لضمان أمان النظام.')
+                if (password.length < 6) {
+                    throw new Error('كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف وأرقام.')
                 }
                 if (password !== confirmPassword) {
                     throw new Error('كلمتا المرور غير متطابقتين.')
@@ -342,7 +379,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             if (userAppMeta.must_change_password === true) {
                 setActiveUserEmail(signInData.user?.email || cleanUser)
                 setMode('setNewPassword')
-                setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (12 حرفاً على الأقل).')
+                setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (6 أحرف على الأقل).')
                 return
             }
 
@@ -579,7 +616,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             <strong>تفعيل الحساب وتعيين كلمة المرور</strong>
                         </div>
                         <h1>أهلاً بك في حركة المخزن</h1>
-                        <p>يُرجى تعيين كلمة المرور الجديدة لحسابك (12 حرفاً على الأقل) لتتمكن من تسجيل الدخول مستقبلاً.</p>
+                        <p>يُرجى تعيين كلمة المرور الجديدة لحسابك (6 أحرف أو أرقام على الأقل) لتتمكن من تسجيل الدخول مستقبلاً.</p>
 
                         {activeUserEmail && (
                             <div className="auth-account-badge">
@@ -598,8 +635,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={12}
-                                        placeholder="12 حرفاً ورموزاً على الأقل"
+                                        minLength={6}
+                                        placeholder="6 أحرف أو أرقام على الأقل"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         required
@@ -622,8 +659,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showConfirmPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={12}
-                                        placeholder="أعد كتابة كلمة المرور (12 حرفاً على الأقل)"
+                                        minLength={6}
+                                        placeholder="أعد كتابة كلمة المرور (6 أحرف على الأقل)"
                                         value={confirmPassword}
                                         onChange={(event) => setConfirmPassword(event.target.value)}
                                         required

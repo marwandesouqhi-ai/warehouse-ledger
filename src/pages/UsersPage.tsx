@@ -369,8 +369,8 @@ export default function UsersPage({ session }: UsersPageProps) {
         try {
             // 1. If password was provided, sync to Supabase Auth via admin-users Edge Function
             if (editPassword && editPassword.trim().length > 0) {
-                if (editPassword.length < 12) {
-                    setEditError('كلمة المرور الجديدة يجب ألا تقل عن 12 حرفاً للأمان.')
+                if (editPassword.length < 6) {
+                    setEditError('كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام للأمان.')
                     return
                 }
                 if (supabase && (isSystemAdmin || session)) {
@@ -663,8 +663,8 @@ export default function UsersPage({ session }: UsersPageProps) {
             return
         }
 
-        if (!modalNewPassword || modalNewPassword.length < 12) {
-            setPwdModalError('كلمة المرور يجب أن لا تقل عن 12 حرفاً للأمان.')
+        if (!modalNewPassword || modalNewPassword.length < 6) {
+            setPwdModalError('كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام للأمان.')
             return
         }
 
@@ -714,8 +714,8 @@ export default function UsersPage({ session }: UsersPageProps) {
             setSelfPasswordError('يرجى كتابة كلمة المرور الجديدة.')
             return
         }
-        if (selfPassword.length < 12) {
-            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 12 حرفاً للأمان.')
+        if (selfPassword.length < 6) {
+            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام للأمان.')
             return
         }
         if (selfPassword !== selfConfirm) {
