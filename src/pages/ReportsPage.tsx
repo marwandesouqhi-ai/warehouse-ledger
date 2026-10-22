@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -62,6 +62,7 @@ export default function ReportsPage({
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
   const [permitInitialItems, setPermitInitialItems] = useState<CustodyItem[]>([])
+  const [permitTargetWarehouseId, setPermitTargetWarehouseId] = useState<string>('fci')
   const [searchTerm, setSearchTerm] = useState('')
 
   // Statistics per warehouse
@@ -89,11 +90,20 @@ export default function ReportsPage({
   // Print single warehouse inventory sheet
   function handlePrintWarehouseSheet(wh: WarehouseDefinition) {
     setSelectedWarehouseForPrint(wh)
+    document.body.classList.add('printing-warehouse-sheet')
     // Small timeout to allow state to settle before printing
     setTimeout(() => {
       window.print()
     }, 150)
   }
+
+  useEffect(() => {
+    function cleanupPrint() {
+      document.body.classList.remove('printing-warehouse-sheet')
+    }
+    window.addEventListener('afterprint', cleanupPrint)
+    return () => window.removeEventListener('afterprint', cleanupPrint)
+  }, [])
 
   const selectedWhItems = useMemo(() => {
     return items.filter((i) => i.warehouseId === selectedWarehouseForPrint.id)
@@ -117,7 +127,7 @@ export default function ReportsPage({
   return (
     <section className="reports-module content-area">
       {/* 1. Header Card */}
-      <div className="card-surface reports-header-card">
+      <div className="card-surface reports-header-card no-print">
         <div className="reports-header-layout">
           <div>
             <div className="reports-badge-pill">
@@ -161,7 +171,7 @@ export default function ReportsPage({
       </div>
 
       {/* 2. Primary 4 Report Category Cards */}
-      <div className="reports-category-grid">
+      <div className="reports-category-grid no-print">
         {/* Card 1: Official Permit */}
         <div className="card-surface reports-cat-card">
           <div>
@@ -258,7 +268,7 @@ export default function ReportsPage({
       </div>
 
       {/* 3. Certified Inventory Reports per College (8 Warehouses Grid) */}
-      <div className="card-surface reports-wh-section">
+      <div className="card-surface reports-wh-section no-print">
         <div className="reports-wh-head">
           <div>
             <h3 className="reports-wh-title">
@@ -352,7 +362,8 @@ export default function ReportsPage({
                   type="button"
                   className="secondary-btn reports-wh-btn-icon"
                   onClick={() => {
-                    setPermitInitialItems(whItems.slice(0, 1))
+                    setPermitInitialItems([])
+                    setPermitTargetWarehouseId(warehouse.id)
                     setIsPermitModalOpen(true)
                   }}
                   title="إصدار إذن صرف لهذه الكلية"
@@ -377,7 +388,7 @@ export default function ReportsPage({
       </div>
 
       {/* 4. Technical Condition & Maintenance Reports */}
-      <div className="reports-tech-grid">
+      <div className="reports-tech-grid no-print">
         {/* Maintenance Items Card */}
         <div className="card-surface reports-tech-card">
           <div className="reports-tech-head">
@@ -509,12 +520,18 @@ export default function ReportsPage({
           initialItems={permitInitialItems}
           allWarehouseItems={items}
           settings={settings}
+          defaultWarehouseId={permitTargetWarehouseId}
           onClose={() => setIsPermitModalOpen(false)}
         />
       )}
 
       {/* 6. Official Printable Inventory Sheet (A4 Portrait Template for Direct Printing) */}
       <div className="official-custody-print-document" aria-hidden="true">
+        {(settings.logoDataUrl || settings.logoUrl) && (
+          <div className="print-watermark" aria-hidden="true">
+            <img src={settings.logoDataUrl || settings.logoUrl} alt="" />
+          </div>
+        )}
         <header className="print-letterhead">
           <div className="print-header-col print-header-right">
             <div className="print-gov-heading">جمهورية مصر العربية</div>
@@ -681,18 +698,9 @@ export default function ReportsPage({
 
         <footer className="print-document-footer">
           <span>طُبع هذا المحضر آلياً عبر منظومة إدارة المخازن والعهدة — مستند رسمي صالح للتدقيق المالي والمخزني</span>
-          <span>صفحة 1 من 1</span>
+          <span>مستند رسمي معتمد</span>
         </footer>
       </div>
-
-      {isPermitModalOpen && (
-        <OfficialDisbursementPermitModal
-          initialItems={permitInitialItems}
-          allWarehouseItems={items}
-          settings={settings}
-          onClose={() => setIsPermitModalOpen(false)}
-        />
-      )}
     </section>
   )
 }

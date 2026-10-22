@@ -1,6 +1,6 @@
 {
-  "name": "حركة المخزن | نظام إدارة المخزون",
-  "short_name": "حركة المخزن",
+  "name": "ZNU-Warehouse-Ledger",
+  "short_name": "ZNU-Ledger",
   "description": "نظام متكامل واحترافي لإدارة ومتابعة حركة المستودع، التوريد، الصرف، والأرصدة المتبقية",
   "id": "warehouse-ledger-app",
   "start_url": "/",

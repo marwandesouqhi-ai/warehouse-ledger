@@ -444,6 +444,37 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             />
                         </label>
                         <label>
+                            اختصار / رمز المؤسسة (مثال: ZNU)
+                            <input
+                                value={draft.organizationCode ?? 'ZNU'}
+                                disabled={!isSystemAdmin}
+                                placeholder="ZNU"
+                                onChange={(event) => {
+                                    const code = event.target.value.trim().toUpperCase()
+                                    setDraft({
+                                        ...draft,
+                                        organizationCode: code,
+                                        systemName: code ? `${code}-Warehouse-Ledger` : 'Warehouse-Ledger',
+                                    })
+                                    setSaved(false)
+                                    setSaveNotice('')
+                                }}
+                            />
+                        </label>
+                        <label>
+                            اسم المنظومة المعروض (اسم السيستم)
+                            <input
+                                value={draft.systemName ?? (draft.organizationCode ? `${draft.organizationCode}-Warehouse-Ledger` : 'ZNU-Warehouse-Ledger')}
+                                disabled={!isSystemAdmin}
+                                placeholder="ZNU-Warehouse-Ledger"
+                                onChange={(event) => {
+                                    setDraft({ ...draft, systemName: event.target.value })
+                                    setSaved(false)
+                                    setSaveNotice('')
+                                }}
+                            />
+                        </label>
+                        <label>
                             العملة المعتمدة
                             <select
                                 value={draft.currency}

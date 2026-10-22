@@ -81,7 +81,8 @@ serve(async (req: Request) => {
 
     // ─── ACTION: get_profile ─────────────────────────────────────────────────
     if (action === "get_profile") {
-      const emailToLookup = (caller?.email || body.email || "").trim().toLowerCase()
+      const rawEmail = (caller?.email || body.email || "")
+      const emailToLookup = rawEmail.split("#")[0].split("?")[0].trim().toLowerCase()
       if (!emailToLookup && !caller?.id) {
         return new Response(JSON.stringify({ error: "جلسة المستخدم غير صالحة أو منتهية. يرجى إعادة فتح رابط الدعوة." }), {
           status: 401,

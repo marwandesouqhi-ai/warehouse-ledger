@@ -6,6 +6,8 @@ export type AppSettings = {
   currency: 'EGP' | 'SAR' | 'AED' | 'USD'
   logoDataUrl?: string
   logoUrl?: string
+  organizationCode?: string
+  systemName?: string
 }
 
 export const settingsStorageKey = 'warehouse-ledger-settings'
@@ -15,6 +17,16 @@ export const defaultSettings: AppSettings = {
   organization: 'جامعة الزقازيق الأهلية',
   department: 'المخازن',
   currency: 'EGP',
+  organizationCode: 'ZNU',
+  systemName: 'ZNU-Warehouse-Ledger',
+}
+
+export function getSystemDisplayName(settings?: Partial<AppSettings> | null): string {
+  if (settings?.systemName?.trim()) return settings.systemName.trim()
+  const code =
+    settings?.organizationCode?.trim() ||
+    (settings?.organization?.includes('الزقازيق') ? 'ZNU' : '')
+  return code ? `${code}-Warehouse-Ledger` : 'ZNU-Warehouse-Ledger'
 }
 
 export function loadAppSettings(): AppSettings {

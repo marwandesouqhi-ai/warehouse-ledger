@@ -197,6 +197,7 @@ body {
   color: var(--ink);
   font-family: 'IBM Plex Sans Arabic', Tahoma, 'Segoe UI', sans-serif;
   transition: background 0.2s ease, color 0.2s ease;
+  overflow-x: clip;
 }
 
 #root {
@@ -330,7 +331,6 @@ table th,
 .table-responsive {
   width: 100%;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--surface);

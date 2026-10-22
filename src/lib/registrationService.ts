@@ -288,7 +288,17 @@ export async function sendPasswordRecovery(target: {
         return { success: true, message: data.message }
       }
       if (error || (data && !data.success)) {
-        const msg = data?.error || error?.message || 'تعذر إرسال رابط تعيين كلمة المرور.'
+        let errMessage = data?.error || error?.message
+        if (error && typeof error === 'object' && 'context' in error) {
+          try {
+            const ctxJson = await (error as any).context.json()
+            if (ctxJson?.error) errMessage = ctxJson.error
+            else if (ctxJson?.message) errMessage = ctxJson.message
+          } catch {
+            // ignore
+          }
+        }
+        const msg = errMessage || 'تعذر إرسال رابط تعيين كلمة المرور.'
         return { success: false, message: msg, error: msg }
       }
     } catch (err: unknown) {
@@ -315,10 +325,20 @@ export async function resendRegistrationInvitation(
         return { success: true, message: data.message || 'تمت إعادة إرسال الدعوة بنجاح.' }
       }
       if (error || (data && !data.success)) {
+        let errMessage = data?.error || error?.message
+        if (error && typeof error === 'object' && 'context' in error) {
+          try {
+            const ctxJson = await (error as any).context.json()
+            if (ctxJson?.error) errMessage = ctxJson.error
+            else if (ctxJson?.message) errMessage = ctxJson.message
+          } catch {
+            // ignore
+          }
+        }
         return {
           success: false,
-          message: data?.error || error?.message || 'تعذر إعادة إرسال الدعوة.',
-          error: data?.error || error?.message,
+          message: errMessage || 'تعذر إعادة إرسال الدعوة.',
+          error: errMessage,
         }
       }
     } catch (err) {
@@ -347,10 +367,20 @@ export async function cancelRegistrationInvitation(
         return { success: true, message: data.message || 'تم إلغاء الدعوة بنجاح.' }
       }
       if (error || (data && !data.success)) {
+        let errMessage = data?.error || error?.message
+        if (error && typeof error === 'object' && 'context' in error) {
+          try {
+            const ctxJson = await (error as any).context.json()
+            if (ctxJson?.error) errMessage = ctxJson.error
+            else if (ctxJson?.message) errMessage = ctxJson.message
+          } catch {
+            // ignore
+          }
+        }
         return {
           success: false,
-          message: data?.error || error?.message || 'تعذر إلغاء الدعوة.',
-          error: data?.error || error?.message,
+          message: errMessage || 'تعذر إلغاء الدعوة.',
+          error: errMessage,
         }
       }
     } catch (err) {
@@ -419,11 +449,12 @@ export type InviteProfile = {
 export async function getInviteProfile(fallbackEmail?: string): Promise<{ success: boolean; profile?: InviteProfile; error?: string }> {
   if (supabase) {
     try {
+      const cleanEmail = fallbackEmail ? fallbackEmail.split('#')[0].split('?')[0].trim() : undefined
       // 1. First try Edge Function to get authenticated invite profile
       const { data, error } = await supabase.functions.invoke('complete-activation', {
         body: {
           action: 'get_profile',
-          email: fallbackEmail || undefined,
+          email: cleanEmail,
         },
       })
       if (!error && data?.success && data.profile) {
@@ -432,7 +463,7 @@ export async function getInviteProfile(fallbackEmail?: string): Promise<{ succes
 
       // 2. Direct secure lookup for signed-in invite user or fallback email
       const { data: { user } } = await supabase.auth.getUser()
-      const searchEmail = user?.email || fallbackEmail
+      const searchEmail = user?.email || cleanEmail
       if (user || searchEmail) {
         let query = supabase
           .from('app_users')
