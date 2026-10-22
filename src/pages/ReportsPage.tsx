@@ -28,6 +28,7 @@ import {
 } from '../lib/custody'
 import type { FixtureMovement } from '../lib/fixture'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
+import { AnimatePresence } from 'motion/react'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
 
 interface ReportsPageProps {
@@ -515,15 +516,17 @@ export default function ReportsPage({
       </div>
 
       {/* 5. Official Disbursement Permit Modal */}
-      {isPermitModalOpen && (
-        <OfficialDisbursementPermitModal
-          initialItems={permitInitialItems}
-          allWarehouseItems={items}
-          settings={settings}
-          defaultWarehouseId={permitTargetWarehouseId}
-          onClose={() => setIsPermitModalOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {isPermitModalOpen && (
+          <OfficialDisbursementPermitModal
+            initialItems={permitInitialItems}
+            allWarehouseItems={items}
+            settings={settings}
+            defaultWarehouseId={permitTargetWarehouseId}
+            onClose={() => setIsPermitModalOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 6. Official Printable Inventory Sheet (A4 Portrait Template for Direct Printing) */}
       <div className="official-custody-print-document" aria-hidden="true">

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
   Printer,
@@ -159,12 +160,24 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
   }
 
   const logoUrl = settings.logoDataUrl || settings.logoUrl
+  const shouldReduceMotion = useReducedMotion()
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
+    <motion.div
+      className="modal-backdrop"
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <motion.div
         className="modal-dialog official-permit-dialog"
         onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
       >
         {/* Modal Controls Header (Hidden in Print) */}
         <div className="modal-header no-print permit-controls-header">
@@ -664,7 +677,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

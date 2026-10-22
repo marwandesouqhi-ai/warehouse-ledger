@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import type { Session } from '@supabase/supabase-js'
 import {
   Activity,
@@ -235,6 +236,7 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
 
 function App() {
   const location = useLocation()
+  const shouldReduceMotion = useReducedMotion()
   const [darkMode, setDarkMode] = useState(loadDarkMode)
   const [movements, setMovements] = useState<FixtureMovement[]>(loadMovements)
   const [session, setSession] = useState<Session | null>(() => {
@@ -1460,8 +1462,16 @@ function App() {
         </div>
         {syncError && <div className="inline-message error" role="alert">{syncError}</div>}
 
-        <div key={location.pathname} className="route-content-container page-enter-motion">
-          <Routes>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            className="route-content-container"
+            initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Routes location={location}>
           <Route
             path="/"
             element={
@@ -2216,125 +2226,158 @@ function App() {
             }
           />
           </Routes>
-        </div>
+        </motion.div>
+      </AnimatePresence>
 
-        {canManageRecords && editingMovement && (
-          <div className="modal-backdrop" onClick={() => setEditingMovement(null)}>
-            <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title-wrap">
-                  <div className="modal-title-icon"><Pencil size={18} /></div>
-                  <div>
-                    <h3>تعديل حركة المخزن</h3>
-                    <span className="modal-subtitle">{editingMovement.item}</span>
-                  </div>
-                </div>
-                <button type="button" className="modal-close-btn" onClick={() => setEditingMovement(null)} aria-label="إغلاق">
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="modal-body">
-                <MovementForm
-                  initialMovement={editingMovement}
-                  isModal
-                  onSave={async (updated) => {
-                    await updateExistingMovement(updated)
-                    setEditingMovement(null)
-                  }}
-                  onCancel={() => setEditingMovement(null)}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {canManageRecords && deletingMovement && (
-          <div className="modal-backdrop" onClick={() => !isDeleting && setDeletingMovement(null)}>
-            <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title-wrap">
-                  <div className="modal-title-icon modal-icon-danger">
-                    <Trash2 size={18} />
-                  </div>
-                  <div>
-                    <h3>تأكيد حذف الحركة</h3>
-                    <span className="modal-subtitle">سيتم حذف الحركة نهائياً من السجل</span>
-                  </div>
-                </div>
-                <button type="button" className="modal-close-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)} aria-label="إغلاق">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="modal-confirm-body">
-                <div className="confirm-icon-wrap delete-tone">
-                  <Trash2 size={26} />
-                </div>
-                <h3>هل أنت متأكد من الحذف؟</h3>
-                <p>أنت على وشك حذف هذا السجل بشكل نهائي من قاعدة البيانات والسجلات المخزنية.</p>
-
-                <div className="confirm-details-card">
-                  <div className="confirm-detail-row">
-                    <span className="confirm-detail-label">الصنف:</span>
-                    <strong className="confirm-detail-val">{deletingMovement.item}</strong>
-                  </div>
-                  <div className="confirm-detail-row">
-                    <span className="confirm-detail-label">تاريخ الحركة:</span>
-                    <span className="confirm-detail-val">{deletingMovement.date || '—'}</span>
-                  </div>
-                  <div className="confirm-detail-row">
-                    <span className="confirm-detail-label">الكميات (وارد / منصرف):</span>
-                    <span className="confirm-detail-val">+{deletingMovement.qin} / -{deletingMovement.qout}</span>
-                  </div>
-                  {deletingMovement.from && (
-                    <div className="confirm-detail-row">
-                      <span className="confirm-detail-label">المورد:</span>
-                      <span className="confirm-detail-val">{deletingMovement.from}</span>
+        <AnimatePresence>
+          {canManageRecords && editingMovement && (
+            <motion.div
+              className="modal-backdrop"
+              onClick={() => setEditingMovement(null)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <motion.div
+                className="modal-dialog modal-dialog-form"
+                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="modal-header">
+                  <div className="modal-title-wrap">
+                    <div className="modal-title-icon"><Pencil size={18} /></div>
+                    <div>
+                      <h3>تعديل حركة المخزن</h3>
+                      <span className="modal-subtitle">{editingMovement.item}</span>
                     </div>
-                  )}
-                  {deletingMovement.to && (
-                    <div className="confirm-detail-row">
-                      <span className="confirm-detail-label">المستلم:</span>
-                      <span className="confirm-detail-val">{deletingMovement.to}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="confirm-warning">
-                  ⚠️ تنبيه: لا يمكن استرجاع هذا السجل بعد إتمام عملية الحذف.
-                </div>
-
-                {deleteError && <div className="inline-message error w-full mb-3">{deleteError}</div>}
-
-                <div className="modal-confirm-actions">
-                  <button type="button" className="secondary-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)}>
-                    إلغاء
+                  </div>
+                  <button type="button" className="modal-close-btn" onClick={() => setEditingMovement(null)} aria-label="إغلاق">
+                    <X size={18} />
                   </button>
-                  <button
-                    type="button"
-                    className="danger-btn"
-                    disabled={isDeleting}
-                    onClick={async () => {
-                      setIsDeleting(true)
-                      setDeleteError('')
-                      try {
-                        await deleteExistingMovement(deletingMovement)
-                        setDeletingMovement(null)
-                      } catch (err) {
-                        setDeleteError(err instanceof Error ? err.message : 'تعذر حذف الحركة.')
-                      } finally {
-                        setIsDeleting(false)
-                      }
+                </div>
+                <div className="modal-body">
+                  <MovementForm
+                    initialMovement={editingMovement}
+                    isModal
+                    onSave={async (updated) => {
+                      await updateExistingMovement(updated)
+                      setEditingMovement(null)
                     }}
-                  >
-                    <Trash2 size={16} />
-                    {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الحركة'}
+                    onCancel={() => setEditingMovement(null)}
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {canManageRecords && deletingMovement && (
+            <motion.div
+              className="modal-backdrop"
+              onClick={() => !isDeleting && setDeletingMovement(null)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <motion.div
+                className="modal-dialog modal-dialog-confirm"
+                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="modal-header">
+                  <div className="modal-title-wrap">
+                    <div className="modal-title-icon modal-icon-danger">
+                      <Trash2 size={18} />
+                    </div>
+                    <div>
+                      <h3>تأكيد حذف الحركة</h3>
+                      <span className="modal-subtitle">سيتم حذف الحركة نهائياً من السجل</span>
+                    </div>
+                  </div>
+                  <button type="button" className="modal-close-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)} aria-label="إغلاق">
+                    <X size={18} />
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+
+                <div className="modal-confirm-body">
+                  <div className="confirm-icon-wrap delete-tone">
+                    <Trash2 size={26} />
+                  </div>
+                  <h3>هل أنت متأكد من الحذف؟</h3>
+                  <p>أنت على وشك حذف هذا السجل بشكل نهائي من قاعدة البيانات والسجلات المخزنية.</p>
+
+                  <div className="confirm-details-card">
+                    <div className="confirm-detail-row">
+                      <span className="confirm-detail-label">الصنف:</span>
+                      <strong className="confirm-detail-val">{deletingMovement.item}</strong>
+                    </div>
+                    <div className="confirm-detail-row">
+                      <span className="confirm-detail-label">تاريخ الحركة:</span>
+                      <span className="confirm-detail-val">{deletingMovement.date || '—'}</span>
+                    </div>
+                    <div className="confirm-detail-row">
+                      <span className="confirm-detail-label">الكميات (وارد / منصرف):</span>
+                      <span className="confirm-detail-val">+{deletingMovement.qin} / -{deletingMovement.qout}</span>
+                    </div>
+                    {deletingMovement.from && (
+                      <div className="confirm-detail-row">
+                        <span className="confirm-detail-label">المورد:</span>
+                        <span className="confirm-detail-val">{deletingMovement.from}</span>
+                      </div>
+                    )}
+                    {deletingMovement.to && (
+                      <div className="confirm-detail-row">
+                        <span className="confirm-detail-label">المستلم:</span>
+                        <span className="confirm-detail-val">{deletingMovement.to}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="confirm-warning">
+                    ⚠️ تنبيه: لا يمكن استرجاع هذا السجل بعد إتمام عملية الحذف.
+                  </div>
+
+                  {deleteError && <div className="inline-message error w-full mb-3">{deleteError}</div>}
+
+                  <div className="modal-confirm-actions">
+                    <button type="button" className="secondary-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)}>
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-btn"
+                      disabled={isDeleting}
+                      onClick={async () => {
+                        setIsDeleting(true)
+                        setDeleteError('')
+                        try {
+                          await deleteExistingMovement(deletingMovement)
+                          setDeletingMovement(null)
+                        } catch (err) {
+                          setDeleteError(err instanceof Error ? err.message : 'تعذر حذف الحركة.')
+                        } finally {
+                          setIsDeleting(false)
+                        }
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الحركة'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
 
       </main>

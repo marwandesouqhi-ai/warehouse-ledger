@@ -10340,9 +10340,9 @@
   }
 }
 
-.page-enter-motion {
-  animation: pageEnter var(--dur-base) var(--ease-out) both;
+.route-content-container {
   width: 100%;
+  min-width: 0;
 }
 
 /* 2. Cards, KPI Cards & Panels (Staggered Fade-Up) */
@@ -10463,13 +10463,14 @@ a {
   }
 }
 
+/* 6. Modals / Overlays (Animated via Motion Library & AnimatePresence) */
 .modal-backdrop {
-  animation: modalBackdropFade var(--dur-fast) var(--ease-out) both;
+  will-change: opacity;
 }
 
 .modal-dialog,
 .official-permit-dialog {
-  animation: modalDialogScale var(--dur-base) var(--ease-out) both;
+  will-change: transform, opacity;
 }
 
 /* 7. Toasts / Alerts (Inline-End Slide) */

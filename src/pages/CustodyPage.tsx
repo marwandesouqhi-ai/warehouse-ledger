@@ -57,6 +57,7 @@ import {
   mergeImportedCustody,
   parseRawCustodyRows,
 } from '../lib/custodyImport'
+import { AnimatePresence } from 'motion/react'
 import { CustodyItemHistoryModal } from '../components/CustodyItemHistoryModal'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
 import { logAuditEvent } from '../lib/auditLogger'
@@ -1523,25 +1524,29 @@ export default function CustodyPage({
       )}
 
       {/* 8. Item Lifecycle & History Modal */}
-      {historyItem && (
-        <CustodyItemHistoryModal
-          item={historyItem}
-          currency={currency}
-          onClose={() => setHistoryItem(null)}
-          onUpdateItem={handleSaveItem}
-        />
-      )}
+      <AnimatePresence>
+        {historyItem && (
+          <CustodyItemHistoryModal
+            item={historyItem}
+            currency={currency}
+            onClose={() => setHistoryItem(null)}
+            onUpdateItem={handleSaveItem}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 9. Official Disbursement / Inspection Permit Modal */}
-      {isPermitModalOpen && (
-        <OfficialDisbursementPermitModal
-          initialItems={permitInitialItems}
-          allWarehouseItems={items}
-          settings={settings}
-          defaultWarehouseId={activeWarehouseId}
-          onClose={() => setIsPermitModalOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {isPermitModalOpen && (
+          <OfficialDisbursementPermitModal
+            initialItems={permitInitialItems}
+            allWarehouseItems={items}
+            settings={settings}
+            defaultWarehouseId={activeWarehouseId}
+            onClose={() => setIsPermitModalOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 9.5 New Disbursement / Transfer Modal */}
       {isNewDisbursementOpen && (

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
   History,
@@ -112,11 +113,24 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
     setIsSaving(false)
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
+    <motion.div
+      className="modal-backdrop"
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <motion.div
         className="modal-dialog modal-dialog-lg max-h-90vh"
         onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
       >
         {/* Modal Header */}
         <div className="modal-header">
@@ -272,7 +286,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
             إغلاق
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
