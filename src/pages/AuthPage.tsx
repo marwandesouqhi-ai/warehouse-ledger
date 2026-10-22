@@ -78,19 +78,23 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
     const isConfigured = Boolean(supabase && isSupabaseConfigured())
 
-    // Check for errors returned in the URL hash
+    // Check for errors returned in the URL hash or query string
     useEffect(() => {
         if (typeof window === 'undefined') return
         const hash = window.location.hash || ''
-        if (hash.includes('error=')) {
-            const params = new URLSearchParams(hash.replace(/^#/, ''))
+        const search = window.location.search || ''
+        if (hash.includes('error=') || search.includes('error=')) {
+            const raw = hash.includes('error=') ? hash.replace(/^#/, '') : search.replace(/^\?/, '')
+            const params = new URLSearchParams(raw)
             const code = params.get('error_code') || ''
             const desc = params.get('error_description') || params.get('error') || ''
             if (code === 'otp_expired' || desc.toLowerCase().includes('expired') || desc.toLowerCase().includes('invalid')) {
-                setError('⚠️ رابط تفعيل الدعوة أو الاستعادة غير صالح أو انتهت صلاحيته. يُرجى مراجعة مدير النظام (System Admin) لإعادة إرسال الدعوة.')
+                setError('⚠️ رابط تفعيل الحساب أو استعادة كلمة المرور غير صالح أو انتهت صلاحيته (الروابط صالحة للاستخدام لمرة واحدة فقط). إذا كنت بحاجة لرابط جديد، يمكنك طلبه مجدداً.')
             } else if (desc) {
                 setError(decodeURIComponent(desc.replace(/\+/g, ' ')))
             }
+            // Clean URL hash so back/refresh doesn't re-trigger error state
+            window.history.replaceState(null, '', window.location.pathname)
         }
     }, [])
 
@@ -118,7 +122,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 if (res.success && res.profile) {
                     setInviteProfile(res.profile)
                     if (res.profile.status === 'active') {
-                        setNotice('تم تفعيل هذا الحساب بالفعل سابقاً. يمكنك تسجيل الدخول باسم المستخدم وكلمة المرور الخاصة بك.')
+                        setNotice('عذراً، تم استخدام رابط التفعيل هذا مسبقاً وتفعيل الحساب بالفعل. رابط التفعيل صالح للاستخدام لمرة واحدة فقط.')
                     }
                 } else {
                     setProfileLoadError(res.error || 'تعذر تحميل بيانات الدعوة الخاصة بك.')
@@ -192,6 +196,10 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'activateAccount') {
+                if (inviteProfile?.status === 'active') {
+                    throw new Error('رابط التفعيل صالح للاستخدام لمرة واحدة فقط، وقد تم تفعيل هذا الحساب بالفعل مسبقاً. يُرجى تسجيل الدخول مباشرة.')
+                }
+
                 const cleanUser = username.trim().toLowerCase()
                 const uValidation = validateChosenUsername(cleanUser)
                 if (!uValidation.valid) {
@@ -217,7 +225,15 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 }
 
                 // 2. Finalize activation atomically in database & metadata via complete-activation Edge Function
-                await completeAccountActivation(cleanUser)
+                const actRes = await completeAccountActivation(cleanUser)
+                if (!actRes.success) {
+                    throw new Error(actRes.error || actRes.message || 'تعذر إتمام تفعيل الحساب.')
+                }
+
+                // Clean URL hash and search params immediately so reload doesn't replay invite
+                if (typeof window !== 'undefined') {
+                    window.history.replaceState(null, '', window.location.pathname)
+                }
 
                 void logAuditEvent({
                     action: 'تفعيل حساب موظف جديد واختيار اسم المستخدم',
@@ -257,10 +273,21 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     user: { id: activeUserEmail || 'user-pwd-reset', email: activeUserEmail },
                 })
 
-                setNotice('تم تعيين كلمة المرور بنجاح! جاري تحويلك إلى لوحة التحكم...')
+                // Immediately clean URL hash and query string so recovery token cannot be re-used
+                if (typeof window !== 'undefined') {
+                    window.history.replaceState(null, '', window.location.pathname)
+                }
+
+                // Explicitly sign out of recovery session so single-use is strictly enforced
+                if (supabase) {
+                    await supabase.auth.signOut().catch(() => {})
+                }
+
+                setNotice('تم تعيين كلمة المرور بنجاح! انتهت صلاحية رابط الاستعادة لمرة واحدة، يُرجى تسجيل الدخول بكلمة المرور الجديدة.')
                 setTimeout(() => {
+                    setMode('signIn')
                     onPasswordSet?.()
-                }, 1000)
+                }, 1200)
                 return
             }
 
@@ -477,7 +504,52 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             </div>
                         )}
 
-                        {inviteProfile && (
+                        {inviteProfile && inviteProfile.status === 'active' ? (
+                            <div className="auth-step-box">
+                                <div className="inline-message warning mb-4" role="alert">
+                                    <ShieldAlert size={22} className="shrink-0 text-amber-500" />
+                                    <div>
+                                        <strong className="text-base">تم استخدام رابط التفعيل مسبقاً:</strong>
+                                        <p className="mt-1 mb-2 font-sm">
+                                            رابط التفعيل صالح للاستخدام لمرة واحدة فقط. الحساب الخاص بالموظف <strong>{inviteProfile.fullName}</strong> ({inviteProfile.employeeId}) تم تفعيله بالفعل وهو نشط في المنظومة.
+                                        </p>
+                                        <p className="font-xs text-muted mb-0">
+                                            لأسباب أمنية، لا يمكن إعادة استخدام رابط التفعيل لتغيير البيانات. يُرجى تسجيل الدخول مباشرة باستخدام اسم المستخدم وكلمة المرور الخاصة بك.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="auth-btn-row">
+                                    <button
+                                        type="button"
+                                        className="primary-btn flex-1"
+                                        onClick={() => {
+                                            if (typeof window !== 'undefined') {
+                                                window.history.replaceState(null, '', window.location.pathname)
+                                            }
+                                            setMode('signIn')
+                                            setError('')
+                                            setNotice('الحساب مفعل بالفعل. يرجى تسجيل الدخول باسم المستخدم وكلمة المرور.')
+                                        }}
+                                    >
+                                        <LogIn size={16} /> الانتقال إلى تسجيل الدخول
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="secondary-btn"
+                                        onClick={() => {
+                                            if (typeof window !== 'undefined') {
+                                                window.history.replaceState(null, '', window.location.pathname)
+                                            }
+                                            setMode('forgotPassword')
+                                            setError('')
+                                            setNotice('')
+                                        }}
+                                    >
+                                        نسيت كلمة المرور؟
+                                    </button>
+                                </div>
+                            </div>
+                        ) : inviteProfile ? (
                             <>
                                 <div className="auth-step-box">
                                     <div className="auth-step-box-header">
@@ -607,7 +679,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     </button>
                                 </form>
                             </>
-                        )}
+                        ) : null}
                     </>
                 ) : mode === 'setNewPassword' ? (
                     <>

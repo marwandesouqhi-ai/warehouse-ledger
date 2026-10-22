@@ -279,5 +279,41 @@ describe('Employee Onboarding: Telegram -> Admin Approval -> Gmail Invite -> Act
             expect(resendBlock).toContain('invitation_status === "accepted"')
             expect(resendBlock).toContain('30000') // 30 seconds rate limit
         })
+
+        it('verifies complete-activation Edge Function strictly enforces single-use activation', () => {
+            const activationPath = path.resolve(__dirname, '../../supabase/functions/complete-activation/index.ts')
+            const content = fs.readFileSync(activationPath, 'utf-8')
+
+            // Must reject if account is already active
+            expect(content).toContain('userRow.status === "active"')
+            expect(content).toContain('ACTIVATION_LINK_ALREADY_USED')
+            expect(content).toContain('رابط التفعيل صالح للاستخدام لمرة واحدة فقط')
+        })
+
+        it('verifies complete_employee_activation SQL RPC rejects already active accounts with an exception', () => {
+            const migrationPath = path.resolve(__dirname, '../../supabase/migrations/20261018170000_employee_onboarding_invitation_and_activation.sql')
+            const content = fs.readFileSync(migrationPath, 'utf-8')
+
+            expect(content).toContain("IF v_user.status = 'active' THEN")
+            expect(content).toContain("RAISE EXCEPTION 'رابط التفعيل صالح للاستخدام لمرة واحدة فقط، وقد تم تفعيل هذا الحساب بالفعل مسبقاً.';")
+        })
+
+        it('verifies AuthPage cleans recovery and activation hashes and revokes recovery sessions upon completion', () => {
+            const authPagePath = path.resolve(__dirname, '../../src/pages/AuthPage.tsx')
+            const content = fs.readFileSync(authPagePath, 'utf-8')
+
+            // Form must be locked / replaced with dedicated notice if invite profile status is already active
+            expect(content).toContain("inviteProfile.status === 'active'")
+            expect(content).toContain('تم استخدام رابط التفعيل مسبقاً')
+
+            // Must reject submission in activateAccount if status is active
+            expect(content).toContain("inviteProfile?.status === 'active'")
+
+            // Must clean window.history.replaceState immediately
+            expect(content).toContain("window.history.replaceState(null, '', window.location.pathname)")
+
+            // Must terminate recovery session on password set
+            expect(content).toContain('await supabase.auth.signOut()')
+        })
     })
 })

@@ -387,13 +387,7 @@ BEGIN
   END IF;
 
   IF v_user.status = 'active' THEN
-    RETURN jsonb_build_object(
-      'success', true,
-      'status', 'already_active',
-      'message', 'هذا الحساب مفعل ونشط بالفعل.',
-      'username', v_user.username,
-      'employee_id', v_user.employee_id
-    );
+    RAISE EXCEPTION 'رابط التفعيل صالح للاستخدام لمرة واحدة فقط، وقد تم تفعيل هذا الحساب بالفعل مسبقاً.';
   END IF;
 
   IF v_user.status <> 'pending_activation' THEN

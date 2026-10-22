@@ -1276,7 +1276,7 @@ function App() {
         onPasswordSet={() => {
           setIsInviteFlow(false)
           setIsSettingPassword(false)
-          if (window.location.hash) {
+          if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', window.location.pathname)
           }
           void supabase?.auth.getSession().then(({ data }) => {
@@ -1296,7 +1296,7 @@ function App() {
         settings={settings}
         onPasswordSet={() => {
           setIsSettingPassword(false)
-          if (window.location.hash) {
+          if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', window.location.pathname)
           }
         }}

@@ -269,21 +269,21 @@ serve(async (req: Request) => {
         })
       }
 
-      // Idempotency: if already active and matches cleanUsername
-      if (userRow.status === "active" && normalizeUsername(userRow.username) === cleanUsername) {
+      // Strict single-use enforcement: if account is already active, reject re-activation
+      if (userRow.status === "active") {
         return new Response(JSON.stringify({
-          success: true,
-          message: "تم تفعيل هذا الحساب مسبقاً بنجاح.",
-          username: userRow.username,
-          employeeId: userRow.employee_id,
+          error: "رابط التفعيل صالح للاستخدام لمرة واحدة فقط، وقد تم تفعيل هذا الحساب بالفعل مسبقاً. يُرجى تسجيل الدخول مباشرة.",
+          code: "ACTIVATION_LINK_ALREADY_USED",
         }), {
-          status: 200,
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
 
-      if (userRow.status !== "pending_activation" && userRow.status !== "active") {
-        return new Response(JSON.stringify({ error: `حالة الحساب غير مؤهلة للتفعيل (${userRow.status}). يرجى التواصل مع الإدارة.` }), {
+      if (userRow.status !== "pending_activation") {
+        return new Response(JSON.stringify({
+          error: `حالة الحساب غير مؤهلة للتفعيل (${userRow.status}). يرجى التواصل مع الإدارة.`,
+        }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
@@ -323,26 +323,48 @@ serve(async (req: Request) => {
       })
 
       if (actErr) {
-        // Fallback to manual direct atomic updates if RPC not yet created
-        await supabaseAdmin
-          .from("app_users")
-          .update({
-            username: cleanUsername,
-            status: "active",
-            activated_at: new Date().toISOString(),
-            must_change_password: false,
-            auth_user_id: caller.id,
-            notes: "تم تفعيل الحساب بنجاح بواسطة الموظف",
+        const errMsg = actErr.message || ""
+        // If it's a domain/validation error from the DB procedure, return it directly to client
+        if (
+          errMsg.includes("صالح للاستخدام") ||
+          errMsg.includes("مفعل") ||
+          errMsg.includes("مستخدم بالفعل") ||
+          errMsg.includes("غير مؤهلة للتفعيل") ||
+          errMsg.includes("تعيين كلمة المرور")
+        ) {
+          return new Response(JSON.stringify({ error: errMsg }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           })
-          .eq("id", userRow.id)
+        }
 
-        await supabaseAdmin
-          .from("registration_requests")
-          .update({
-            invitation_status: "accepted",
-            updated_at: new Date().toISOString(),
+        // Fallback only if RPC function does not exist in legacy DB
+        if (errMsg.includes("function") && errMsg.includes("does not exist")) {
+          await supabaseAdmin
+            .from("app_users")
+            .update({
+              username: cleanUsername,
+              status: "active",
+              activated_at: new Date().toISOString(),
+              must_change_password: false,
+              auth_user_id: caller.id,
+              notes: "تم تفعيل الحساب بنجاح بواسطة الموظف",
+            })
+            .eq("id", userRow.id)
+
+          await supabaseAdmin
+            .from("registration_requests")
+            .update({
+              invitation_status: "accepted",
+              updated_at: new Date().toISOString(),
+            })
+            .or(`employee_id.eq.${userRow.employee_id},email.eq.${userRow.email}`)
+        } else {
+          return new Response(JSON.stringify({ error: errMsg || "فشل إتمام تفعيل الحساب في قاعدة البيانات." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           })
-          .or(`employee_id.eq.${userRow.employee_id},email.eq.${userRow.email}`)
+        }
       }
 
       // Synchronize server-managed Auth app_metadata and user_metadata
