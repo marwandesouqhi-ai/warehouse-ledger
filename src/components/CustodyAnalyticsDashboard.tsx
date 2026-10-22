@@ -87,7 +87,7 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
   }, [items])
 
   return (
-    <div className="custody-analytics-dashboard animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+    <div className="custody-analytics-dashboard animate-fade-in flex flex-col gap-4">
       {/* 1. Header Banner */}
       <div className="custody-dash-banner card-surface">
         <div className="custody-dash-banner-lead">
@@ -106,18 +106,16 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
 
         <button
           type="button"
-          className="highlight-action-btn"
           onClick={onExportAllExcel}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: 'var(--text-sm)' }}
           title="تصدير ملف Excel متعدد الصفحات يحتوي على صفحة لكل كلية + صفحة ملخص عام"
-        >
+         className="highlight-action-btn secondary-btn flex items-center gap-2 p-3 font-sm">
           <FileSpreadsheet size={17} />
           <span>تصدير سجل الجرد الموحد (Excel شامل لكافة الكليات)</span>
         </button>
       </div>
 
       {/* 2. Grand Total KPI Cards */}
-      <div className="custody-kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+      <div className="custody-kpis-grid custody-kpis-grid-fit">
         <div className="custody-kpi-card card-surface tone-emerald">
           <div className="kpi-mini-head">
             <span>إجمالي القيمة الدفترية للأصول</span>
@@ -166,11 +164,11 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
         {/* Warehouses Comparative Chart */}
         <div className="card-surface custody-dash-wh-card">
           <div className="custody-dash-wh-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)' }}>
-              <Building2 size={18} style={{ color: 'var(--accent)' }} />
+            <div className="flex items-center gap-2 font-bold text-ink">
+              <Building2 size={18} className="text-accent" />
               <span>توزيع القيمة المالية للأصول بين الكليات والمخازن</span>
             </div>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>مرتبة حسب القيمة</span>
+            <span className="font-xs text-muted">مرتبة حسب القيمة</span>
           </div>
 
           <div className="custody-dash-wh-list">
@@ -186,19 +184,19 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
                   tabIndex={0}
                 >
                   <div className="custody-dash-wh-top-row">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--ink)' }}>{wh.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold font-sm text-ink">{wh.name}</span>
                       {wh.isHub && (
                         <span className="custody-dash-wh-hub-badge">
                           المغذي
                         </span>
                       )}
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>({wh.itemsCount} بند)</span>
+                      <span className="font-xs text-muted">({wh.itemsCount} بند)</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)' }}>{formatMoney(wh.stats.totalValue, currency)}</strong>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', fontWeight: 700 }}>{wh.sharePercentage}%</span>
-                      <ArrowUpRight size={14} style={{ color: 'var(--muted)' }} />
+                    <div className="flex items-center gap-2">
+                      <strong className="font-sm text-ink">{formatMoney(wh.stats.totalValue, currency)}</strong>
+                      <span className="font-xs text-accent font-bold">{wh.sharePercentage}%</span>
+                      <ArrowUpRight size={14} className="text-muted" />
                     </div>
                   </div>
 
@@ -219,24 +217,24 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
         </div>
 
         {/* Technical Condition Matrix & Categories */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+        <div className="flex flex-col gap-4">
           {/* Categories Distribution */}
           <div className="card-surface custody-dash-wh-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: 'var(--sp-3)' }}>
-              <Boxes size={18} style={{ color: 'var(--accent)' }} />
+            <div className="flex items-center gap-2 font-bold text-ink mb-3">
+              <Boxes size={18} className="text-accent" />
               <span>توزيع الأصول حسب التصنيفات الرئيسية</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+            <div className="flex flex-col gap-2">
               {categoryStats.map((cat) => (
                 <div
                   key={cat.category}
                   className="custody-dash-cat-item"
                 >
-                  <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{cat.category}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ color: 'var(--muted)', fontSize: 'var(--text-xs)' }}>{cat.count} صنف ({cat.units} وحدة)</span>
-                    <strong style={{ color: 'var(--accent)' }}>{formatMoney(cat.value, currency)}</strong>
+                  <span className="font-semibold text-ink">{cat.category}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-muted font-xs">{cat.count} صنف ({cat.units} وحدة)</span>
+                    <strong className="text-accent">{formatMoney(cat.value, currency)}</strong>
                   </div>
                 </div>
               ))}
@@ -245,44 +243,44 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
 
           {/* Condition Health Status */}
           <div className="card-surface custody-dash-wh-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--ink)', marginBottom: 'var(--sp-3)' }}>
-              <PieChart size={18} style={{ color: 'var(--accent)' }} />
+            <div className="flex items-center gap-2 font-bold text-ink mb-3">
+              <PieChart size={18} className="text-accent" />
               <span>الحالة الفنية التراكمية لأصول المؤسسة</span>
             </div>
 
             <div className="custody-dash-condition-grid">
               <div className="custody-dash-condition-box" data-condition="excellent">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                <div className="flex items-center gap-1 font-xs font-semibold">
                   <CheckCircle2 size={16} /> ممتازة (جاهزة للعمل)
                 </div>
-                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div className="text-lg font-bold text-ink mt-1">
                   {overallStats.excellent.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
               <div className="custody-dash-condition-box" data-condition="good">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                <div className="flex items-center gap-1 font-xs font-semibold">
                   <ShieldCheck size={16} /> جيدة (تعمل بكفاءة)
                 </div>
-                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div className="text-lg font-bold text-ink mt-1">
                   {overallStats.good.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
               <div className="custody-dash-condition-box" data-condition="maintenance">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                <div className="flex items-center gap-1 font-xs font-semibold">
                   <Wrench size={16} /> تتطلب صيانة / فحص
                 </div>
-                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div className="text-lg font-bold text-ink mt-1">
                   {overallStats.maintenance.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
 
               <div className="custody-dash-condition-box" data-condition="damaged">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                <div className="flex items-center gap-1 font-xs font-semibold">
                   <Ban size={16} /> تالفة / كهنة
                 </div>
-                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>
+                <div className="text-lg font-bold text-ink mt-1">
                   {overallStats.damaged.toLocaleString('ar-EG')} صنف
                 </div>
               </div>
@@ -293,15 +291,15 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
 
       {/* 4. Top 5 Highest-Value Assets */}
       <div className="card-surface custody-dash-wh-card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-          <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: 'var(--text-sm)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-ink font-sm">
             🏆 أعلى الأصول قيمة دفترية مسجلة في المؤسسة
           </div>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>تحديد أولويات التأمين والمتابعة الدورية</span>
+          <span className="font-xs text-muted">تحديد أولويات التأمين والمتابعة الدورية</span>
         </div>
 
         <div className="table-responsive">
-          <table className="custody-table" style={{ margin: 0 }}>
+          <table className="custody-table m-0">
             <thead>
               <tr>
                 <th>كود العهدة</th>
@@ -320,12 +318,12 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
                 return (
                   <tr key={asset.id}>
                     <td><code>{asset.code}</code></td>
-                    <td style={{ fontWeight: 600 }}>{asset.name}</td>
+                    <td className="font-semibold">{asset.name}</td>
                     <td>{wh?.name || asset.warehouseId}</td>
                     <td>{asset.category}</td>
-                    <td style={{ fontWeight: 700 }}>{asset.quantity} {asset.unit}</td>
+                    <td className="font-bold">{asset.quantity} {asset.unit}</td>
                     <td>{asset.unitPrice ? formatMoney(asset.unitPrice, currency) : '—'}</td>
-                    <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{formatMoney(asset.value, currency)}</td>
+                    <td className="text-accent font-bold">{formatMoney(asset.value, currency)}</td>
                     <td>
                       <span className={`status-pill ${asset.condition === 'excellent' || asset.condition === 'good' ? 'status-pill-ok' : 'status-pill-warn'}`}>
                         {asset.condition === 'excellent' ? 'ممتازة' : asset.condition === 'good' ? 'جيدة' : asset.condition === 'maintenance' ? 'صيانة' : 'كهنة'}

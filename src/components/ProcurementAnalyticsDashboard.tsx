@@ -146,8 +146,8 @@ export function ProcurementAnalyticsDashboard({
       {/* رأس القسم والإجراءات السريعة */}
       <div className="proc-dash-header">
         <div>
-          <h2 className="proc-dash-title" style={{ fontSize: isDashboardEmbed ? 'var(--text-md)' : 'var(--text-lg)' }}>
-            <Receipt size={22} style={{ color: 'var(--accent)' }} />
+          <h2 className={`proc-dash-title ${isDashboardEmbed ? 'text-md' : 'text-lg'}`}>
+            <Receipt size={22} className="text-accent" />
             تحليلات وبيانات قسم المشتريات والتوريدات
           </h2>
           <span className="proc-dash-subtitle">
@@ -168,7 +168,7 @@ export function ProcurementAnalyticsDashboard({
           <NavLink
             to="/purchases?tab=add"
             className="primary-btn"
-            style={{ textDecoration: 'none' }}
+            
           >
             <Plus size={16} />
             فاتورة وتوريد جديد
@@ -242,7 +242,7 @@ export function ProcurementAnalyticsDashboard({
             </div>
           </div>
           <div className="proc-dash-kpi-sub">
-            <NavLink to="/purchases/suppliers" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+            <NavLink to="/purchases/suppliers" className="text-accent font-semibold">
               عرض سجل الموردين ←
             </NavLink>
           </div>
@@ -252,7 +252,7 @@ export function ProcurementAnalyticsDashboard({
       {/* مسار التوريد ومؤشرات العمليات */}
       <div className="proc-dash-pipeline-card card-surface">
         <div className="proc-dash-pipeline-header">
-          <Truck size={18} style={{ color: 'var(--accent)' }} />
+          <Truck size={18} className="text-accent" />
           مؤشرات دورة التوريد والعمليات المسجلة
         </div>
         <div className="proc-dash-pipeline-grid">
@@ -276,17 +276,17 @@ export function ProcurementAnalyticsDashboard({
       <div className="proc-dash-recent-card card-surface">
         <div className="proc-dash-recent-header">
           <div>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--ink)' }}>
+            <div className="font-sm font-bold text-ink">
               أحدث فواتير وحركات الشراء والتوريد الفعلية
             </div>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>
+            <span className="font-xs text-muted">
               معاينة سريعة لآخر {filteredPurchases.length} حركة شراء مسجلة في النظام
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--muted)' }} />
+          <div className="flex gap-2 items-center">
+            <div className="input-search-wrap">
+              <Search size={14} className="input-search-icon" />
               <input
                 type="text"
                 placeholder="بحث برقم الفاتورة أو المورد أو الصنف..."
@@ -306,21 +306,21 @@ export function ProcurementAnalyticsDashboard({
 
         {filteredPurchases.length === 0 ? (
           <div className="proc-dash-empty-state">
-            <Package size={36} style={{ margin: '0 auto 8px', opacity: 0.4, display: 'block' }} />
+            <Package size={36} className="mx-auto mb-2 opacity-50 block" />
             لا توجد فواتير أو حركات شراء تطابق بحثك حالياً.
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="custom-table" style={{ width: '100%', fontSize: 'var(--text-xs)' }}>
+            <table className="custom-table w-full font-xs">
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'right' }}>التاريخ</th>
-                  <th style={{ textAlign: 'right' }}>رقم الفاتورة</th>
-                  <th style={{ textAlign: 'right' }}>المورد / الشركة</th>
-                  <th style={{ textAlign: 'right' }}>الصنف</th>
-                  <th style={{ textAlign: 'center' }}>الكمية</th>
-                  <th style={{ textAlign: 'center' }}>سعر الوحدة</th>
-                  <th style={{ textAlign: 'center' }}>الإجمالي</th>
+                  <th className="text-right">التاريخ</th>
+                  <th className="text-right">رقم الفاتورة</th>
+                  <th className="text-right">المورد / الشركة</th>
+                  <th className="text-right">الصنف</th>
+                  <th className="text-center">الكمية</th>
+                  <th className="text-center">سعر الوحدة</th>
+                  <th className="text-center">الإجمالي</th>
                 </tr>
               </thead>
               <tbody>
@@ -332,15 +332,15 @@ export function ProcurementAnalyticsDashboard({
                     <tr key={m.id}>
                       <td>{m.date || '—'}</td>
                       <td>
-                        <strong style={{ color: 'var(--ink)' }}>{m.inv || '—'}</strong>
+                        <strong className="text-ink">{m.inv || '—'}</strong>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 600, color: 'var(--chart-1)' }}>{m.from || '—'}</span>
+                        <span className="font-semibold text-chart-1">{m.from || '—'}</span>
                       </td>
                       <td>{m.item || '—'}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{q.toLocaleString('ar-EG')}</td>
-                      <td style={{ textAlign: 'center' }}>{p > 0 ? formatCurrency(p, currency) : '—'}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--chart-3)' }}>
+                      <td className="text-center font-semibold">{q.toLocaleString('ar-EG')}</td>
+                      <td className="text-center">{p > 0 ? formatCurrency(p, currency) : '—'}</td>
+                      <td className="text-center font-bold text-chart-3">
                         {total > 0 ? formatCurrency(total, currency) : '—'}
                       </td>
                     </tr>

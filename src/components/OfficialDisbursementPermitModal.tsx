@@ -165,85 +165,34 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
       <div
         className="modal-dialog official-permit-dialog"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '96vw',
-          maxWidth: '1440px',
-          height: '95vh',
-          maxHeight: '95vh',
-          display: 'flex',
-          flexDirection: 'column',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          background: 'var(--surface)',
-        }}
       >
         {/* Modal Controls Header (Hidden in Print) */}
-        <div
-          className="modal-header no-print"
-          style={{
-            padding: '16px 24px',
-            borderBottom: '1px solid var(--line)',
-            background: 'var(--surface)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          }}
-        >
-          <div className="modal-title-wrap" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              className="modal-title-icon"
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'var(--badge-success-bg)',
-                color: 'var(--accent)',
-              }}
-            >
+        <div className="modal-header no-print permit-controls-header">
+          <div className="modal-title-wrap flex items-center gap-3">
+            <div className="modal-title-icon permit-title-icon">
               <FileCheck2 size={22} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ink)' }}>
+              <div className="flex items-center gap-2">
+                <h3 className="m-0 text-lg font-bold text-ink">
                   إصدار وطباعة إذن صرف / تسليم عهدة رسمي
                 </h3>
-                <span
-                  style={{
-                    fontSize: '0.76rem',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    background: 'var(--bg)',
-                    border: '1px solid var(--line)',
-                    color: 'var(--muted)',
-                  }}
-                >
+                <span className="permit-badge-tag">
                   حجم شاشة كامل (A4 معتمد)
                 </span>
               </div>
-              <span className="modal-subtitle" style={{ fontSize: '0.84rem', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+              <span className="modal-subtitle font-xs text-muted mt-1 block">
                 نموذج حكومي رسمي معتمد بالترويسة والختم والعلامة المائية المعتمدة مع إمكانية تحديد عدد القطع بدقة
               </span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="primary-btn"
+              className="primary-btn permit-print-btn"
               onClick={handlePrintPermit}
               disabled={itemsToPrint.length === 0}
-              style={{
-                padding: '8px 18px',
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
               title="طباعة إذن الصرف فوراً على مقاس A4"
             >
               <Printer size={16} />
@@ -251,20 +200,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
             </button>
             <button
               type="button"
-              className="modal-close-btn"
+              className="modal-close-btn permit-close-icon-btn"
               onClick={onClose}
               aria-label="إغلاق"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid var(--line)',
-                background: 'var(--bg)',
-                cursor: 'pointer',
-              }}
             >
               <X size={18} />
             </button>
@@ -272,93 +210,58 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
         </div>
 
         {/* Modal Main Content (2-Column Desktop Grid) */}
-        <div
-          className="modal-body-scroll"
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            padding: '16px 20px',
-            background: 'var(--bg)',
-          }}
-        >
-          <div
-            className="official-permit-body-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(380px, 460px) 1fr',
-              gap: '18px',
-              height: '100%',
-              alignItems: 'stretch',
-            }}
-          >
+        <div className="modal-body-scroll permit-modal-body-scroll">
+          <div className="official-permit-body-grid">
             {/* ═══════════════════════════════════════════════════════════ */}
             {/* RIGHT COLUMN: PERMIT CONFIG & ITEM QUANTITIES (Hidden in Print) */}
             {/* ═══════════════════════════════════════════════════════════ */}
-            <div
-              className="no-print"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px',
-                height: '100%',
-                overflowY: 'auto',
-                paddingRight: '4px',
-              }}
-            >
+            <div className="no-print permit-left-col">
               {/* Card 1: Permit Metadata Form */}
-              <div
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--line)',
-                  padding: '14px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 700, fontSize: '0.92rem', color: 'var(--ink)' }}>
+              <div className="permit-card-box">
+                <div className="flex items-center gap-2 mb-3 font-bold font-sm text-ink">
                   <ArrowRightLeft size={16} className="text-accent" />
                   <span>بيانات إذن الصرف والتوجيه</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                <div className="grid-2col-fit">
+                  <label className="form-label-compact">
                     نوع المستند:
                     <select
                       value={permitType}
                       onChange={(e) => setPermitType(e.target.value as 'disburse' | 'receive')}
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     >
                       <option value="disburse">إذن صرف عهدة ومهمات</option>
                       <option value="receive">محضر فحص واستلام عهدة</option>
                     </select>
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <label className="form-label-compact">
                     رقم الإذن:
                     <input
                       type="text"
                       value={permitNumber}
                       onChange={(e) => setPermitNumber(e.target.value)}
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     />
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <label className="form-label-compact">
                     تاريخ الإذن:
                     <input
                       type="date"
                       value={permitDate}
                       onChange={(e) => setPermitDate(e.target.value)}
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     />
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <label className="form-label-compact">
                     المخزن المنصرف منه (المسلّم):
                     <select
                       value={sourceWarehouseId}
                       onChange={(e) => setSourceWarehouseId(e.target.value)}
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     >
                       {WAREHOUSES.map((w) => (
                         <option key={w.id} value={w.id}>{w.name}</option>
@@ -366,12 +269,12 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     </select>
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <label className="form-label-compact">
                     الجهة المستلمة (الكلية):
                     <select
                       value={targetWarehouseId}
                       onChange={(e) => setTargetWarehouseId(e.target.value)}
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     >
                       {WAREHOUSES.map((w) => (
                         <option key={w.id} value={w.id}>{w.name}</option>
@@ -379,75 +282,49 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     </select>
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <label className="form-label-compact">
                     اسم أمين العهدة المستلم:
                     <input
                       type="text"
                       value={recipientName}
                       onChange={(e) => setRecipientName(e.target.value)}
                       placeholder="اسم المستلم رباعي"
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     />
                   </label>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 600, gridColumn: 'span 2' }}>
+                  <label className="form-label-compact col-span-2">
                     سبب وقرار الصرف:
                     <input
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="سبب وتوجيه الصرف"
-                      style={{ padding: '6px 8px', borderRadius: '7px', border: '1px solid var(--line)', background: 'var(--bg)', fontSize: '0.82rem' }}
+                      className="input-compact"
                     />
                   </label>
                 </div>
               </div>
 
               {/* Card 2: Items & Piece Quantity Manager */}
-              <div
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--line)',
-                  padding: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  flex: 1,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  minHeight: '340px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.92rem', color: 'var(--ink)' }}>
+              <div className="permit-card-flex-box">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 font-bold font-sm text-ink">
                     <Package size={16} className="text-accent" />
                     <span>تحديد الأصناف وعدد القطع</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div className="flex gap-1">
                     <button
                       type="button"
+                      className="permit-small-btn"
                       onClick={selectAllCandidates}
-                      style={{
-                        padding: '3px 8px',
-                        fontSize: '0.72rem',
-                        borderRadius: '6px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--bg)',
-                        cursor: 'pointer',
-                      }}
                     >
                       تحديد الكل
                     </button>
                     <button
                       type="button"
+                      className="permit-small-btn"
                       onClick={clearAllCandidates}
-                      style={{
-                        padding: '3px 8px',
-                        fontSize: '0.72rem',
-                        borderRadius: '6px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--bg)',
-                        cursor: 'pointer',
-                      }}
                     >
                       إلغاء التحديد
                     </button>
@@ -455,38 +332,20 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 </div>
 
                 {/* Search Bar for items */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--line)',
-                    background: 'var(--bg)',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <Search size={14} style={{ color: 'var(--muted)' }} />
+                <div className="permit-search-bar">
+                  <Search size={14} className="text-muted" />
                   <input
                     type="search"
                     placeholder="ابحث بالاسم، الكود، أو السيريال..."
                     value={itemSearchTerm}
                     onChange={(e) => setItemSearchTerm(e.target.value)}
-                    style={{
-                      border: 'none',
-                      outline: 'none',
-                      background: 'transparent',
-                      width: '100%',
-                      fontSize: '0.8rem',
-                      color: 'var(--ink)',
-                    }}
+                    className="permit-search-input"
                   />
                   {itemSearchTerm && (
                     <button
                       type="button"
                       onClick={() => setItemSearchTerm('')}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      className="bg-none border-none cursor-pointer p-0"
                     >
                       <X size={13} />
                     </button>
@@ -494,19 +353,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 </div>
 
                 {/* Items List with Custom Quantity Selector */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    overflowY: 'auto',
-                    flex: 1,
-                    maxHeight: '360px',
-                    paddingLeft: '2px',
-                  }}
-                >
+                <div className="permit-items-list-container">
                   {candidateItems.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                    <div className="text-center p-5 text-muted font-xs">
                       لا توجد أصناف متوفرة في مخزن "{sourceWh.name}" مطابقة للبحث.
                     </div>
                   ) : (
@@ -517,99 +366,46 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                       return (
                         <div
                           key={item.id}
-                          style={{
-                            borderRadius: '10px',
-                            border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                            background: isSelected ? 'var(--accent-dim)' : 'var(--bg)',
-                            padding: '10px 12px',
-                            transition: 'all 0.15s ease',
-                          }}
+                          className={`permit-item-row ${isSelected ? 'selected' : ''}`}
                         >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                            <label
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: '8px',
-                                cursor: 'pointer',
-                                flex: 1,
-                              }}
-                            >
+                          <div className="flex items-start justify-between gap-2">
+                            <label className="permit-item-row-label">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleItem(item)}
-                                style={{
-                                  marginTop: '3px',
-                                  cursor: 'pointer',
-                                  width: '16px',
-                                  height: '16px',
-                                  accentColor: 'var(--accent)',
-                                }}
+                                className="permit-item-checkbox"
                               />
                               <div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                <div className="font-sm font-bold text-ink">
                                   {item.name}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', fontSize: '0.74rem', color: 'var(--muted)' }}>
-                                  <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{item.code}</span>
+                                <div className="flex items-center gap-2 mt-1 font-xs text-muted">
+                                  <span className="font-mono font-semibold">{item.code}</span>
                                   <span>•</span>
                                   <span>المتاح بالرصيد: <strong>{item.quantity}</strong> {item.unit}</span>
                                 </div>
                               </div>
                             </label>
 
-                            <span
-                              style={{
-                                fontSize: '0.72rem',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                background: isSelected ? 'var(--accent)' : 'var(--surface)',
-                                color: isSelected ? 'var(--text-on-accent)' : 'var(--muted)',
-                                fontWeight: 700,
-                              }}
-                            >
+                            <span className={`permit-item-status-badge ${isSelected ? 'selected' : 'unselected'}`}>
                               {isSelected ? 'مشمول بالإذن' : 'غير محدد'}
                             </span>
                           </div>
 
                           {/* When selected: Quantity Stepper & Direct Input */}
                           {isSelected && (
-                            <div
-                              style={{
-                                marginTop: '10px',
-                                paddingTop: '8px',
-                                borderTop: '1px dashed var(--line)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '10px',
-                                background: 'var(--surface)',
-                                padding: '8px 10px',
-                                borderRadius: '8px',
-                              }}
-                            >
-                              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--ink)' }}>
+                            <div className="permit-item-qty-stepper-box">
+                              <div className="font-xs font-semibold text-ink">
                                 عدد القطع المراد صرفها:
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="flex items-center gap-1">
                                 <button
                                   type="button"
+                                  className="permit-stepper-btn"
                                   onClick={() => updateQuantity(item.id, disburseQty - 1, item.quantity)}
                                   disabled={disburseQty <= 1}
-                                  style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '6px',
-                                    border: '1px solid var(--line)',
-                                    background: 'var(--bg)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: disburseQty <= 1 ? 'not-allowed' : 'pointer',
-                                    opacity: disburseQty <= 1 ? 0.4 : 1,
-                                  }}
                                   aria-label="إنقاص قطعة واحدة"
                                 >
                                   <Minus size={13} />
@@ -621,80 +417,39 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                                   max={item.quantity}
                                   value={disburseQty}
                                   onChange={(e) => updateQuantity(item.id, Number(e.target.value), item.quantity)}
-                                  style={{
-                                    width: '60px',
-                                    padding: '4px 6px',
-                                    textAlign: 'center',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 700,
-                                    borderRadius: '6px',
-                                    border: '1.5px solid var(--accent)',
-                                    background: 'var(--bg)',
-                                    color: 'var(--ink)',
-                                  }}
+                                  className="permit-qty-input"
                                 />
 
                                 <button
                                   type="button"
+                                  className="permit-stepper-btn"
                                   onClick={() => updateQuantity(item.id, disburseQty + 1, item.quantity)}
                                   disabled={disburseQty >= item.quantity}
-                                  style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '6px',
-                                    border: '1px solid var(--line)',
-                                    background: 'var(--bg)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: disburseQty >= item.quantity ? 'not-allowed' : 'pointer',
-                                    opacity: disburseQty >= item.quantity ? 0.4 : 1,
-                                  }}
                                   aria-label="زيادة قطعة واحدة"
                                 >
                                   <Plus size={13} />
                                 </button>
 
-                                <span style={{ fontSize: '0.78rem', color: 'var(--muted)', minWidth: '40px' }}>
+                                <span className="font-xs text-muted min-w-40">
                                   من {item.quantity} {item.unit}
                                 </span>
 
                                 {item.quantity > 1 && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
+                                  <div className="flex items-center gap-1 me-1">
                                     <button
                                       type="button"
+                                      className={`permit-qty-quick-btn ${disburseQty === 1 ? 'active' : ''}`}
                                       onClick={() => updateQuantity(item.id, 1, item.quantity)}
                                       disabled={disburseQty === 1}
-                                      style={{
-                                        fontSize: '0.73rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '5px',
-                                        border: '1px solid var(--line)',
-                                        background: disburseQty === 1 ? 'var(--surface)' : 'var(--bg)',
-                                        color: 'var(--ink)',
-                                        cursor: disburseQty === 1 ? 'default' : 'pointer',
-                                        opacity: disburseQty === 1 ? 0.45 : 1,
-                                        fontWeight: 600,
-                                      }}
                                       title="تحديد قطعة واحدة فقط"
                                     >
                                       1 قطعة
                                     </button>
                                     <button
                                       type="button"
+                                      className={`permit-qty-quick-btn ${disburseQty === item.quantity ? 'active' : ''}`}
                                       onClick={() => updateQuantity(item.id, item.quantity, item.quantity)}
                                       disabled={disburseQty === item.quantity}
-                                      style={{
-                                        fontSize: '0.73rem',
-                                        padding: '2px 7px',
-                                        borderRadius: '5px',
-                                        border: '1px solid var(--accent)',
-                                        background: disburseQty === item.quantity ? 'var(--accent)' : 'var(--accent-dim)',
-                                        color: disburseQty === item.quantity ? 'var(--text-on-accent)' : 'var(--accent)',
-                                        cursor: disburseQty === item.quantity ? 'default' : 'pointer',
-                                        opacity: disburseQty === item.quantity ? 0.7 : 1,
-                                        fontWeight: 700,
-                                      }}
                                       title="صرف كامل الكمية المتاحة بالرصيد"
                                     >
                                       الكل ({item.quantity})
@@ -715,36 +470,13 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
             {/* ═══════════════════════════════════════════════════════════ */}
             {/* LEFT COLUMN: LIVE A4 OFFICIAL DOCUMENT PREVIEW */}
             {/* ═══════════════════════════════════════════════════════════ */}
-            <div
-              style={{
-                height: '100%',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--bg)',
-                borderRadius: '12px',
-                padding: '4px',
-              }}
-            >
-              <div
-                className="no-print"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  background: 'var(--surface)',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  marginBottom: '10px',
-                  fontSize: '0.82rem',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--ink)', fontWeight: 600 }}>
+            <div className="permit-right-col-preview">
+              <div className="no-print permit-preview-topbar">
+                <div className="flex items-center gap-1 text-ink font-semibold">
                   <Layers size={15} className="text-accent" />
                   <span>معاينة حية للمستند الرسمي A4 (الختم والعلامة المائية مفعّلة)</span>
                 </div>
-                <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>
+                <span className="text-muted font-xs">
                   {itemsToPrint.length} صنف مدرج • {totalDisbursedPieces} قطعة إجمالية
                 </span>
               </div>
@@ -755,18 +487,6 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
               <div
                 id="printable-official-permit"
                 className="printable-official-permit"
-                style={{
-                  position: 'relative',
-                  padding: '28px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: '2px solid #000000',
-                  borderRadius: '4px',
-                  fontFamily: "'Amiri', 'Traditional Arabic', 'Cairo', serif",
-                  lineHeight: 1.4,
-                  boxShadow: '0 4px 18px rgba(0,0,0,0.08)',
-                  overflow: 'hidden',
-                }}
               >
                 {/* Security Watermark (Logo centered behind text) */}
                 {logoUrl && (
@@ -776,26 +496,26 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 )}
 
                 {/* Header */}
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px double #000', paddingBottom: '14px', marginBottom: '16px' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>جمهورية مصر العربية</div>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 700 }}>{settings.organization || 'المؤسسة التعليمية'}</div>
-                    <div style={{ fontSize: '0.9rem' }}>{settings.department || 'إدارة المخازن المركزية'}</div>
-                    <div style={{ fontSize: '0.82rem' }}>قسم مراقبة وحسابات العهد الحكومية</div>
+                <div className="permit-doc-header">
+                  <div className="text-right">
+                    <div className="text-md font-bold">جمهورية مصر العربية</div>
+                    <div className="font-sm font-bold">{settings.organization || 'المؤسسة التعليمية'}</div>
+                    <div className="font-sm">{settings.department || 'إدارة المخازن المركزية'}</div>
+                    <div className="font-xs">قسم مراقبة وحسابات العهد الحكومية</div>
                   </div>
 
-                  <div style={{ textAlign: 'center' }}>
+                  <div className="text-center">
                     {logoUrl ? (
-                      <img src={logoUrl} alt="Logo" style={{ maxHeight: '68px', maxWidth: '100px', objectFit: 'contain' }} />
+                      <img src={logoUrl} alt="Logo" className="permit-logo-img" />
                     ) : (
-                      <div style={{ border: '1px solid #333', padding: '6px 12px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                        <Warehouse size={28} style={{ margin: '0 auto' }} />
+                      <div className="permit-logo-placeholder">
+                        <Warehouse size={28} className="mx-auto block" />
                         <div>شعار المؤسسة</div>
                       </div>
                     )}
                   </div>
 
-                  <div style={{ textAlign: 'left', direction: 'ltr', fontSize: '0.85rem' }}>
+                  <div className="text-left font-sm">
                     <div><strong>رقم الإذن:</strong> {permitNumber}</div>
                     <div><strong>التاريخ:</strong> {permitDate}</div>
                     <div><strong>السنة المالية:</strong> 2026/2027</div>
@@ -803,41 +523,41 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 </div>
 
                 {/* Title */}
-                <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', margin: '14px 0', borderBottom: '1px solid #000', paddingBottom: '10px' }}>
-                  <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, textDecoration: 'underline' }}>
+                <div className="permit-doc-title-block">
+                  <h2 className="m-0 text-xl font-bold underline">
                     {permitType === 'disburse' ? 'إذن صرف ونقل عهدة ومهمات مخزنية' : 'محضر فحص واستلام عهدة مستديمة'}
                   </h2>
-                  <div style={{ fontSize: '0.86rem', marginTop: '4px' }}>
+                  <div className="font-sm mt-1">
                     طبقاً للائحة المخازن والمشتريات الحكومية وقواعد حصر وتدقيق الأصول المستديمة
                   </div>
                 </div>
 
                 {/* Meta Strip */}
-                <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', fontSize: '0.92rem', marginBottom: '16px', background: '#f9f9f9', padding: '10px 14px', border: '1px solid #ccc' }}>
+                <div className="permit-meta-grid">
                   <div><strong>المخزن المنصرف منه (المسلّم):</strong> {sourceWh.name}</div>
                   <div><strong>الجهة المستلمة:</strong> {targetWh.name}</div>
                   <div><strong>اسم أمين العهدة المستلم:</strong> {recipientName || 'أمين عهدة الجهة'}</div>
                   <div><strong>الموقع / القاعة المستهدفة:</strong> {targetWh.building}</div>
-                  <div style={{ gridColumn: 'span 2' }}><strong>سبب وتوجيه الصرف:</strong> {notes}</div>
+                  <div className="col-span-2"><strong>سبب وتوجيه الصرف:</strong> {notes}</div>
                 </div>
 
                 {/* Items Table */}
-                <table style={{ position: 'relative', zIndex: 1, width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '0.9rem' }}>
+                <table className="permit-table">
                   <thead>
-                    <tr style={{ background: '#eee' }}>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '38px', textAlign: 'center' }}>م</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '95px' }}>كود العهدة</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px' }}>اسم الصنف ومواصفاته الفنية</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '70px', textAlign: 'center' }}>الكمية</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '65px', textAlign: 'center' }}>الوحدة</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '85px', textAlign: 'center' }}>الحالة</th>
-                      <th style={{ border: '1px solid #000', padding: '7px 8px', width: '130px' }}>ملاحظات / السيريال</th>
+                    <tr className="permit-table-header-row">
+                      <th className="w-10 text-center">م</th>
+                      <th className="w-24">كود العهدة</th>
+                      <th>اسم الصنف ومواصفاته الفنية</th>
+                      <th className="w-16 text-center">الكمية</th>
+                      <th className="w-16 text-center">الوحدة</th>
+                      <th className="w-20 text-center">الحالة</th>
+                      <th className="w-32">ملاحظات / السيريال</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itemsToPrint.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ border: '1px solid #000', padding: '18px', textAlign: 'center', color: '#666' }}>
+                        <td colSpan={7} className="p-4 text-center text-muted">
                           يرجى اختيار صنف واحد على الأقل وتحديد عدد القطع لإدراجه في إذن الصرف.
                         </td>
                       </tr>
@@ -846,17 +566,17 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                         const disburseQty = itemQuantities[item.id] ?? item.quantity
                         return (
                           <tr key={item.id}>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center' }}>{idx + 1}</td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', fontFamily: 'monospace', fontWeight: 600 }}>{item.code}</td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', fontWeight: 700 }}>{item.name}</td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 800, fontSize: '0.98rem' }}>
+                            <td className="text-center">{idx + 1}</td>
+                            <td className="font-mono font-semibold">{item.code}</td>
+                            <td className="font-bold">{item.name}</td>
+                            <td className="text-center font-extrabold text-base">
                               {disburseQty}
                             </td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center' }}>{item.unit}</td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center' }}>
+                            <td className="text-center">{item.unit}</td>
+                            <td className="text-center">
                               {item.condition === 'excellent' ? 'ممتازة' : item.condition === 'good' ? 'جيدة' : item.condition === 'maintenance' ? 'تحتاج صيانة' : 'كهنة'}
                             </td>
-                            <td style={{ border: '1px solid #000', padding: '6px 8px', fontSize: '0.82rem' }}>
+                            <td className="font-xs">
                               {item.serialNumber ? `S/N: ${item.serialNumber}` : item.notes || '—'}
                             </td>
                           </tr>
@@ -866,14 +586,14 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                   </tbody>
                   {itemsToPrint.length > 0 && (
                     <tfoot>
-                      <tr style={{ background: '#f5f5f5', fontWeight: 700 }}>
-                        <td colSpan={3} style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'left' }}>
+                      <tr className="permit-table-footer-row">
+                        <td colSpan={3} className="text-start">
                           إجمالي عدد القطع المصرّحة بالإذن:
                         </td>
-                        <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontSize: '1rem', fontWeight: 800 }}>
+                        <td className="text-center font-extrabold text-base">
                           {totalDisbursedPieces}
                         </td>
-                        <td colSpan={3} style={{ border: '1px solid #000', padding: '6px 8px' }}>
+                        <td colSpan={3}>
                           قطعة / وحدة عهدة
                         </td>
                       </tr>
@@ -882,37 +602,37 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 </table>
 
                 {/* Acknowledgment Statement */}
-                <div style={{ position: 'relative', zIndex: 1, fontSize: '0.88rem', margin: '14px 0', padding: '8px 12px', border: '1px dashed #444', lineHeight: 1.6 }}>
+                <div className="permit-declaration-box">
                   <strong>إقرار استلام:</strong> أقر أنا الموقع أدناه بأنني عاينت واستلمت كافة الأصناف والمهمات المبينة أعلاه بالعدد والكمية المحددة بحالة فنية سليمة ومطابقة للمواصفات، وقيدت بعهدتي الشخصية والمصلحية تحت مسؤوليتي المباشرة طبقاً للائحة المخازن الرسمية.
                 </div>
 
                 {/* Signatures Strip */}
-                <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '24px', textAlign: 'center', fontSize: '0.88rem' }}>
+                <div className="permit-signatures-grid">
                   <div>
                     <strong>أمين العهدة المستلم</strong>
-                    <div style={{ height: '42px' }} />
+                    <div className="permit-spacer-42" />
                     <div>الاسم: ....................</div>
                     <div>التوقيع: ..................</div>
                   </div>
 
                   <div>
                     <strong>أمين المخزن المسلّم</strong>
-                    <div style={{ height: '42px' }} />
+                    <div className="permit-spacer-42" />
                     <div>الاسم: ....................</div>
                     <div>التوقيع: ..................</div>
                   </div>
 
                   <div>
                     <strong>المراجع المخزني</strong>
-                    <div style={{ height: '42px' }} />
+                    <div className="permit-spacer-42" />
                     <div>الاسم: ....................</div>
                     <div>التوقيع: ..................</div>
                   </div>
 
-                  <div style={{ border: '1px dashed #999', padding: '4px', borderRadius: '4px' }}>
+                  <div className="permit-stamp-box">
                     <strong>يعتمد، مدير عام المخازن</strong>
-                    <div style={{ height: '28px' }} />
-                    <div style={{ fontSize: '0.78rem', color: '#555' }}>(خاتم شعار المؤسسة)</div>
+                    <div className="permit-spacer-28" />
+                    <div className="permit-stamp-subtext">(خاتم شعار المؤسسة)</div>
                   </div>
                 </div>
               </div>
@@ -921,37 +641,24 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
         </div>
 
         {/* Modal Footer (Hidden in Print) */}
-        <div
-          className="modal-footer no-print"
-          style={{
-            padding: '12px 24px',
-            borderTop: '1px solid var(--line)',
-            background: 'var(--surface)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.85rem', color: 'var(--muted)' }}>
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>
+        <div className="modal-footer no-print permit-footer-controls">
+          <div className="flex items-center gap-3 font-sm text-muted">
+            <span className="font-semibold text-ink">
               الملخص: {itemsToPrint.length} صنف محدد ({totalDisbursedPieces} قطعة إجمالية)
             </span>
             <span>•</span>
             <span>المستند مهيأ بالكامل للطباعة على ورقة A4 رأسية</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button type="button" className="secondary-btn" onClick={onClose} style={{ padding: '8px 18px' }}>
+          <div className="flex items-center gap-2">
+            <button type="button" className="secondary-btn" onClick={onClose}>
               إلغاء
             </button>
             <button
               type="button"
-              className="primary-btn"
               onClick={handlePrintPermit}
               disabled={itemsToPrint.length === 0}
-              style={{ padding: '9px 24px', fontSize: '0.92rem', fontWeight: 700 }}
-            >
+             className="primary-btn font-bold">
               <Printer size={16} />
               <span>طباعة الإذن الآن (A4 معتمد)</span>
             </button>

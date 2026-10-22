@@ -424,7 +424,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         <ShieldAlert size={18} />
                         <div>
                             <strong>خدمة المصادقة السحابية غير مهيأة:</strong>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>
+                            <p className="mt-1 m-0 font-sm">
                                 تم إيقاف تسجيل الدخول المحلي غير الآمن. يُرجى تهيئة متغيرات البيئة للاتصال بقاعدة بيانات Supabase للمتابعة.
                             </p>
                         </div>
@@ -520,7 +520,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             onChange={(event) => setUsername(event.target.value)}
                                             required
                                         />
-                                        <span style={{ fontSize: '0.76rem', color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
+                                        <span className="font-xs text-muted block mt-1">
                                             من 3 إلى 30 حرفاً إنجليزياً (أحرف صغيرة، أرقام، . _ -). يُستخدم لتسجيل الدخول لاحقاً.
                                         </span>
                                         {usernameValidation && (

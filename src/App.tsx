@@ -207,35 +207,25 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
   return (
     <section className="page-stack">
       <header className="page-intro">
-        <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+        <div className="page-intro-icon modal-icon-danger">
           <ShieldAlert size={22} />
         </div>
         <div>
-          <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية مقيدة</p>
+          <p className="eyebrow text-bad">صلاحية مقيدة</p>
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
       </header>
 
       <div className="card-surface restricted-screen-card">
-        <div style={{
-          width: '64px',
-          height: '64px',
-          borderRadius: '16px',
-          background: 'var(--badge-danger-bg)',
-          color: 'var(--bad)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 16px auto',
-        }}>
+        <div className="modal-title-icon modal-icon-danger restricted-icon-box">
           <ShieldAlert size={32} />
         </div>
-        <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>صلاحية حسابك للعرض والقراءة فقط</h3>
-        <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '20px' }}>
+        <h3 className="text-lg mb-2">صلاحية حسابك للعرض والقراءة فقط</h3>
+        <p className="text-muted font-sm leading-normal mb-4">
           {message}
         </p>
-        <NavLink to="/" className="primary-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <NavLink to="/" className="primary-btn inline-flex items-center gap-1">
           العودة إلى لوحة التحكم الرئيسية
         </NavLink>
       </div>
@@ -1547,27 +1537,18 @@ function App() {
                 )}
 
                 {/* 2. Unified Analytics Switcher */}
-                <div className="card-surface" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '14px', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
-                    <strong style={{ fontSize: '0.92rem', color: 'var(--ink)' }}>لوحة التحليلات والإحصائيات الشاملة للمؤسسة:</strong>
+                <div className="card-surface dashboard-analytics-bar">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={18} className="text-accent" />
+                    <strong className="font-sm text-ink">لوحة التحليلات والإحصائيات الشاملة للمؤسسة:</strong>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <div className="flex gap-2 flex-wrap">
                     {dashboardScope !== 'purchases_only' && (
                       <button
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'all' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('all')}
-                        style={{
-                          background: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'all' ? 'var(--text-on-accent)' : 'var(--ink)',
-                          borderColor: dashboardAnalyticsTab === 'all' ? 'var(--accent)' : 'var(--line)',
-                          fontWeight: 600,
-                          fontSize: '0.84rem',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                        }}
                       >
                         <Sparkles size={14} /> التحليل الشامل الموحد
                       </button>
@@ -1579,15 +1560,6 @@ function App() {
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'procurement' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('procurement')}
-                        style={{
-                          background: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'procurement' ? 'var(--text-on-accent)' : 'var(--ink)',
-                          borderColor: dashboardAnalyticsTab === 'procurement' ? 'var(--accent)' : 'var(--line)',
-                          fontWeight: 600,
-                          fontSize: '0.84rem',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                        }}
                       >
                         <Receipt size={14} /> تحليلات إدارة المشتريات
                       </button>
@@ -1599,15 +1571,6 @@ function App() {
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'movements' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('movements')}
-                        style={{
-                          background: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'movements' ? 'var(--text-on-accent)' : 'var(--ink)',
-                          borderColor: dashboardAnalyticsTab === 'movements' ? 'var(--accent)' : 'var(--line)',
-                          fontWeight: 600,
-                          fontSize: '0.84rem',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                        }}
                       >
                         <TrendingUp size={14} /> تحليلات حركة الوارد والمنصرف
                       </button>
@@ -1619,15 +1582,6 @@ function App() {
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'custody' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('custody')}
-                        style={{
-                          background: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--surface)',
-                          color: dashboardAnalyticsTab === 'custody' ? 'var(--text-on-accent)' : 'var(--ink)',
-                          borderColor: dashboardAnalyticsTab === 'custody' ? 'var(--accent)' : 'var(--line)',
-                          fontWeight: 600,
-                          fontSize: '0.84rem',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                        }}
                       >
                         <Building2 size={14} /> تحليلات عهدة وأصول الكليات (8 مخازن)
                       </button>
@@ -1637,7 +1591,7 @@ function App() {
 
                 {/* 3. Procurement Analytics Section */}
                 {dashboardScope !== 'warehouse_only' && (dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'procurement') && (
-                  <div style={{ marginTop: '8px' }}>
+                  <div className="mt-2">
                     <ProcurementAnalyticsDashboard
                       movements={movements}
                       currency={settings.currency}
@@ -1813,19 +1767,18 @@ function App() {
 
             {/* Custody & Assets Analytics across the 8 Colleges */}
             {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'custody') && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Building2 size={19} style={{ color: 'var(--accent)' }} />
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink)' }}>
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 size={19} className="text-accent" />
+                    <h3 className="m-0 text-lg font-bold text-ink">
                       إحصائيات وتحليلات عهد وأصول كليات المؤسسة (8 كليات)
                     </h3>
                   </div>
                   <button
                     type="button"
-                    className="secondary-btn"
+                    className="secondary-btn btn-sm"
                     onClick={() => navigate('/reports')}
-                    style={{ fontSize: '0.82rem', padding: '5px 12px' }}
                   >
                     <FileSpreadsheet size={14} /> الانتقال لمركز التقارير
                   </button>
@@ -2032,7 +1985,7 @@ function App() {
                             ))
                           ) : (
                             <li className="activity-empty-state">
-                              <History size={24} style={{ opacity: 0.5, marginBottom: 6 }} />
+                              <History size={24} className="opacity-50 mb-1" />
                               <div>لا توجد عمليات مسجلة حديثاً في سجل التدقيق.</div>
                             </li>
                           )}
@@ -2297,7 +2250,7 @@ function App() {
             <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div className="modal-title-wrap">
-                  <div className="modal-title-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+                  <div className="modal-title-icon modal-icon-danger">
                     <Trash2 size={18} />
                   </div>
                   <div>
@@ -2542,7 +2495,7 @@ function MovementsPage({
 
       {activeTab === 'add' ? (
         <div className="movements-add-section">
-          <div className="section-head movement-heading" style={{ marginBottom: '16px' }}>
+          <div className="section-head movement-heading mb-4">
             <div>
               <h2><PackagePlus size={19} /> تسجيل حركة جديدة</h2>
               <span>سجّل بيانات التوريد لحساب المخزن الرئيسي أو بيانات الصرف لحساب المخازن الفرعية</span>
@@ -2588,8 +2541,8 @@ function MovementsPage({
           </div>
 
           {addSuccessMessage && (
-            <div className="inline-message success" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="inline-message success mb-4 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
                 <CheckCircle2 size={18} />
                 <span>{addSuccessMessage}</span>
               </div>
@@ -2600,7 +2553,6 @@ function MovementsPage({
                   setAddSuccessMessage('')
                   handleTabChange('add')
                 }}
-                style={{ fontSize: '0.82rem', padding: '4px 12px' }}
               >
                 <Plus size={14} /> إضافة حركة أخرى
               </button>
@@ -2609,38 +2561,20 @@ function MovementsPage({
 
       <div className="movements-filter-toolbar">
         {onSearchChange && (
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: '220px' }}>
-            <Search size={15} style={{ position: 'absolute', right: '10px', color: 'var(--muted)', pointerEvents: 'none' }} />
+          <div className="input-search-wrap">
+            <Search size={15} className="input-search-icon" />
             <input
               type="search"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="بحث في الحركات..."
-              style={{
-                width: '100%',
-                padding: '7px 32px 7px 28px',
-                borderRadius: '8px',
-                border: '1px solid var(--line)',
-                background: 'var(--bg)',
-                color: 'var(--ink)',
-                fontSize: '0.85rem'
-              }}
+              className="search-input-field w-full"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
-                style={{
-                  position: 'absolute',
-                  left: '8px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--muted)',
-                  padding: '2px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
+                className="input-action-btn"
                 title="مسح البحث"
               >
                 <X size={13} />
@@ -2650,7 +2584,7 @@ function MovementsPage({
         )}
 
         <div className="filter-group">
-          <Filter size={15} style={{ opacity: 0.6 }} />
+          <Filter size={15} className="opacity-60" />
           <button
             type="button"
             className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
@@ -2682,7 +2616,7 @@ function MovementsPage({
         </div>
 
         <div className="sort-group">
-          <ArrowUpDown size={15} style={{ opacity: 0.6 }} />
+          <ArrowUpDown size={15} className="opacity-60" />
           <select
             className="sort-select"
             value={sortOption}

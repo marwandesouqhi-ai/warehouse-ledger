@@ -831,10 +831,10 @@ export default function UsersPage({ session }: UsersPageProps) {
                     <div className="users-restricted-icon-box">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 className="modal-lead-text" style={{ fontSize: '1.25rem' }}>
+                    <h3 className="modal-lead-text text-lg">
                         صلاحية وصول مقيدة لمدير النظام فقط
                     </h3>
-                    <p className="text-muted" style={{ margin: '0 0 24px 0', lineHeight: '1.6' }}>
+                    <p className="text-muted mb-5 leading-normal">
                         عذراً، إدارة المستخدمين والاطلاع على حساباتهم وتغيير كلمات المرور مخصصة حصرياً لحسابات <strong>مدير النظام (System Administrator)</strong> لحماية سرية وأمان الحسابات.
                     </p>
                 </div>
@@ -1060,20 +1060,17 @@ export default function UsersPage({ session }: UsersPageProps) {
                                     value={newEmail}
                                     onChange={(e) => setNewEmail(e.target.value)}
                                     placeholder="employee@company.com"
-                                    className="user-field-input"
-                                    style={{ direction: 'ltr', textAlign: 'right' }}
+                                    className="user-field-input text-ltr"
                                 />
                             </label>
 
                             <label className="user-field-group">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div className="flex justify-between items-center">
                                     <span>كلمة المرور <span className="req-star">*</span></span>
                                     <button
                                         type="button"
                                         onClick={generateRandomPassword}
-                                        className="text-link-btn"
-                                        style={{ fontSize: '0.78rem' }}
-                                    >
+                                     className="text-link-btn font-xs">
                                         <Sparkles size={13} /> توليد عشوائي
                                     </button>
                                 </div>
@@ -1084,8 +1081,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         onChange={(e) => setNewPassword(e.target.value)}
                                         placeholder="أدخل كلمة المرور"
                                         required
-                                        className="user-field-input"
-                                        style={{ paddingInlineStart: '12px', paddingInlineEnd: '40px' }}
+                                        className="user-field-input input-with-end-padding"
                                     />
                                     <button
                                         type="button"
@@ -1495,10 +1491,10 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                     {/* Delegation Control Banner */}
                     <div className="users-delegation-banner">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="flex items-center gap-2">
                             <ShieldCheck size={20} color="var(--accent)" />
                             <div>
-                                <strong className="modal-lead-text" style={{ margin: 0 }}>
+                                <strong className="modal-lead-text m-0">
                                     تفويض مراجعة واعتماد طلبات الموظفين لمدراء الأقسام
                                 </strong>
                                 <span className="modal-help-text">
@@ -1528,7 +1524,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         <table className="custody-table">
                             <thead>
                                 <tr>
-                                    <th style={{ width: '40px' }}>م</th>
+                                    <th className="col-w-num">م</th>
                                     <th>بيانات المتقدم والاتصال</th>
                                     <th>القسم والدور الوظيفي</th>
                                     <th>حالة الطلب والاعتماد</th>
@@ -1546,7 +1542,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 ) : (
                                     filteredRequests.map((req, idx) => (
                                         <tr key={req.id}>
-                                            <td className="tabular-nums text-muted" style={{ verticalAlign: 'top', paddingTop: '16px' }}>{idx + 1}</td>
+                                            <td className="tabular-nums text-muted cell-top-align">{idx + 1}</td>
                                             
                                             {/* 1. بيانات المتقدم والاتصال */}
                                             <td>
@@ -1590,7 +1586,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                             {/* 3. حالة الطلب والاعتماد وتاريخ التقديم */}
                                             <td>
                                                 <div className="user-stack-cell">
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                    <div className="flex items-center gap-1 flex-wrap">
                                                         <span className={`badge ${req.approvalStatus === 'approved' ? 'badge--ok' : req.approvalStatus === 'rejected' ? 'badge--bad' : 'badge--info'}`}>
                                                             {req.approvalStatus === 'approved'
                                                                 ? 'معتمد'
@@ -1629,7 +1625,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 {req.approvalStatus === 'approved' ? 'بانتظار إرسال الرابط' : '—'}
                                                             </span>
                                                         )}
-                                                        <span className="text-muted text-xs tabular-nums" style={{ marginInlineStart: '4px' }}>
+                                                        <span className="text-muted text-xs tabular-nums ms-1">
                                                             بتاريخ: {new Date(req.createdAt).toLocaleDateString('ar-EG')}
                                                         </span>
                                                     </div>
@@ -1751,15 +1747,15 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
 
                     <div className="users-security-user-badge">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div className="modal-title-icon modal-icon-accent" style={{ borderRadius: '50%' }}>
+                        <div className="flex items-center gap-3">
+                            <div className="modal-title-icon modal-icon-accent rounded-full">
                                 <ShieldCheck size={22} />
                             </div>
                             <div>
-                                <strong style={{ fontSize: '0.92rem', display: 'block', color: 'var(--ink)' }}>
+                                <strong className="font-sm block text-ink">
                                     {activeUserEmail}
                                 </strong>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                <span className="font-xs text-muted">
                                     الدور الحالي: {isSystemAdmin ? 'مدير النظام الرئيسي' : (ROLE_LABELS[activeUserRole as EffectiveRole] || activeUserRole || 'موظف')}
                                 </span>
                             </div>
@@ -1770,7 +1766,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
 
                     <div className="users-security-box">
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+                        <div className="form-grid-2col">
                             <label className="user-field-group">
                                 <span>كلمة المرور الجديدة <span className="req-star">*</span></span>
                                 <div className="users-input-wrapper">
@@ -1779,8 +1775,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         value={selfPassword}
                                         onChange={(e) => setSelfPassword(e.target.value)}
                                         placeholder="أدخل كلمة المرور الجديدة"
-                                        className="user-field-input"
-                                        style={{ paddingInlineStart: '12px', paddingInlineEnd: '40px' }}
+                                        className="user-field-input input-with-end-padding"
                                     />
                                     <button
                                         type="button"
@@ -1865,7 +1860,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </label>
 
                                 <label className="form-label-block">
-                                    الصلاحية {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(آخر مدير نظام نشط محمي ضد خفض الصلاحيات)</span>}
+                                    الصلاحية {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span className="protect-badge">(آخر مدير نظام نشط محمي ضد خفض الصلاحيات)</span>}
                                     <select
                                         value={editRole}
                                         onChange={(e) => setEditRole(e.target.value as UserRole)}
@@ -1892,12 +1887,12 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </label>
 
                                 <div className="info-grid-box">
-                                    <span style={{ fontSize: '0.84rem', fontWeight: 600, display: 'block', marginBottom: '6px', color: 'var(--ink)' }}>
+                                    <span className="font-sm font-semibold block mb-1 text-ink">
                                         صلاحيات استثنائية إضافية:
                                     </span>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div className="flex flex-col gap-2">
                                         {(['view_audit', 'view_settings', 'manage_records'] as Permission[]).map((p) => (
-                                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', color: 'var(--ink)' }}>
+                                            <label key={p} className="flex items-center gap-1 font-xs cursor-pointer text-ink">
                                                 <input
                                                     type="checkbox"
                                                     checked={editPermissions.includes(p)}
@@ -1905,7 +1900,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                         if (e.target.checked) setEditPermissions([...editPermissions, p])
                                                         else setEditPermissions(editPermissions.filter(x => x !== p))
                                                     }}
-                                                    style={{ accentColor: 'var(--accent)' }}
+                                                    className="accent-checkbox"
                                                 />
                                                 <span>{PERMISSION_LABELS[p]}</span>
                                             </label>
@@ -1915,19 +1910,18 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                 <label className="form-label-block">
                                     تغيير كلمة المرور (اتركه فارغاً للإبقاء على الحالية)
-                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <div className="input-icon-wrapper">
                                         <input
                                             type={showEditPassword ? 'text' : 'password'}
                                             value={editPassword}
                                             onChange={(e) => setEditPassword(e.target.value)}
                                             placeholder="اتركه فارغاً لعدم التغيير"
-                                            className="form-input-themed"
-                                            style={{ paddingLeft: '36px' }}
+                                            className="form-input-themed input-with-end-padding"
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowEditPassword(!showEditPassword)}
-                                            style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                                            className="input-action-btn"
                                             aria-label={showEditPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         >
                                             {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1942,13 +1936,12 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         value={editActivationCode}
                                         onChange={(e) => setEditActivationCode(e.target.value)}
                                         required
-                                        className="form-input-themed"
-                                        style={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                        className="form-input-themed font-mono font-bold"
                                     />
                                 </label>
 
                                 <label className="form-label-block">
-                                    حالة الحساب {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span style={{ color: 'var(--accent)', fontSize: '0.78rem' }}>(نشط دائماً ومحمي ضد التعطيل)</span>}
+                                    حالة الحساب {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span className="protect-badge">(نشط دائماً ومحمي ضد التعطيل)</span>}
                                     <select
                                         value={editStatus}
                                         onChange={(e) => setEditStatus(e.target.value as 'active' | 'pending_activation')}
@@ -1962,7 +1955,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                 {editError && <div className="inline-message error">{editError}</div>}
 
-                                <div className="form-actions" style={{ marginTop: '8px' }}>
+                                <div className="form-actions mt-2">
                                     <button type="button" className="secondary-btn" onClick={() => setEditingUser(null)}>
                                         إلغاء
                                     </button>
@@ -2003,7 +1996,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 لن يتمكن هذا المستخدم من تسجيل الدخول إلى النظام بعد الحذف.
                             </p>
 
-                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                            <div className="form-actions mt-4">
                                 <button type="button" className="secondary-btn" onClick={() => setDeletingUser(null)}>
                                     إلغاء
                                 </button>
@@ -2042,32 +2035,29 @@ export default function UsersPage({ session }: UsersPageProps) {
                         <div className="modal-body modal-body-pad">
                             <form onSubmit={handleSaveUserPassword} className="form-label-block">
                                 <label className="form-label-block">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div className="flex justify-between items-center">
                                         <span>كلمة المرور الجديدة</span>
                                         <button
                                             type="button"
                                             onClick={handleGenerateModalPassword}
-                                            className="text-link-btn"
-                                            style={{ fontSize: '0.78rem' }}
-                                        >
+                                         className="text-link-btn font-xs">
                                             <Sparkles size={13} />
                                             توليد كلمة مرور
                                         </button>
                                     </div>
-                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <div className="input-icon-wrapper">
                                         <input
                                             type={showModalNewPassword ? 'text' : 'password'}
                                             value={modalNewPassword}
                                             onChange={(e) => setModalNewPassword(e.target.value)}
                                             required
                                             placeholder="أدخل كلمة المرور الجديدة"
-                                            className="form-input-themed"
-                                            style={{ paddingLeft: '36px' }}
+                                            className="form-input-themed input-with-end-padding"
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowModalNewPassword(!showModalNewPassword)}
-                                            style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                                            className="input-action-btn"
                                             aria-label={showModalNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         >
                                             {showModalNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -2077,13 +2067,13 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                 {pwdModalError && <div className="inline-message error">{pwdModalError}</div>}
                                 {pwdModalSuccess && (
-                                    <div className="inline-message success" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <div className="inline-message success flex items-center gap-1">
                                         <Check size={16} />
                                         {pwdModalSuccess}
                                     </div>
                                 )}
 
-                                <div className="form-actions" style={{ marginTop: '10px' }}>
+                                <div className="form-actions mt-2">
                                     <button type="button" className="secondary-btn" onClick={() => setPwdModalUser(null)}>
                                         إلغاء
                                     </button>
@@ -2117,20 +2107,20 @@ export default function UsersPage({ session }: UsersPageProps) {
                         </div>
 
                         <div className="modal-body modal-body-pad">
-                            <div className="info-grid-box" style={{ marginBottom: '16px', fontSize: '0.86rem' }}>
+                            <div className="info-grid-box mb-4 font-sm">
                                 <div className="info-grid-row">
-                                    <span style={{ color: 'var(--muted)' }}>البريد الإلكتروني:</span>
-                                    <strong style={{ direction: 'ltr', textAlign: 'right' }}>{approvingReq.email}</strong>
+                                    <span className="text-muted">البريد الإلكتروني:</span>
+                                    <strong className="text-ltr">{approvingReq.email}</strong>
 
-                                    <span style={{ color: 'var(--muted)' }}>القسم المطلوب:</span>
+                                    <span className="text-muted">القسم المطلوب:</span>
                                     <span>{approvingReq.requestedDepartment}</span>
 
-                                    <span style={{ color: 'var(--muted)' }}>الدور المطلوب:</span>
-                                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                    <span className="text-muted">الدور المطلوب:</span>
+                                    <span className="text-accent font-semibold">
                                         {ROLE_LABELS[approvingReq.requestedRole as EffectiveRole] || approvingReq.requestedRole}
                                     </span>
 
-                                    <span style={{ color: 'var(--muted)' }}>حالة التحقق:</span>
+                                    <span className="text-muted">حالة التحقق:</span>
                                     <span>
                                         {approvingReq.verificationStatus === 'verified'
                                             ? 'تم التحقق من البريد الإلكتروني بنجاح'
@@ -2139,7 +2129,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </div>
                             </div>
 
-                            <label className="form-label-block" style={{ marginBottom: '16px' }}>
+                            <label className="form-label-block mb-4">
                                 <span>الدور النهائي المُعتمد للموظف <span className="req-star">*</span></span>
                                 <select
                                     value={selectedApprovedRole}
@@ -2155,7 +2145,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </span>
                             </label>
 
-                            <div className="form-actions" style={{ marginTop: '16px' }}>
+                            <div className="form-actions mt-3">
                                 <button
                                     type="button"
                                     className="secondary-btn"
@@ -2202,7 +2192,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 هل أنت متأكد من رغبتك في رفض طلب التسجيل للمتقدم <strong>"{rejectingReq.fullName}"</strong>؟
                             </p>
 
-                            <label className="form-label-block" style={{ marginBottom: '16px' }}>
+                            <label className="form-label-block mb-4">
                                 <span>سبب الرفض (سيتم حفظه في السجل وإبلاغ المتقدم):</span>
                                 <textarea
                                     value={rejectionReasonInput}
@@ -2213,7 +2203,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 />
                             </label>
 
-                            <div className="form-actions" style={{ marginTop: '16px' }}>
+                            <div className="form-actions mt-3">
                                 <button
                                     type="button"
                                     className="secondary-btn"
@@ -2261,7 +2251,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <p className="modal-help-text">
                                 سيتم إبطال رابط الدعوة فورياً ووضع الحساب في حالة تعليق، مع الحفاظ على كافة السجلات والأكواد في قاعدة البيانات بصورة آمنة ودون حذف أي بيانات.
                             </p>
-                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                            <div className="form-actions mt-4">
                                 <button type="button" className="secondary-btn" onClick={() => setCancellingReq(null)} disabled={isActionLoading}>
                                     تراجع
                                 </button>
@@ -2292,24 +2282,18 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="modal-body modal-body-pad" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                        <div className="modal-body modal-body-pad modal-scroll-body">
                             {consistencyLoading ? (
-                                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
+                                <div className="text-center p-5 text-muted">
                                     جارٍ فحص ومطابقة جداول المصادقة والهويات...
                                 </div>
                             ) : consistencyReport ? (
-                                <div style={{ display: 'grid', gap: '14px', fontSize: '0.88rem' }}>
-                                    <div className="info-grid-box" style={{
-                                        background: consistencyReport.has_issues ? 'var(--warn-bg)' : 'var(--ok-bg)',
-                                        borderColor: consistencyReport.has_issues ? 'var(--warn)' : 'var(--ok)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '10px',
-                                    }}>
+                                <div className="grid gap-3 font-sm">
+                                    <div className={`info-grid-box flex items-center gap-2 ${consistencyReport.has_issues ? 'status-warn-box' : 'status-ok-box'}`}>
                                         {consistencyReport.has_issues ? <ShieldAlert size={20} color="var(--warn)" /> : <CheckCircle2 size={20} color="var(--ok)" />}
                                         <div>
                                             <strong>{consistencyReport.has_issues ? 'تم رصد حالات تباين تتطلب مراجعة الإدارة' : 'كافة الهويات متطابقة ومنتظمة بالكامل'}</strong>
-                                            <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                            <span className="block font-xs text-muted">
                                                 تاريخ الفحص: {new Date(consistencyReport.generated_at).toLocaleString('ar-EG')}
                                             </span>
                                         </div>
@@ -2317,7 +2301,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                     <div className="info-grid-box">
                                         <strong>حسابات Auth بدون سجل app_users:</strong>
-                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                        <p className="mt-1 m-0 text-muted font-xs">
                                             {consistencyReport.missing_app_users.length === 0
                                                 ? 'لا يوجد أي تباين (0)'
                                                 : `${consistencyReport.missing_app_users.length} حساب: ${consistencyReport.missing_app_users.map(u => u.email).join(', ')}`}
@@ -2326,7 +2310,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                     <div className="info-grid-box">
                                         <strong>سجلات app_users بدون حساب Auth:</strong>
-                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                        <p className="mt-1 m-0 text-muted font-xs">
                                             {consistencyReport.missing_auth_users.length === 0
                                                 ? 'لا يوجد أي تباين (0)'
                                                 : `${consistencyReport.missing_auth_users.length} سجل: ${consistencyReport.missing_auth_users.map(u => u.email).join(', ')}`}
@@ -2335,7 +2319,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                     <div className="info-grid-box">
                                         <strong>طلبات تسجيل معتمدة بدون إرسال دعوة:</strong>
-                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                        <p className="mt-1 m-0 text-muted font-xs">
                                             {consistencyReport.approved_without_invitation.length === 0
                                                 ? 'لا توجد طلبات معلقة بدون دعوة (0)'
                                                 : `${consistencyReport.approved_without_invitation.length} طلب: ${consistencyReport.approved_without_invitation.map(r => r.email).join(', ')}`}
@@ -2344,7 +2328,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                     <div className="info-grid-box">
                                         <strong>حسابات نشطة بدون اسم مستخدم:</strong>
-                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                        <p className="mt-1 m-0 text-muted font-xs">
                                             {consistencyReport.active_without_username.length === 0
                                                 ? 'جميع الحسابات النشطة تمتلك أسماء مستخدمين صحيحة (0)'
                                                 : `${consistencyReport.active_without_username.length} حساب`}
@@ -2353,7 +2337,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
                                     <div className="info-grid-box">
                                         <strong>عناوين بريد إلكتروني مكررة:</strong>
-                                        <p style={{ margin: '4px 0 0 0', color: 'var(--muted)', fontSize: '0.82rem' }}>
+                                        <p className="mt-1 m-0 text-muted font-xs">
                                             {consistencyReport.duplicate_emails.length === 0
                                                 ? 'لا يوجد أي بريد إلكتروني مكرر (0)'
                                                 : `${consistencyReport.duplicate_emails.length} مكرر`}
@@ -2362,7 +2346,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </div>
                             ) : null}
 
-                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                            <div className="form-actions mt-4">
                                 <button type="button" className="secondary-btn" onClick={() => setConsistencyModalOpen(false)}>
                                     إغلاق التقرير
                                 </button>
@@ -2402,7 +2386,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 لن يتمكن الموظف من تسجيل الدخول إلى النظام أو إجراء أي عمليات حتى يتم رفع التعليق وإعادة تنشيطه من قِبل مدير النظام.
                             </p>
 
-                            <div className="form-actions" style={{ marginTop: '20px' }}>
+                            <div className="form-actions mt-4">
                                 <button
                                     type="button"
                                     className="secondary-btn"

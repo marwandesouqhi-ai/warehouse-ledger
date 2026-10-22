@@ -348,11 +348,11 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         return (
             <section className="page-stack settings-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+                    <div className="page-intro-icon modal-icon-danger">
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية وصول مقيدة</p>
+                        <p className="eyebrow text-bad">صلاحية وصول مقيدة</p>
                         <h2>إعدادات المؤسسة</h2>
                         <p>خاص ومقتصر على مدير النظام (System Admin).</p>
                     </div>
@@ -362,13 +362,13 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                     <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                    <h3 className="m-0 mb-2 text-lg text-ink">
                         صلاحية وصول مقيدة لمدير النظام فقط
                     </h3>
-                    <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+                    <p className="text-muted font-sm leading-normal mb-5">
                         عذراً، صفحة إعدادات المؤسسة وتخصيص الشعار مخصصة حصرياً لحسابات <strong>مدير النظام (System Administrator)</strong>. لا يملك حسابك الحالي الصلاحيات الكافية للوصول إلى هذه الإعدادات.
                     </p>
-                    <Link to="/" className="primary-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <Link to="/" className="primary-btn inline-flex items-center gap-2">
                         العودة إلى لوحة التحكم
                         <ArrowLeft size={16} />
                     </Link>
@@ -389,20 +389,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             </header>
 
             {saveNotice && (
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '12px 16px',
-                        background: 'var(--badge-success-bg)',
-                        border: '1px solid var(--badge-success-border, var(--line))',
-                        borderRadius: 'var(--r-sm)',
-                        color: 'var(--good)',
-                        fontWeight: 600,
-                        fontSize: 'var(--text-sm)',
-                    }}
-                >
+                <div className="inline-message success flex items-center gap-2 mb-4 font-sm">
                     <CheckCircle2 size={18} />
                     <span>{saveNotice}</span>
                 </div>
@@ -496,7 +483,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                         {isSystemAdmin ? (
                             <button type="submit" className="primary-btn"><Save size={17} /> حفظ بيانات المؤسسة</button>
                         ) : (
-                            <div className="inline-message info" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div className="inline-message info m-0 flex items-center gap-2">
                                 <Info size={16} /> هذه الإعدادات للعرض فقط — تعديل إعدادات وشعار المؤسسة مقتصر على مدير النظام (System Admin).
                             </div>
                         )}
@@ -511,19 +498,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             <span>ارفع صورة شعار المؤسسة لتظهر تلقائياً في الشريط الجانبي وأعلى النظام ومطبوعات كشوفات العهدة</span>
                         </div>
                         {hasSelectedLogo && !logoPreviewFailed && (
-                            <div
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '0.8rem',
-                                    padding: '4px 10px',
-                                    borderRadius: 'var(--r-sm)',
-                                    background: 'var(--badge-success-bg)',
-                                    color: 'var(--good)',
-                                    fontWeight: 600,
-                                }}
-                            >
+                            <div className="badge badge-success inline-flex items-center gap-1 font-xs">
                                 <CheckCircle2 size={14} /> الشعار مفعل في النظام والطباعة
                             </div>
                         )}
@@ -579,8 +554,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             ) : (
                                 <div className="logo-url-field">
                                     <span>رابط صورة الشعار</span>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <span className="logo-url-input-wrap" style={{ flex: 1 }}>
+                                    <div className="flex gap-2 items-center">
+                                        <span className="logo-url-input-wrap flex-1">
                                             <ExternalLink size={16} />
                                             <input
                                                 dir="ltr"
@@ -600,10 +575,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         {isSystemAdmin && (
                                             <button
                                                 type="button"
-                                                className="secondary-btn"
                                                 onClick={handleApplyUrl}
-                                                style={{ whiteSpace: 'nowrap' }}
-                                            >
+                                             className="secondary-btn nowrap">
                                                 <Save size={15} /> تطبيق وحفظ الرابط
                                             </button>
                                         )}
@@ -662,9 +635,9 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                 {/* System Backup Section (Strictly System Admin only) */}
                 {isSystemAdmin && (
                     <section className="card-surface settings-section backup-settings-section">
-                        <div className="section-head" style={{ marginBottom: '14px' }}>
+                        <div className="section-head mb-3">
                             <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <div className="flex items-center gap-2 mb-1">
                                     <h3><Database size={19} /> النسخ الاحتياطي وحماية البيانات</h3>
                                     <span className="admin-only-badge">خاص بمدير النظام</span>
                                 </div>
@@ -719,14 +692,14 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                     </div>
 
                                     {cloudBackupNotice && (
-                                        <div className="inline-message success" style={{ margin: '8px 0', fontSize: '0.84rem' }}>
+                                        <div className="inline-message success my-2 font-xs">
                                             <CheckCircle2 size={16} />
                                             <span>{cloudBackupNotice}</span>
                                         </div>
                                     )}
 
                                     {cloudBackupError && (
-                                        <div className="inline-message error" style={{ margin: '8px 0', fontSize: '0.84rem' }}>
+                                        <div className="inline-message error my-2 font-xs">
                                             <ShieldAlert size={16} />
                                             <span>{cloudBackupError}</span>
                                         </div>
@@ -776,14 +749,14 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                     </div>
 
                                     {localBackupNotice && (
-                                        <div className="inline-message success" style={{ margin: '8px 0', fontSize: '0.84rem' }}>
+                                        <div className="inline-message success my-2 font-xs">
                                             <CheckCircle2 size={16} />
                                             <span>{localBackupNotice}</span>
                                         </div>
                                     )}
 
                                     {localBackupError && (
-                                        <div className="inline-message error" style={{ margin: '8px 0', fontSize: '0.84rem' }}>
+                                        <div className="inline-message error my-2 font-xs">
                                             <ShieldAlert size={16} />
                                             <span>{localBackupError}</span>
                                         </div>
@@ -815,16 +788,16 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             </div>
                         ) : (
                             /* Restore Tab Content */
-                            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="mt-4 flex flex-col gap-4">
                                 {restoreSuccessNotice && (
-                                    <div className="inline-message success" style={{ margin: 0, fontSize: '0.88rem' }}>
+                                    <div className="inline-message success m-0 font-sm">
                                         <CheckCircle2 size={18} />
                                         <span>{restoreSuccessNotice}</span>
                                     </div>
                                 )}
 
                                 {restoreError && (
-                                    <div className="inline-message error" style={{ margin: 0, fontSize: '0.88rem' }}>
+                                    <div className="inline-message error m-0 font-sm">
                                         <ShieldAlert size={18} />
                                         <span>{restoreError}</span>
                                     </div>
@@ -832,7 +805,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
                                 <div className="backup-cards-grid">
                                     {/* 1. Local JSON File Restore Card */}
-                                    <div className="backup-card local-backup-card" style={{ gap: '16px' }}>
+                                    <div className="backup-card local-backup-card gap-4">
                                         <div className="backup-card-head">
                                             <div className="backup-card-icon local">
                                                 <FileUp size={24} />
@@ -847,12 +820,12 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
                                         {!parsedBackup ? (
                                             <label className="restore-dropzone-label">
-                                                <FileUp size={32} style={{ color: 'var(--accent)' }} />
+                                                <FileUp size={32} className="text-accent" />
                                                 <div>
-                                                    <strong style={{ display: 'block', fontSize: '0.92rem', color: 'var(--ink)' }}>
+                                                    <strong className="block font-sm text-ink">
                                                         اضغط لاختيار ملف النسخة الاحتياطية (.json)
                                                     </strong>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                                    <span className="font-xs text-muted">
                                                         أو اسحب وأفلت الملف هنا
                                                     </span>
                                                 </div>
@@ -867,22 +840,21 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                             <div className="restore-preview-card">
                                                 <div className="restore-preview-head">
                                                     <div>
-                                                        <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <FileCheck size={16} style={{ color: 'var(--good)' }} />
+                                                        <strong className="font-sm text-ink flex items-center gap-1">
+                                                            <FileCheck size={16} className="text-good" />
                                                             ملف صالح: {restoreFile?.name}
                                                         </strong>
-                                                        <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                                        <span className="font-xs text-muted">
                                                             تاريخ النسخة: {formatBackupTimestamp(parsedBackup.backupDate)}
                                                         </span>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        className="secondary-btn"
+                                                        className="secondary-btn btn-sm"
                                                         onClick={() => {
                                                             setParsedBackup(null)
                                                             setRestoreFile(null)
                                                         }}
-                                                        style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                                                     >
                                                         اختيار ملف آخر
                                                     </button>
@@ -907,8 +879,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                     </div>
                                                 </div>
 
-                                                <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px' }}>
-                                                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '8px' }}>
+                                                <div className="border-top-line">
+                                                    <span className="font-xs font-semibold text-ink block mb-2">
                                                         حدد البيانات التي ترغب في استعادتها:
                                                     </span>
                                                     <div className="restore-options-grid">
@@ -950,7 +922,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         )}
 
                                         {restoreValidationError && (
-                                            <div className="inline-message error" style={{ margin: 0, fontSize: '0.84rem' }}>
+                                            <div className="inline-message error m-0 font-xs">
                                                 <ShieldAlert size={16} />
                                                 <span>{restoreValidationError}</span>
                                             </div>
@@ -1032,21 +1004,21 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
                 {/* Users & Permissions Shortcut Card (System Admin only) */}
                 {isSystemAdmin && (
-                    <section className="card-surface settings-section" style={{ border: '1px dashed var(--line)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--accent-wash)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                    <section className="card-surface settings-section border-dashed border-line">
+                        <div className="flex items-center justify-between flex-wrap gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="feature-icon-box">
                                     <UsersRound size={22} />
                                 </div>
                                 <div>
-                                    <h4 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: 'var(--ink)' }}>المستخدمون والصلاحيات</h4>
-                                    <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+                                    <h4 className="m-0 mb-1 text-base text-ink">المستخدمون والصلاحيات</h4>
+                                    <span className="font-sm text-muted">
                                         تم فصل إدارة الحسابات، الصلاحيات، الدعوات وتغيير كلمات المرور في صفحة مستقلة.
                                     </span>
                                 </div>
                             </div>
 
-                            <Link to="/users" className="primary-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                            <Link to="/users" className="primary-btn inline-flex items-center gap-2">
                                 الانتقال لصفحة المستخدمين
                                 <ArrowLeft size={16} />
                             </Link>

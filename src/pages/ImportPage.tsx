@@ -45,11 +45,11 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
         return (
             <section className="page-stack import-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+                    <div className="page-intro-icon modal-icon-danger">
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>صلاحية وصول مقيدة</p>
+                        <p className="eyebrow text-bad">صلاحية وصول مقيدة</p>
                         <h2>استيراد حركات المخزن من Excel</h2>
                         <p>خاص ومقتصر على المحررين ومديري النظام لإضافة وتحديث بيانات المخزن.</p>
                     </div>
@@ -59,10 +59,10 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
                     <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                    <h3 className="m-0 mb-2 text-lg text-ink">
                         صلاحية العرض فقط (Viewer)
                     </h3>
-                    <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+                    <p className="text-muted font-sm leading-normal mb-5">
                         عذراً، استيراد وتعديل حركات المخزن متاح حصرياً لحسابات <strong>المحررين (Editors)</strong> و<strong>مديري النظام (Admins)</strong>. حسابك الحالي يملك صلاحية المشاهدة والاستعراض فقط.
                     </p>
                 </div>

@@ -83,34 +83,26 @@ export default function QualityPage({ movements, onInspect }: QualityPageProps) 
       </div>
 
       <section className="card-surface quality-findings">
-        <div className="section-head quality-findings-head" style={{ flexWrap: 'wrap', gap: '12px' }}>
+        <div className="section-head quality-findings-head flex-wrap gap-3">
           <div>
             <h3>نتائج الفحص</h3>
             <span>{visibleFindings.length.toLocaleString('ar-EG')} تنبيه مطابق</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: '220px' }}>
-              <Search size={15} style={{ position: 'absolute', right: '10px', color: 'var(--muted)', pointerEvents: 'none' }} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="input-search-wrap">
+              <Search size={15} className="input-search-icon" />
               <input
                 type="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث في التنبيهات والأصناف..."
-                style={{
-                  padding: '7px 32px 7px 28px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg)',
-                  color: 'var(--ink)',
-                  fontSize: '0.85rem',
-                  width: '100%'
-                }}
+                className="search-input-field w-full"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
-                  style={{ position: 'absolute', left: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '2px', display: 'flex', alignItems: 'center' }}
+                  className="input-action-btn"
                   title="مسح البحث"
                 >
                   <X size={13} />
@@ -118,7 +110,7 @@ export default function QualityPage({ movements, onInspect }: QualityPageProps) 
               )}
             </div>
 
-            <label className="filter-select-label" style={{ margin: 0 }}>
+            <label className="filter-select-label m-0">
               <span>نوع النتيجة</span>
               <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="تصفية نتائج الجودة">
                 <option value="all">كل النتائج</option>

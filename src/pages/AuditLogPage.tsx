@@ -120,11 +120,11 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         return (
             <section className="page-stack audit-page">
                 <header className="page-intro">
-                    <div className="page-intro-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+                    <div className="page-intro-icon modal-icon-danger">
                         <ShieldAlert size={22} />
                     </div>
                     <div>
-                        <p className="eyebrow" style={{ color: 'var(--bad)' }}>منطقة مراقبة مقيدة</p>
+                        <p className="eyebrow text-bad">منطقة مراقبة مقيدة</p>
                         <h2>سجل العمليات والتدقيق (Audit Log)</h2>
                         <p>خاص ومقتصر على إدارة النظام لحماية سرية وأمان العمليات.</p>
                     </div>
@@ -134,13 +134,13 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                     <div className="audit-restricted-icon">
                         <ShieldAlert size={34} />
                     </div>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: 'var(--text-lg)', color: 'var(--ink)' }}>
+                    <h3 className="m-0 mb-2 text-lg text-ink">
                         صلاحية وصول مقيدة لمدير النظام فقط
                     </h3>
-                    <p style={{ color: 'var(--muted)', fontSize: 'var(--text-sm)', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+                    <p className="text-muted font-sm leading-normal mb-5">
                         عذراً، سجل المراقبة والتدقيق مخصص حصرياً لحسابات <strong>مدير النظام (System Administrator)</strong> للاطلاع على العمليات والأنشطة الإدارية. لا يملك حسابك الحالي الصلاحيات الكافية لاستعراض هذا السجل.
                     </p>
-                    <Link to="/" className="primary-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <Link to="/" className="primary-btn inline-flex items-center gap-2">
                         العودة إلى لوحة التحكم
                         <ArrowLeft size={16} />
                     </Link>
@@ -162,7 +162,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                 </div>
             </header>
 
-            <div className="kpi-block" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+            <div className="kpi-block kpi-grid-fit">
                 <div className="kpi-item tone-primary">
                     <span className="kpi-icon"><Activity size={18} /></span>
                     <span className="kpi-label">إجمالي العمليات</span>
@@ -185,8 +185,8 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                 </div>
             </div>
 
-            <div className="card-surface audit-table-wrapper" style={{ padding: '20px', borderRadius: 'var(--r-md)' }}>
-                <div className="section-head" style={{ marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="card-surface audit-table-wrapper p-5">
+                <div className="section-head mb-4 flex-wrap gap-3">
                     <div className="audit-toolbar">
                         <div className="toolbar-search audit-search-box">
                             <Search size={16} />
@@ -224,26 +224,24 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
 
                     <button
                         type="button"
-                        className="secondary-btn"
                         onClick={loadLogs}
                         disabled={loading}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    >
+                     className="secondary-btn btn-sm inline-flex items-center gap-1">
                         <RefreshCw size={15} className={loading ? 'spin' : ''} />
                         تحديث السجل
                     </button>
                 </div>
 
-                {error && <div className="inline-message error" role="alert" style={{ marginBottom: '14px' }}>{error}</div>}
+                {error && <div className="inline-message error mb-3" role="alert">{error}</div>}
 
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-                        <RefreshCw size={24} className="spin" style={{ margin: '0 auto 10px' }} />
+                    <div className="text-center p-8 text-muted">
+                        <RefreshCw size={24} className="spin mx-auto mb-2 block" />
                         <p>جارٍ تحميل سجل العمليات...</p>
                     </div>
                 ) : filteredLogs.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-                        <History size={36} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
+                    <div className="text-center p-8 text-muted">
+                        <History size={36} className="mx-auto mb-2 block opacity-50" />
                         <h3>لا توجد عمليات مطابقة</h3>
                         <p>سيبدأ تسجيل العمليات تلقائياً فور تنفيذ أي إجراء في النظام.</p>
                     </div>
@@ -269,58 +267,45 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
 
                                     return (
                                         <tr key={log.id}>
-                                            <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                            <td className="nowrap text-muted">
+                                                <span className="inline-flex items-center gap-1">
                                                     <Clock size={13} />
                                                     {formatTime(log.created_at)}
                                                 </span>
                                             </td>
 
                                             <td>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div className="flex items-center gap-1">
                                                     <User size={15} color="var(--accent)" />
                                                     <strong>{log.user_email || 'غير مسجل'}</strong>
                                                     {isAdmin && (
-                                                        <span
-                                                            style={{
-                                                                fontSize: 'var(--text-xs)',
-                                                                background: 'var(--accent-wash)',
-                                                                color: 'var(--accent)',
-                                                                padding: '2px 6px',
-                                                                borderRadius: 'var(--r-pill)',
-                                                                fontWeight: 600,
-                                                            }}
-                                                        >
-                                                            مدير
-                                                        </span>
+                                                        <span className="self-badge">مدير</span>
                                                     )}
                                                 </div>
                                             </td>
 
                                             <td>
                                                 <span
-                                                    className={`quality-item ${tone}`}
-                                                    style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 'var(--r-sm)', fontSize: 'var(--text-xs)', fontWeight: 600 }}
-                                                >
+                                                 className={`quality-item ${tone} quality-item ${tone} audit-action-pill`}>
                                                     {log.action}
                                                 </span>
                                             </td>
 
-                                            <td style={{ direction: 'ltr', textAlign: 'right' }}>
+                                            <td className="text-ltr">
                                                 <span className="audit-ip-tag">
                                                     <Globe size={13} color="var(--accent)" />
                                                     {log.ip_address || '—'}
                                                 </span>
                                             </td>
 
-                                            <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                            <td className="text-muted nowrap">
+                                                <span className="inline-flex items-center gap-1">
                                                     <Laptop size={14} />
                                                     {formatDevice(log.user_agent)}
                                                 </span>
                                             </td>
 
-                                            <td style={{ maxWidth: '300px' }}>
+                                            <td className="truncate-cell">
                                                 <div
                                                     className="audit-details-text"
                                                     title={JSON.stringify(log.details)}
@@ -330,7 +315,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                                             .map(([k, v]) => `${k}: ${String(v)}`)
                                                             .join(' | ')
                                                     ) : (
-                                                        <span style={{ color: 'var(--muted)' }}>—</span>
+                                                        <span className="text-muted">—</span>
                                                     )}
                                                 </div>
                                             </td>

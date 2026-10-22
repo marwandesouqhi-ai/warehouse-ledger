@@ -451,20 +451,20 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
 
       {/* Comparison Matrix Table */}
       {quotesLoading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-          <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '8px' }} />
+        <div className="text-center p-8 text-muted">
+          <RefreshCw size={24} className="spin-icon mb-2" />
           <div>جارٍ تحميل عروض الأسعار...</div>
         </div>
       ) : !selectedRequestId ? (
-        <div className="empty-state card-surface" style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--line)' }}>
-          <FileSpreadsheet size={40} style={{ opacity: 0.35, marginBottom: '10px' }} />
+        <div className="empty-state card-surface text-center p-8 border-dashed border-line">
+          <FileSpreadsheet size={40} className="opacity-35 mb-2" />
           <h3>اختر طلب شراء لاستعراض ومقارنة عروض الأسعار</h3>
         </div>
       ) : quotes.length === 0 ? (
-        <div className="empty-state card-surface" style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--line)' }}>
-          <FileSpreadsheet size={40} style={{ opacity: 0.35, marginBottom: '10px' }} />
+        <div className="empty-state card-surface text-center p-8 border-dashed border-line">
+          <FileSpreadsheet size={40} className="opacity-35 mb-2" />
           <h3>لا توجد عروض أسعار مسجلة لهذا الطلب حتى الآن</h3>
-          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+          <p className="text-muted font-sm mb-4">
             يمكنك البدء في تلقي عروض الموردين المعتمدين وتسجيل أسعارهم ومواعيد التوريد.
           </p>
           <button

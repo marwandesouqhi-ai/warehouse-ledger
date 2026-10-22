@@ -115,18 +115,17 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal-dialog"
+        className="modal-dialog modal-dialog-lg max-h-90vh"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: '640px', maxHeight: '90vh' }}
       >
         {/* Modal Header */}
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(8, 127, 104, 0.12)', color: 'var(--accent)' }}>
+            <div className="modal-title-icon modal-icon-accent">
               <History size={20} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--ink)' }}>سجل تاريخ وحركة الأصل</h3>
+              <h3 className="m-0 text-md text-ink font-bold">سجل تاريخ وحركة الأصل</h3>
               <span className="modal-subtitle">
                 تتبع مسار الأصل وتاريخ القيد والصيانة والنقل بين القاعات
               </span>
@@ -138,50 +137,40 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
         </div>
 
         {/* Modal Body */}
-        <div className="modal-body-scroll" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div className="modal-body-scroll p-5 flex flex-col gap-4">
           {/* Asset Summary Card */}
-          <div
-            style={{
-              padding: '14px 18px',
-              borderRadius: '12px',
-              background: 'var(--bg)',
-              border: '1px solid var(--line)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+          <div className="card-surface p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-start flex-wrap gap-2">
               <div>
-                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>كود العهدة: <code>{item.code}</code></span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '1.1rem', color: 'var(--ink)' }}>{item.name}</h4>
+                <span className="font-xs text-muted">كود العهدة: <code>{item.code}</code></span>
+                <h4 className="mt-1 m-0 text-md font-bold text-ink">{item.name}</h4>
               </div>
               <span className={`status-pill ${item.condition === 'excellent' || item.condition === 'good' ? 'status-pill-ok' : 'status-pill-warn'}`}>
                 {item.condition === 'excellent' ? 'ممتازة' : item.condition === 'good' ? 'جيدة' : item.condition === 'maintenance' ? 'صيانة' : 'كهنة'}
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', fontSize: '0.84rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)' }}>
-                <MapPin size={15} style={{ color: 'var(--accent)' }} />
+            <div className="grid-fit-140 font-sm">
+              <div className="flex items-center gap-1 text-muted">
+                <MapPin size={15} className="text-accent" />
                 <span>{warehouse.name} ({item.roomLocation || '—'})</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)' }}>
-                <User size={15} style={{ color: 'var(--accent)' }} />
+              <div className="flex items-center gap-1 text-muted">
+                <User size={15} className="text-accent" />
                 <span>أمين العهدة: {item.custodian || '—'}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)' }}>
-                <Package size={15} style={{ color: 'var(--accent)' }} />
+              <div className="flex items-center gap-1 text-muted">
+                <Package size={15} className="text-accent" />
                 <span>الكمية: {item.quantity} {item.unit}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)' }}>
-                <Calendar size={15} style={{ color: 'var(--accent)' }} />
+              <div className="flex items-center gap-1 text-muted">
+                <Calendar size={15} className="text-accent" />
                 <span>القيمة: {formatMoney(item.value, currency)}</span>
               </div>
             </div>
 
             {item.serialNumber && (
-              <div style={{ fontSize: '0.8rem', color: 'var(--muted)', borderTop: '1px dashed var(--line)', paddingTop: '8px' }}>
+              <div className="font-xs text-muted border-top-line">
                 الرقم التسلسلي (Serial Number): <strong>{item.serialNumber}</strong>
               </div>
             )}
@@ -189,22 +178,13 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
 
           {/* Timeline of events */}
           <div>
-            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px' }}>
+            <div className="font-sm font-bold text-ink mb-3">
               مسار الخط الزمني وسجل العمليات:
             </div>
 
-            <div style={{ position: 'relative', paddingInlineStart: '28px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div className="timeline-wrapper">
               {/* Vertical line */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  bottom: '10px',
-                  right: '10px',
-                  width: '2px',
-                  background: 'var(--line)',
-                }}
-              />
+              <div className="timeline-line" />
 
               {historicalEvents.map((evt, idx) => {
                 const isCreation = evt.type === 'creation'
@@ -215,46 +195,25 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
                 const Icon = isCreation ? CheckCircle2 : isTransfer ? Package : isMaintenance ? Wrench : FileText
 
                 return (
-                  <div key={idx} style={{ position: 'relative' }}>
+                  <div key={idx} className="relative">
                     {/* Dot */}
                     <div
-                      style={{
-                        position: 'absolute',
-                        right: '-28px',
-                        top: '2px',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: 'var(--surface)',
-                        border: `2px solid ${dotColor}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: dotColor,
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                      }}
+                      className="timeline-dot"
+                      style={{ borderColor: dotColor, color: dotColor }}
                     >
                       <Icon size={11} />
                     </div>
 
-                    <div
-                      style={{
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--line)',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <strong style={{ fontSize: '0.88rem', color: 'var(--ink)' }}>{evt.title}</strong>
+                    <div className="card-surface p-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <strong className="font-sm text-ink">{evt.title}</strong>
                         {evt.date && (
-                          <span style={{ fontSize: '0.74rem', color: 'var(--muted)', background: 'var(--bg)', padding: '2px 6px', borderRadius: '4px' }}>
+                          <span className="code-pill text-muted font-xs">
                             {evt.date}
                           </span>
                         )}
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+                      <p className="m-0 font-xs text-muted leading-normal">
                         {evt.desc}
                       </p>
                     </div>
@@ -265,49 +224,25 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
           </div>
 
           {/* Quick Add Log / Maintenance Note */}
-          <div
-            style={{
-              padding: '14px',
-              borderRadius: '12px',
-              background: 'rgba(8, 127, 104, 0.04)',
-              border: '1px solid rgba(8, 127, 104, 0.2)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 600, color: 'var(--accent)' }}>
+          <div className="note-card-accent p-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2 font-sm font-semibold text-accent">
               <PlusCircle size={16} />
               <span>إضافة إجراء فحص أو ملاحظة صيانة جديدة:</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '10px' }}>
+            <div className="grid-2col-fit">
               <input
                 type="text"
                 placeholder="اكتب الإجراء (مثلاً: تم الفحص الفني الدوري ويعمل بكفاءة)"
                 value={newLogText}
                 onChange={(e) => setNewLogText(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--surface)',
-                  color: 'var(--ink)',
-                  fontSize: '0.86rem',
-                }}
+                className="input-field"
               />
 
               <select
                 value={newCondition}
                 onChange={(e) => setNewCondition(e.target.value as CustodyItem['condition'])}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--surface)',
-                  color: 'var(--ink)',
-                  fontSize: '0.86rem',
-                }}
+                className="select-field"
                 aria-label="تحديث الحالة الفنية"
               >
                 <option value="excellent">ممتازة (جاهزة للعمل)</option>
@@ -317,13 +252,12 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
               </select>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="flex justify-end">
               <button
                 type="button"
-                className="primary-btn"
+                className="primary-btn btn-sm inline-flex items-center gap-1"
                 onClick={handleSaveLog}
                 disabled={isSaving || (!newLogText.trim() && newCondition === item.condition)}
-                style={{ padding: '7px 16px', fontSize: '0.85rem' }}
               >
                 <Save size={15} />
                 <span>حفظ في سجل الأصل</span>
@@ -334,7 +268,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
 
         {/* Modal Footer */}
         <div className="modal-footer">
-          <button type="button" className="secondary-btn" onClick={onClose} style={{ padding: '8px 20px' }}>
+          <button type="button" className="secondary-btn" onClick={onClose}>
             إغلاق
           </button>
         </div>

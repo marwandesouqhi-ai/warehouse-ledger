@@ -645,40 +645,14 @@ export default function CustodyPage({
           <p className="custody-description">{activeWarehouse.description}</p>
 
           {/* Quick links to Reports and Dashboard Analytics */}
-          <div className="custody-view-toggle-bar" style={{ display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
-            <NavLink
-              to="/reports"
-              className="secondary-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '7px',
-                fontWeight: 600,
-                fontSize: '0.86rem',
-                padding: '7px 16px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-              }}
-            >
-              <FileSpreadsheet size={15} style={{ color: 'var(--accent)' }} />
+          <div className="custody-view-toggle-bar">
+            <NavLink to="/reports" className="secondary-btn">
+              <FileSpreadsheet size={15} className="text-accent" />
               <span>مركز التقارير وسجلات الجرد</span>
             </NavLink>
 
-            <NavLink
-              to="/"
-              className="secondary-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '7px',
-                fontWeight: 600,
-                fontSize: '0.86rem',
-                padding: '7px 16px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-              }}
-            >
-              <BarChart3 size={15} style={{ color: 'var(--chart-1)' }} />
+            <NavLink to="/" className="secondary-btn">
+              <BarChart3 size={15} className="text-chart-1" />
               <span>لوحة التحليلات العامة بالداشبورد</span>
             </NavLink>
           </div>
@@ -751,13 +725,12 @@ export default function CustodyPage({
           </button>
 
           {/* Enhanced Export Excel Dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div className="relative">
             <button
               type="button"
-              className="secondary-btn"
+              className="secondary-btn flex items-center gap-1"
               onClick={() => setIsExportDropdownOpen((prev) => !prev)}
               id="btn-export-custody-excel"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               title="تصدير كشف عهدة إلى ملف Excel"
             >
               <FileSpreadsheet size={16} />
@@ -766,79 +739,34 @@ export default function CustodyPage({
             </button>
 
             {isExportDropdownOpen && (
-              <div
-                className="export-dropdown-menu"
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  marginTop: '6px',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--line)',
-                  borderRadius: '10px',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-                  minWidth: '280px',
-                  zIndex: 50,
-                  overflow: 'hidden',
-                  padding: '6px',
-                }}
-              >
+              <div className="export-dropdown-menu">
                 <button
                   type="button"
-                  style={{
-                    width: '100%',
-                    textAlign: 'right',
-                    padding: '9px 12px',
-                    borderRadius: '7px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--ink)',
-                    fontSize: '0.86rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '9px',
-                  }}
+                  className="export-dropdown-item"
                   onClick={() => {
                     setIsExportDropdownOpen(false)
                     void exportCustodyToExcel(activeWarehouse.name, activeWarehouseItems, currency)
                   }}
                 >
-                  <FileSpreadsheet size={16} style={{ color: 'var(--accent)' }} />
+                  <FileSpreadsheet size={16} className="text-accent" />
                   <div>
-                    <div style={{ fontWeight: 600 }}>تصدير عهدة {activeWarehouse.shortName}</div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>كشف بالبنود والإجماليات ({activeWarehouseItems.length} صنف)</small>
+                    <div className="font-semibold">تصدير عهدة {activeWarehouse.shortName}</div>
+                    <small className="text-muted font-xs">كشف بالبنود والإجماليات ({activeWarehouseItems.length} صنف)</small>
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  style={{
-                    width: '100%',
-                    textAlign: 'right',
-                    padding: '9px 12px',
-                    borderRadius: '7px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--ink)',
-                    fontSize: '0.86rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '9px',
-                    borderTop: '1px solid var(--line)',
-                    marginTop: '4px',
-                    paddingTop: '8px',
-                  }}
+                  className="export-dropdown-item"
                   onClick={() => {
                     setIsExportDropdownOpen(false)
                     void exportComprehensiveCustodyWorkbook(items, currency, settings.organization)
                   }}
                 >
-                  <Building2 size={16} style={{ color: 'var(--chart-1)' }} />
+                  <Building2 size={16} className="text-chart-1" />
                   <div>
-                    <div style={{ fontWeight: 600 }}>سجل الجرد الموحد لكافة الكليات</div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>ملف Excel شامل متعدد الصفحات لكافة المخازن الـ 8</small>
+                    <div className="font-semibold">سجل الجرد الموحد لكافة الكليات</div>
+                    <small className="text-muted font-xs">ملف Excel شامل متعدد الصفحات لكافة المخازن الـ 8</small>
                   </div>
                 </button>
               </div>
@@ -858,32 +786,15 @@ export default function CustodyPage({
       </div>
 
       {importNotice && (
-        <div
-          className="inline-message success"
-          role="status"
-          style={{
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="inline-message success mb-4 flex items-center justify-between gap-3" role="status">
+          <div className="flex items-center gap-2">
             <CheckCircle2 size={18} />
             <span>{importNotice}</span>
           </div>
           <button
             type="button"
             onClick={() => setImportNotice('')}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'inherit',
-              padding: 0,
-              display: 'flex',
-            }}
+            className="bg-none border-none cursor-pointer p-0 flex items-center text-ink"
             aria-label="إغلاق التنبيه"
           >
             <X size={16} />
@@ -1258,7 +1169,7 @@ export default function CustodyPage({
                                 </button>
                               )}
                               {!isSystemAdmin && (
-                                <span className="read-only-badge" style={{ fontSize: '0.75rem', padding: '3px 8px' }} title="التعديل والحذف لمدير النظام فقط">
+                                <span className="read-only-badge" title="التعديل والحذف لمدير النظام فقط">
                                   <Eye size={12} /> تعديل/حذف: للمدير فقط
                                 </span>
                               )}
@@ -1386,10 +1297,9 @@ export default function CustodyPage({
           {canDisburse && (
             <button
               type="button"
-              className="primary-btn"
+              className="primary-btn inline-flex items-center gap-1"
               onClick={() => setIsNewDisbursementOpen(true)}
               id="btn-add-disbursement-toolbar"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <Plus size={16} />
               <span>إذن صرف / تحويل جديد</span>
@@ -1456,37 +1366,36 @@ export default function CustodyPage({
                   return (
                     <tr key={m.id || idx}>
                       <td>{idx + 1}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{m.date || m.issue || '—'}</td>
-                      <td style={{ fontWeight: 600 }}>{m.item}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--bad)' }}>{qty}</td>
+                      <td className="nowrap">{m.date || m.issue || '—'}</td>
+                      <td className="font-semibold">{m.item}</td>
+                      <td className="font-bold text-bad">{qty}</td>
                       <td>{formatCurrency(price, currency)}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{formatCurrency(total, currency)}</td>
+                      <td className="font-bold text-ink">{formatCurrency(total, currency)}</td>
                       <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem' }}>
-                          <Warehouse size={13} style={{ color: 'var(--accent)' }} />
+                        <span className="inline-flex items-center gap-1 font-sm">
+                          <Warehouse size={13} className="text-accent" />
                           <span>{m.from || 'المخزن الرئيسي'}</span>
                         </span>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 600 }}>{m.to || m.custodianName || '—'}</span>
+                        <span className="font-semibold">{m.to || m.custodianName || '—'}</span>
                       </td>
                       <td>
                         {m.permit || m.issue ? (
-                          <code style={{ fontSize: '0.82rem', padding: '2px 6px', background: 'var(--bg)', borderRadius: '4px' }}>
+                          <code className="code-pill">
                             {m.permit || m.issue}
                           </code>
                         ) : '—'}
                       </td>
-                      <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td className="truncate-cell">
                         {m.notes || '—'}
                       </td>
                       <td className="actions-cell">
                         <button
                           type="button"
-                          className="table-action-btn"
+                          className="table-action-btn secondary-btn btn-sm inline-flex items-center gap-1"
                           onClick={() => handleOpenPermitForMovement(m)}
                           title="طباعة إذن صرف رسمي معتمد لهذا البند"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', padding: '4px 8px' }}
                         >
                           <Printer size={14} />
                           <span>إذن رسمي</span>
@@ -1546,7 +1455,7 @@ export default function CustodyPage({
           <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-wrap">
-                <div className="modal-title-icon" style={{ background: 'var(--badge-danger-bg)', color: 'var(--bad)' }}>
+                <div className="modal-title-icon modal-icon-danger">
                   <Trash2 size={18} />
                 </div>
                 <div>
@@ -1747,14 +1656,14 @@ export default function CustodyPage({
         <table className="print-official-table">
           <thead>
             <tr>
-              <th style={{ width: '4%' }}>م</th>
-              <th style={{ width: '13%' }}>كود العهدة</th>
-              <th style={{ width: '28%' }}>اسم الصنف والمواصفات الفنية</th>
-              <th style={{ width: '13%' }}>التصنيف والنوع</th>
-              <th style={{ width: '16%' }}>أمين العهدة / المكان</th>
-              <th style={{ width: '8%' }}>الكمية</th>
-              <th style={{ width: '10%' }}>القيمة الدفترية</th>
-              <th style={{ width: '8%' }}>الحالة الفنية</th>
+              <th className="col-w-4p">م</th>
+              <th className="col-w-13p">كود العهدة</th>
+              <th className="col-w-28p">اسم الصنف والمواصفات الفنية</th>
+              <th className="col-w-13p">التصنيف والنوع</th>
+              <th className="col-w-16p">أمين العهدة / المكان</th>
+              <th className="col-w-8p">الكمية</th>
+              <th className="col-w-10p">القيمة الدفترية</th>
+              <th className="col-w-8p">الحالة الفنية</th>
             </tr>
           </thead>
           <tbody>
@@ -2220,7 +2129,7 @@ function TransferCustodyModal({
       <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+            <div className="modal-title-icon modal-icon-accent">
               <ArrowLeftRight size={18} />
             </div>
             <div>
@@ -2380,7 +2289,7 @@ function SupplyFromMainModal({
       <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'var(--badge-success-bg)', color: 'var(--good)' }}>
+            <div className="modal-title-icon modal-icon-success">
               <ArrowLeftRight size={18} />
             </div>
             <div>
@@ -2629,7 +2538,7 @@ function ImportCustodyModal({
       <div className="modal-dialog modal-dialog-import" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'var(--badge-success-bg)', color: 'var(--accent)' }}>
+            <div className="modal-title-icon modal-icon-accent">
               <FileUp size={18} />
             </div>
             <div>
@@ -2726,7 +2635,7 @@ function ImportCustodyModal({
                   const selectedFile = e.target.files?.[0]
                   if (selectedFile) void handleFileSelected(selectedFile)
                 }}
-                style={{ display: 'none' }}
+                className="hidden"
                 id="input-custody-excel-file"
               />
             </div>
@@ -2735,18 +2644,16 @@ function ImportCustodyModal({
               <div className="custody-import-file-info">
                 <FileSpreadsheet size={22} />
                 <div>
-                  <div style={{ color: 'var(--ink)', fontWeight: 600 }}>{fileName}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                  <div className="text-ink font-semibold">{fileName}</div>
+                  <div className="font-xs text-muted">
                     {isParsing ? 'جاري قراءة وتحليل الأعمدة والصفوف...' : `${parsedRows.length} صنف صالح للقيد في ${targetWh.name}`}
                   </div>
                 </div>
               </div>
               <button
                 type="button"
-                className="secondary-btn"
                 onClick={handleResetFile}
-                style={{ padding: '6px 14px', fontSize: '0.84rem' }}
-              >
+               className="secondary-btn btn-sm">
                 تغيير الملف
               </button>
             </div>
@@ -2754,14 +2661,14 @@ function ImportCustodyModal({
 
           {/* 4. Parsing / Error / Warning Notices */}
           {isParsing && (
-            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)', fontSize: '0.92rem' }}>
-              <div className="loading-spinner" style={{ margin: '0 auto 10px auto' }} />
+            <div className="text-center p-5 text-muted font-sm">
+              <div className="loading-spinner mx-auto mb-2 block" />
               جاري فحص ومطابقة الأعمدة وتوليد القيود المخزنية...
             </div>
           )}
 
           {parseError && (
-            <div className="inline-message error" style={{ marginTop: '14px' }}>
+            <div className="inline-message error mt-3">
               <AlertTriangle size={16} />
               <span>{parseError}</span>
             </div>
@@ -3049,11 +2956,11 @@ function NewDisbursementModal({
       <div className="disbursement-modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <div className="modal-title-icon" style={{ background: 'rgba(14, 124, 134, 0.12)', color: 'var(--accent)' }}>
+            <div className="modal-title-icon modal-icon-accent">
               <ArrowLeftRight size={20} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--ink)' }}>
+              <h3 className="m-0 text-md text-ink font-bold">
                 إنشاء إذن صرف / تحويل عهدة جديد
               </h3>
               <span className="modal-subtitle">
