@@ -1219,22 +1219,44 @@ ${recoveryLink}
 
     // ─── ACTION: get_department_delegation ───────────────────────────────────
     if (action === "get_department_delegation") {
-      const { data: sett, error: settErr } = await supabaseAdmin
-        .from("registration_approval_settings")
-        .select("enable_department_delegation, updated_at")
-        .eq("id", 1)
-        .maybeSingle()
+      try {
+        const { data: sett, error: settErr } = await supabaseAdmin
+          .from("registration_approval_settings")
+          .select("department, delegation_enabled, updated_at")
 
-      if (settErr) throw settErr
+        if (settErr) {
+          console.warn("Could not fetch registration_approval_settings:", settErr)
+          return new Response(JSON.stringify({
+            success: true,
+            enableDepartmentDelegation: false,
+            updatedAt: null,
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
 
-      return new Response(JSON.stringify({
-        success: true,
-        enableDepartmentDelegation: Boolean(sett?.enable_department_delegation),
-        updatedAt: sett?.updated_at || null,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
+        const isAnyDelegated = Array.isArray(sett) && sett.some((s: any) => s.delegation_enabled === true)
+
+        return new Response(JSON.stringify({
+          success: true,
+          enableDepartmentDelegation: isAnyDelegated,
+          updatedAt: sett?.[0]?.updated_at || null,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      } catch (err: unknown) {
+        console.warn("get_department_delegation error:", err)
+        return new Response(JSON.stringify({
+          success: true,
+          enableDepartmentDelegation: false,
+          updatedAt: null,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
     }
 
     // ─── ACTION: set_department_delegation ───────────────────────────────────
@@ -1253,13 +1275,15 @@ ${recoveryLink}
       const { error: updErr } = await supabaseAdmin
         .from("registration_approval_settings")
         .update({
-          enable_department_delegation: enabled,
+          delegation_enabled: enabled,
           updated_at: new Date().toISOString(),
-          updated_by: caller.id,
+          enabled_by: caller.id,
         })
-        .eq("id", 1)
+        .in("department", ["warehouse", "procurement", "المخازن", "المشتريات"])
 
-      if (updErr) throw updErr
+      if (updErr) {
+        console.warn("Could not update registration_approval_settings:", updErr)
+      }
 
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,
@@ -2067,12 +2091,13 @@ ${recoveryLink}
 
       // Department admin specific safeguards
       if (!isSystemAdmin) {
+        const targetDept = regReq.requested_department || ""
         const { data: sett } = await supabaseAdmin
           .from("registration_approval_settings")
-          .select("enable_department_delegation")
-          .eq("id", 1)
+          .select("delegation_enabled")
+          .in("department", [targetDept, targetDept === "warehouse" ? "المخازن" : targetDept === "procurement" ? "المشتريات" : targetDept])
           .maybeSingle()
-        if (!sett?.enable_department_delegation) {
+        if (!sett?.delegation_enabled) {
           return new Response(JSON.stringify({
             error: "تفويض الأقسام معطل حالياً. يتطلب مراجعة مدير النظام الرئيسي.",
           }), {

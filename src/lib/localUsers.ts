@@ -9,6 +9,13 @@ import {
 export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
   if (!supabase) return []
   try {
+    // Only attempt cloud fetch if there is an active authenticated session.
+    // Unauthenticated/anonymous calls to app_users are blocked by RLS policies (returning 403 Forbidden).
+    const sessionRes = await supabase.auth?.getSession?.()
+    if (!sessionRes?.data?.session) {
+      return []
+    }
+
     const { data, error } = await supabase
       .from('app_users')
       .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions, employee_id, email, department, telegram_user_id')

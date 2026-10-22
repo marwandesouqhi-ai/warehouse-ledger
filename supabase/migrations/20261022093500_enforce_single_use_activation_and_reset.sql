@@ -81,3 +81,17 @@ BEGIN
   );
 END;
 $$;
+
+-- Grant column permissions to authenticated users for the employee profile attributes
+GRANT SELECT (employee_id, email, department, telegram_user_id) 
+  ON public.app_users TO authenticated;
+
+-- Ensure service_role and authenticated permissions on registration_approval_settings if table exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'registration_approval_settings') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public.registration_approval_settings TO service_role;
+    GRANT SELECT ON public.registration_approval_settings TO authenticated;
+  END IF;
+END $$;
+
