@@ -322,13 +322,13 @@ export function loadLocalUsers(): LocalUser[] {
         // Completely purge the deleted old account marwandesouqhi@gmail.com if present
         const filtered = users.filter(
           (u) =>
-            u.username.toLowerCase() !== 'marwandesouqhi@gmail.com' &&
-            u.displayName.toLowerCase() !== 'marwandesouqhi@gmail.com'
+            u.username?.toLowerCase() !== 'marwandesouqhi@gmail.com' &&
+            u.displayName?.toLowerCase() !== 'marwandesouqhi@gmail.com'
         )
         let needsSave = filtered.length !== users.length
         users = filtered
 
-        const marwanIdx = users.findIndex((u) => u.username.toLowerCase() === 'marwan-desouky')
+        const marwanIdx = users.findIndex((u) => u.username?.toLowerCase() === 'marwan-desouky')
 
         if (marwanIdx === -1) {
           users.unshift(DEFAULT_ADMIN)

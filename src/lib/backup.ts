@@ -1,11 +1,12 @@
 import type { Session } from '@supabase/supabase-js'
-import { logAuditEvent, getLocalAuditLogs, type AuditLogEntry } from './auditLogger'
+import { logAuditEvent, getLocalAuditLogs, fetchAuditLogs, type AuditLogEntry } from './auditLogger'
 import { fetchCustodyItemsFromCloud, loadCustodyItems, saveCustodyItems, saveCustodyItemsToCloud, type CustodyItem } from './custody'
 import type { FixtureMovement } from './fixture'
 import { fetchUsersFromCloud, loadLocalUsers, saveLocalUsers, syncUsersWithCloud, type LocalUser } from './localUsers'
 import { fetchMovements, saveMovements } from './movementsRepository'
 import { fetchAppSettingsFromCloud, loadAppSettings, saveAppSettingsToCloud, type AppSettings } from './settings'
 import { checkIsSystemAdmin, supabase } from './supabase'
+import { fetchActiveSuppliers } from './suppliersRepository'
 
 export const LAST_CLOUD_BACKUP_KEY = 'warehouse-ledger-last-cloud-backup'
 export const LAST_LOCAL_BACKUP_KEY = 'warehouse-ledger-last-local-backup'
@@ -23,23 +24,23 @@ export type SystemBackupPayload = {
     organization: string
     department: string
     currency: string
-      counts: {
-        movements: number
-        custody: number
-        users: number
-        auditLogs: number
-        suppliers?: number
-      }
-    }
-    data: {
-      settings: AppSettings
-      movements: FixtureMovement[]
-      custody: CustodyItem[]
-      users: LocalUser[]
-      auditLogs: AuditLogEntry[]
-      suppliers?: Record<string, unknown>[]
+    counts: {
+      movements: number
+      custody: number
+      users: number
+      auditLogs: number
+      suppliers?: number
     }
   }
+  data: {
+    settings: AppSettings
+    movements: FixtureMovement[]
+    custody: CustodyItem[]
+    users: LocalUser[]
+    auditLogs: AuditLogEntry[]
+    suppliers?: Record<string, unknown>[]
+  }
+}
 
 export type BackupResult = {
   success: boolean
@@ -47,7 +48,8 @@ export type BackupResult = {
     movements: number
     custody: number
     users: number
-    auditLogs?: number
+    auditLogs: number
+    suppliers?: number
     settings?: boolean
   }
   timestamp: string
@@ -101,6 +103,7 @@ export function formatBackupTimestamp(isoString?: string | null): string {
 
 /**
  * Creates and downloads a complete JSON backup file to the local device.
+ * Covers all system datasets: movements, custody, users, audit logs, suppliers, and settings.
  * Restricted strictly to System Admin.
  */
 export async function exportLocalBackup(session?: Session | null): Promise<BackupResult> {
@@ -109,12 +112,84 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
   }
 
   const settings = loadAppSettings()
-  const movements = getStoredMovements()
-  const custody = loadCustodyItems()
-  const users = loadLocalUsers()
-  const auditLogs = getLocalAuditLogs()
-  const timestamp = new Date().toISOString()
 
+  // 1. Movements: retrieve local movements and merge with cloud movements if available
+  let movements = getStoredMovements()
+  try {
+    const cloudMovements = await fetchMovements()
+    if (cloudMovements && cloudMovements.length > 0) {
+      const mvMap = new Map<string, FixtureMovement>()
+      for (const m of movements) {
+        if (m.id) mvMap.set(String(m.id), m)
+      }
+      for (const m of cloudMovements) {
+        if (m.id) mvMap.set(String(m.id), m)
+      }
+      movements = Array.from(mvMap.values())
+    }
+  } catch {
+    // fallback to local movements
+  }
+
+  // 2. Custody items: retrieve local items and merge with cloud custody if available
+  let custody = loadCustodyItems()
+  try {
+    const cloudCustody = await fetchCustodyItemsFromCloud()
+    if (cloudCustody && cloudCustody.length > 0) {
+      const cMap = new Map<string, CustodyItem>()
+      for (const c of custody) {
+        if (c.id) cMap.set(String(c.id), c)
+      }
+      for (const c of cloudCustody) {
+        if (c.id) cMap.set(String(c.id), c)
+      }
+      custody = Array.from(cMap.values())
+    }
+  } catch {
+    // fallback to local custody
+  }
+
+  // 3. Users: retrieve local users and merge with cloud users if available
+  let users = loadLocalUsers()
+  try {
+    const cloudUsers = await fetchUsersFromCloud()
+    if (cloudUsers && cloudUsers.length > 0) {
+      const uMap = new Map<string, LocalUser>()
+      for (const u of users) {
+        const key = u.id || u.username
+        if (key) uMap.set(key, u)
+      }
+      for (const u of cloudUsers) {
+        const key = u.id || u.username
+        if (key) uMap.set(key, u)
+      }
+      users = Array.from(uMap.values())
+    }
+  } catch {
+    // fallback to local users
+  }
+
+  // 4. Audit logs: retrieve local logs and merge with cloud audit logs if available
+  let auditLogs = getLocalAuditLogs()
+  try {
+    const remoteLogs = await fetchAuditLogs(1000)
+    if (remoteLogs && remoteLogs.length > 0) {
+      const logMap = new Map<string, AuditLogEntry>()
+      for (const l of auditLogs) {
+        if (l.id) logMap.set(String(l.id), l)
+      }
+      for (const l of remoteLogs) {
+        if (l.id) logMap.set(String(l.id), l)
+      }
+      auditLogs = Array.from(logMap.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    }
+  } catch {
+    // fallback to local logs
+  }
+
+  // 5. Suppliers: custom suppliers from localStorage and repository
   let suppliers: Record<string, unknown>[] = []
   try {
     const rawSuppliers = localStorage.getItem('warehouse_custom_suppliers')
@@ -125,6 +200,26 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
   } catch {
     // ignore
   }
+
+  try {
+    const activeSuppliers = await fetchActiveSuppliers()
+    if (activeSuppliers && activeSuppliers.length > 0) {
+      const supMap = new Map<string, Record<string, unknown>>()
+      for (const s of suppliers) {
+        const key = (s.id as string) || (s.name as string)
+        if (key) supMap.set(key, s)
+      }
+      for (const s of activeSuppliers) {
+        const key = s.id || s.name
+        if (key) supMap.set(key, s as unknown as Record<string, unknown>)
+      }
+      suppliers = Array.from(supMap.values())
+    }
+  } catch {
+    // ignore
+  }
+
+  const timestamp = new Date().toISOString()
 
   const payload: SystemBackupPayload = {
     app: 'warehouse-ledger',
@@ -163,15 +258,17 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
   const timeStr = timestamp.slice(11, 16).replace(':', '-')
   const fileName = `نسخة_احتياطية_شاملة_المخازن_${dateStr}_${timeStr}.json`
 
-  // Trigger browser file download
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = fileName
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
+  // Trigger browser file download if in browser
+  if (typeof document !== 'undefined') {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
 
   try {
     localStorage.setItem(LAST_LOCAL_BACKUP_KEY, timestamp)
@@ -180,13 +277,14 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
   }
 
   void logAuditEvent({
-    action: `نسخ احتياطي محلي: تنزيل نسخة شاملة على جهاز الكمبيوتر (${movements.length} حركة، ${custody.length} عهدة)`,
+    action: `نسخ احتياطي محلي شامل: تنزيل نسخة لكامل بيانات النظام (${movements.length} حركة، ${custody.length} عهدة، ${users.length} مستخدم، ${auditLogs.length} عملية تدقيق)`,
     entity_type: 'backup',
     details: {
       movementsCount: movements.length,
       custodyCount: custody.length,
       usersCount: users.length,
       auditLogsCount: auditLogs.length,
+      suppliersCount: suppliers.length,
       fileName,
     },
     user: session?.user,
@@ -199,6 +297,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
       custody: custody.length,
       users: users.length,
       auditLogs: auditLogs.length,
+      suppliers: suppliers.length,
     },
     timestamp,
     fileName,
@@ -206,7 +305,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
 }
 
 /**
- * Performs a complete backup and synchronization of all local records into Supabase cloud database.
+ * Performs a complete backup and synchronization of all system records into Supabase cloud database.
  * Restricted strictly to System Admin.
  */
 export async function backupToSupabaseCloud(session?: Session | null): Promise<BackupResult> {
@@ -222,6 +321,7 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
   const movements = getStoredMovements()
   const custody = loadCustodyItems()
   const users = loadLocalUsers()
+  const auditLogs = getLocalAuditLogs()
   const timestamp = new Date().toISOString()
 
   // 1. Settings Backup to Cloud
@@ -249,12 +349,13 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
   }
 
   void logAuditEvent({
-    action: `نسخ احتياطي سحابي: مزامنة وتأكيد قاعدة بيانات Supabase كاملة (${movements.length} حركة، ${custody.length} عهدة)`,
+    action: `نسخ احتياطي سحابي شامل: مزامنة وتأكيد قاعدة بيانات Supabase كاملة (${movements.length} حركة، ${custody.length} عهدة، ${users.length} مستخدم، ${auditLogs.length} عملية تدقيق)`,
     entity_type: 'backup',
     details: {
       movementsCount: movements.length,
       custodyCount: custody.length,
       usersCount: users.length,
+      auditLogsCount: auditLogs.length,
       settingsBackedUp: true,
     },
     user: session?.user,
@@ -266,6 +367,7 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
       movements: movements.length,
       custody: custody.length,
       users: users.length,
+      auditLogs: auditLogs.length,
       settings: true,
     },
     timestamp,
@@ -277,6 +379,8 @@ export type RestoreOptions = {
   restoreCustody?: boolean
   restoreUsers?: boolean
   restoreSettings?: boolean
+  restoreAuditLogs?: boolean
+  restoreSuppliers?: boolean
 }
 
 export type RestoreResult = {
@@ -285,6 +389,8 @@ export type RestoreResult = {
     movements: number
     custody: number
     users: number
+    auditLogs: number
+    suppliers?: number
     settings?: boolean
   }
   source: 'local_file' | 'cloud'
@@ -304,10 +410,10 @@ export function validateBackupPayload(jsonString: string): {
       return { valid: false, error: 'الملف ليس بتنسيق JSON صحيح.' }
     }
 
-  if (!parsed || typeof parsed !== 'object') {
-    return { valid: false, error: 'الملف ليس بتنسيق JSON صحيح.' }
-  }
-  const candidate = parsed as Partial<SystemBackupPayload>
+    if (!parsed || typeof parsed !== 'object') {
+      return { valid: false, error: 'الملف ليس بتنسيق JSON صحيح.' }
+    }
+    const candidate = parsed as Partial<SystemBackupPayload>
     if (candidate.app !== 'warehouse-ledger') {
       return {
         valid: false,
@@ -356,6 +462,7 @@ export function validateBackupPayload(jsonString: string): {
 
 /**
  * Restores system data from an uploaded valid JSON backup payload.
+ * Can selectively or completely restore: movements, custody, users, audit logs, suppliers, and settings.
  * Restricted strictly to System Admin.
  */
 export async function restoreLocalBackup(
@@ -372,12 +479,16 @@ export async function restoreLocalBackup(
     restoreCustody: true,
     restoreUsers: true,
     restoreSettings: true,
+    restoreAuditLogs: true,
+    restoreSuppliers: true,
     ...options,
   }
 
   let movementsCount = 0
   let custodyCount = 0
   let usersCount = 0
+  let auditLogsCount = 0
+  let suppliersCount = 0
   let settingsRestored = false
 
   // 1. Settings restoration
@@ -390,6 +501,13 @@ export async function restoreLocalBackup(
   if (opts.restoreCustody && Array.isArray(payload.data.custody)) {
     saveCustodyItems(payload.data.custody)
     custodyCount = payload.data.custody.length
+    if (supabase && payload.data.custody.length > 0) {
+      try {
+        await saveCustodyItemsToCloud(payload.data.custody)
+      } catch (err) {
+        console.warn('Error syncing custody to cloud during restore:', err)
+      }
+    }
   }
 
   // 3. Movements restoration
@@ -409,21 +527,43 @@ export async function restoreLocalBackup(
   if (opts.restoreUsers && Array.isArray(payload.data.users) && payload.data.users.length > 0) {
     saveLocalUsers(payload.data.users)
     usersCount = payload.data.users.length
+    if (supabase) {
+      try {
+        await syncUsersWithCloud()
+      } catch (err) {
+        console.warn('Error syncing restored users with cloud:', err)
+      }
+    }
   }
 
   // 5. Custom Suppliers restoration
-  if (Array.isArray(payload.data.suppliers) && payload.data.suppliers.length > 0) {
+  if (opts.restoreSuppliers && Array.isArray(payload.data.suppliers) && payload.data.suppliers.length > 0) {
     try {
       localStorage.setItem('warehouse_custom_suppliers', JSON.stringify(payload.data.suppliers))
+      suppliersCount = payload.data.suppliers.length
     } catch (err) {
       console.warn('Error syncing suppliers during restore:', err)
     }
   }
 
-  // 6. Audit logs restoration
-  if (Array.isArray(payload.data.auditLogs) && payload.data.auditLogs.length > 0) {
+  // 6. Audit logs restoration (سجل العمليات والتدقيق)
+  if (opts.restoreAuditLogs && Array.isArray(payload.data.auditLogs) && payload.data.auditLogs.length > 0) {
     try {
-      localStorage.setItem('warehouse-ledger-audit-logs', JSON.stringify(payload.data.auditLogs))
+      const existing = getLocalAuditLogs()
+      const logMap = new Map<string, AuditLogEntry>()
+      // Keep existing logs
+      for (const log of existing) {
+        if (log.id) logMap.set(log.id, log)
+      }
+      // Merge with backup logs
+      for (const log of payload.data.auditLogs) {
+        if (log.id) logMap.set(log.id, log)
+      }
+      const mergedLogs = Array.from(logMap.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      localStorage.setItem('warehouse-ledger-audit-logs', JSON.stringify(mergedLogs))
+      auditLogsCount = payload.data.auditLogs.length
     } catch (err) {
       console.warn('Error syncing audit logs during restore:', err)
     }
@@ -440,18 +580,21 @@ export async function restoreLocalBackup(
       window.dispatchEvent(new CustomEvent('custody-items-changed'))
       window.dispatchEvent(new CustomEvent('settings-changed'))
       window.dispatchEvent(new CustomEvent('suppliers-changed'))
+      window.dispatchEvent(new CustomEvent('audit-logs-changed'))
     }
   } catch {
     // ignore
   }
 
   void logAuditEvent({
-    action: `استعادة نسخة احتياطية من ملف محلي: تم استعادة ${movementsCount} حركة، ${custodyCount} صنف عهدة، ${usersCount} مستخدم`,
+    action: `استعادة شاملة من ملف محلي: تم استعادة ${movementsCount} حركة، ${custodyCount} صنف عهدة، ${usersCount} مستخدم، ${auditLogsCount} عملية تدقيق`,
     entity_type: 'backup',
     details: {
       movementsCount,
       custodyCount,
       usersCount,
+      auditLogsCount,
+      suppliersCount,
       settingsRestored,
       originalBackupDate: payload.backupDate,
     },
@@ -464,6 +607,8 @@ export async function restoreLocalBackup(
       movements: movementsCount,
       custody: custodyCount,
       users: usersCount,
+      auditLogs: auditLogsCount,
+      suppliers: suppliersCount,
       settings: settingsRestored,
     },
     source: 'local_file',
@@ -524,6 +669,28 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
     console.warn('Could not restore users from cloud:', err)
   }
 
+  let auditLogsCount = 0
+  try {
+    const cloudAuditLogs = await fetchAuditLogs(500)
+    if (cloudAuditLogs && cloudAuditLogs.length > 0) {
+      localStorage.setItem('warehouse-ledger-audit-logs', JSON.stringify(cloudAuditLogs))
+      auditLogsCount = cloudAuditLogs.length
+    }
+  } catch (err) {
+    console.warn('Could not restore audit logs from cloud:', err)
+  }
+
+  let suppliersCount = 0
+  try {
+    const cloudSuppliers = await fetchActiveSuppliers()
+    if (cloudSuppliers && cloudSuppliers.length > 0) {
+      localStorage.setItem('warehouse_custom_suppliers', JSON.stringify(cloudSuppliers))
+      suppliersCount = cloudSuppliers.length
+    }
+  } catch (err) {
+    console.warn('Could not restore suppliers from cloud:', err)
+  }
+
   const timestamp = new Date().toISOString()
 
   // Dispatch global events so UI views react
@@ -535,18 +702,21 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
       window.dispatchEvent(new CustomEvent('custody-items-changed'))
       window.dispatchEvent(new CustomEvent('settings-changed'))
       window.dispatchEvent(new CustomEvent('suppliers-changed'))
+      window.dispatchEvent(new CustomEvent('audit-logs-changed'))
     }
   } catch {
     // ignore
   }
 
   void logAuditEvent({
-    action: `استعادة نسخة احتياطية من Supabase: تم جلب ${movementsCount} حركة، ${custodyCount} صنف عهدة، ${usersCount} مستخدم`,
+    action: `استعادة شاملة من Supabase: تم جلب ${movementsCount} حركة، ${custodyCount} صنف عهدة، ${usersCount} مستخدم، ${auditLogsCount} عملية تدقيق`,
     entity_type: 'backup',
     details: {
       movementsCount,
       custodyCount,
       usersCount,
+      auditLogsCount,
+      suppliersCount,
       settingsRestored,
     },
     user: session?.user,
@@ -558,9 +728,12 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
       movements: movementsCount,
       custody: custodyCount,
       users: usersCount,
+      auditLogs: auditLogsCount,
+      suppliers: suppliersCount,
       settings: settingsRestored,
     },
     source: 'cloud',
     timestamp,
   }
 }
+

@@ -10,6 +10,27 @@ vi.mock('../../src/lib/settings', async (importOriginal) => {
   }
 })
 
+vi.mock('../../src/lib/supabase', () => ({
+  supabase: null,
+  checkIsSystemAdmin: vi.fn((session) => {
+    return (
+      session?.user?.app_metadata?.system_admin === true ||
+      session?.user?.app_metadata?.role === 'system_admin' ||
+      session?.user?.user_metadata?.role === 'system_admin' ||
+      session?.user?.email === 'marwan-desouky'
+    )
+  }),
+}))
+
+vi.mock('../../src/lib/auditLogger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/auditLogger')>()
+  return {
+    ...actual,
+    getClientIp: vi.fn().mockResolvedValue('127.0.0.1'),
+    logAuditEvent: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
 import {
   exportLocalBackup,
   backupToSupabaseCloud,
@@ -41,7 +62,7 @@ describe('System Backup Suite', () => {
 
   beforeEach(() => {
     localStorage.clear()
-    vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
   it('rejects backup execution for non-system admin sessions', async () => {
@@ -58,27 +79,47 @@ describe('System Backup Suite', () => {
     )
   })
 
-  it('exports local backup file on device when called by System Admin', async () => {
+  it('exports local backup file on device including users and audit logs when called by System Admin', async () => {
     // Mock URL.createObjectURL and revokeObjectURL
     const createObjectUrlMock = vi.fn().mockReturnValue('blob:mock-url')
     const revokeObjectUrlMock = vi.fn()
     globalThis.URL.createObjectURL = createObjectUrlMock
     globalThis.URL.revokeObjectURL = revokeObjectUrlMock
 
-    // Seed some custody and movements
+    // Seed movements, custody, users, audit logs, and suppliers
     localStorage.setItem(
       'warehouse-ledger-movements',
       JSON.stringify([{ id: 'm-1', item: 'حبر طابعة', qin: '10' }])
     )
     localStorage.setItem(
       'warehouse-ledger-custody-items',
-      JSON.stringify([{ id: 'c-1', warehouseId: 'main', name: 'شاشة', quantity: 2, value: 5000 }])
+      JSON.stringify([{ id: 'c-test-1', warehouseId: 'main', code: 'MAIN-001', name: 'شاشة', quantity: 2, value: 5000 }])
+    )
+    localStorage.setItem(
+      'warehouse-ledger-local-users',
+      JSON.stringify([
+        { id: 'usr-admin-marwan', username: 'marwan-desouky', displayName: 'مدير النظام', role: 'system_admin', status: 'active' },
+        { id: 'u-1', username: 'storekeeper', role: 'editor', status: 'active' },
+      ])
+    )
+    localStorage.setItem(
+      'warehouse-ledger-audit-logs',
+      JSON.stringify([
+        {
+          id: 'log-1',
+          action: 'إضافة حركة جديدة',
+          user_email: 'storekeeper@example.com',
+          created_at: new Date().toISOString(),
+        },
+      ])
     )
 
     const result = await exportLocalBackup(adminSession)
     expect(result.success).toBe(true)
     expect(result.counts.movements).toBe(1)
     expect(result.counts.custody).toBe(1)
+    expect(result.counts.users).toBe(2)
+    expect(result.counts.auditLogs).toBe(1)
     expect(result.fileName).toContain('نسخة_احتياطية_شاملة_المخازن_')
     expect(localStorage.getItem(LAST_LOCAL_BACKUP_KEY)).toBeTruthy()
   })
@@ -107,19 +148,33 @@ describe('System Backup Suite', () => {
       app: 'warehouse-ledger',
       version: '1.0.0',
       backupDate: new Date().toISOString(),
-      metadata: { organization: 'جامعة', department: 'مخازن', currency: 'EGP', counts: { movements: 1, custody: 1, users: 1, auditLogs: 0 } },
+      metadata: {
+        organization: 'جامعة',
+        department: 'مخازن',
+        currency: 'EGP',
+        counts: { movements: 1, custody: 1, users: 1, auditLogs: 1, suppliers: 0 },
+      },
       data: {
         settings: { organization: 'جامعة', department: 'مخازن', currency: 'EGP' },
         movements: [{ id: 'm-100', item: 'ورق تصوير', qin: '5' }],
         custody: [{ id: 'c-100', warehouseId: 'main', name: 'طابعة ليزر', quantity: 1, value: 3000 }],
         users: [{ id: 'u-1', username: 'admin', role: 'admin' }],
-        auditLogs: [],
+        auditLogs: [
+          {
+            id: 'log-100',
+            action: 'تسجيل دخول',
+            user_email: 'admin',
+            created_at: new Date().toISOString(),
+          },
+        ],
       },
     })
     const res3 = validateBackupPayload(validJson)
     expect(res3.valid).toBe(true)
     expect(res3.payload?.data.movements.length).toBe(1)
     expect(res3.payload?.data.custody.length).toBe(1)
+    expect(res3.payload?.data.users.length).toBe(1)
+    expect(res3.payload?.data.auditLogs.length).toBe(1)
   })
 
   it('rejects restore execution for non-system admin sessions', async () => {
@@ -143,33 +198,62 @@ describe('System Backup Suite', () => {
     )
   })
 
-  it('successfully restores system data from valid backup payload for System Admin', async () => {
+  it('successfully restores complete system data including users and audit logs for System Admin', async () => {
     const payload = {
       app: 'warehouse-ledger' as const,
       version: '1.0.0' as const,
       backupDate: '2026-10-12T09:00:00.000Z',
       generator: { role: 'admin' },
-      metadata: { organization: 'جامعة الزقازيق الأهلية', department: 'المخازن', currency: 'EGP', counts: { movements: 1, custody: 1, users: 1, auditLogs: 0 } },
+      metadata: {
+        organization: 'جامعة الزقازيق الأهلية',
+        department: 'المخازن',
+        currency: 'EGP',
+        counts: { movements: 1, custody: 1, users: 1, auditLogs: 1 },
+      },
       data: {
         settings: { organization: 'جامعة الزقازيق الأهلية', department: 'المخازن', currency: 'EGP' as const },
         movements: [{ id: 'm-test-1', item: 'كابلات شبكة', qin: '50' } as any],
         custody: [{ id: 'c-test-1', warehouseId: 'main', name: 'سويتش شبكات', quantity: 2, value: 8000 } as any],
         users: [{ id: 'u-admin-test', username: 'admin-test', role: 'admin' } as any],
-        auditLogs: [],
+        auditLogs: [
+          {
+            id: 'log-audit-1',
+            action: 'إضافة صنف عهدة جديد',
+            user_email: 'admin-test',
+            created_at: '2026-10-12T08:50:00.000Z',
+          } as any,
+        ],
       },
     }
+
+    const eventsFired: string[] = []
+    const trackEvent = (e: Event) => eventsFired.push(e.type)
+    window.addEventListener('audit-logs-changed', trackEvent)
+    window.addEventListener('local-users-changed', trackEvent)
 
     const result = await restoreLocalBackup(payload, adminSession)
     expect(result.success).toBe(true)
     expect(result.counts.movements).toBe(1)
     expect(result.counts.custody).toBe(1)
     expect(result.counts.users).toBe(1)
+    expect(result.counts.auditLogs).toBe(1)
     expect(result.counts.settings).toBe(true)
 
-    // Verify localStorage has the restored data
+    // Verify localStorage has the restored movements, users, and audit logs
     const storedMovements = JSON.parse(localStorage.getItem('warehouse-ledger-movements') || '[]')
     expect(storedMovements.length).toBe(1)
     expect(storedMovements[0].item).toBe('كابلات شبكة')
+
+    const storedUsers = JSON.parse(localStorage.getItem('warehouse-ledger-local-users') || '[]')
+    expect(storedUsers.length).toBe(1)
+    expect(storedUsers[0].username).toBe('admin-test')
+
+    const storedLogs = JSON.parse(localStorage.getItem('warehouse-ledger-audit-logs') || '[]')
+    expect(storedLogs.length).toBe(1)
+    expect(storedLogs[0].action).toBe('إضافة صنف عهدة جديد')
+
+    expect(eventsFired).toContain('audit-logs-changed')
+    expect(eventsFired).toContain('local-users-changed')
   })
 
   it('preserves outward movements with qout, to, permit, and restores custom suppliers', async () => {
@@ -221,6 +305,7 @@ describe('System Backup Suite', () => {
     const restoreResult = await restoreLocalBackup(payload, adminSession)
     expect(restoreResult.success).toBe(true)
     expect(restoreResult.counts.movements).toBe(2)
+    expect(restoreResult.counts.suppliers).toBe(1)
 
     // Check restored movements in storage
     const restoredMovements = JSON.parse(localStorage.getItem('warehouse-ledger-movements') || '[]')
@@ -241,5 +326,57 @@ describe('System Backup Suite', () => {
     expect(eventsFired).toContain('custody-changed')
     expect(eventsFired).toContain('suppliers-changed')
   })
+
+  it('supports selective restore of only audit logs and users without altering movements', async () => {
+    // Seed initial movements
+    localStorage.setItem(
+      'warehouse-ledger-movements',
+      JSON.stringify([{ id: 'm-orig', item: 'صنف أصلي', qin: '10' }])
+    )
+
+    const payload = {
+      app: 'warehouse-ledger' as const,
+      version: '1.0.0' as const,
+      backupDate: new Date().toISOString(),
+      generator: { role: 'admin' },
+      metadata: { organization: 'ZNU', department: 'المخازن', currency: 'EGP', counts: { movements: 5, custody: 0, users: 1, auditLogs: 2 } },
+      data: {
+        settings: { organization: 'ZNU', department: 'المخازن', currency: 'EGP' as const },
+        movements: [{ id: 'm-new-should-not-restore', item: 'جديد', qin: '99' } as any],
+        custody: [],
+        users: [{ id: 'u-restored', username: 'auditor', role: 'viewer' } as any],
+        auditLogs: [
+          { id: 'log-r-1', action: 'عملية 1', created_at: new Date().toISOString() } as any,
+          { id: 'log-r-2', action: 'عملية 2', created_at: new Date().toISOString() } as any,
+        ],
+      },
+    }
+
+    const restoreResult = await restoreLocalBackup(payload, adminSession, {
+      restoreMovements: false,
+      restoreCustody: false,
+      restoreSettings: false,
+      restoreUsers: true,
+      restoreAuditLogs: true,
+    })
+
+    expect(restoreResult.success).toBe(true)
+    expect(restoreResult.counts.movements).toBe(0)
+    expect(restoreResult.counts.users).toBe(1)
+    expect(restoreResult.counts.auditLogs).toBe(2)
+
+    // Original movements untouched
+    const storedMovements = JSON.parse(localStorage.getItem('warehouse-ledger-movements') || '[]')
+    expect(storedMovements.length).toBe(1)
+    expect(storedMovements[0].id).toBe('m-orig')
+
+    // Users and audit logs restored
+    const storedUsers = JSON.parse(localStorage.getItem('warehouse-ledger-local-users') || '[]')
+    expect(storedUsers[0].username).toBe('auditor')
+
+    const storedLogs = JSON.parse(localStorage.getItem('warehouse-ledger-audit-logs') || '[]')
+    expect(storedLogs.length).toBe(2)
+  })
 })
+
 

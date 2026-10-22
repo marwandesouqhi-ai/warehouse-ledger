@@ -122,6 +122,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         restoreCustody: true,
         restoreUsers: true,
         restoreSettings: true,
+        restoreAuditLogs: true,
+        restoreSuppliers: true,
     })
     const [isRestoringLocal, setIsRestoringLocal] = useState(false)
     const [isRestoringCloud, setIsRestoringCloud] = useState(false)
@@ -163,8 +165,16 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                 setDraft(parsedBackup.data.settings)
                 onSave(parsedBackup.data.settings)
             }
+            const parts: string[] = []
+            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
+            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
+            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
+            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية بسجل التدقيق`)
+            if (result.counts.suppliers) parts.push(`${result.counts.suppliers} مورد`)
+            if (result.counts.settings) parts.push('إعدادات وشعار المؤسسة')
+
             setRestoreSuccessNotice(
-                `✓ تم استعادة النسخة الاحتياطية بنجاح! تم استرجاع: ${result.counts.movements} حركة، ${result.counts.custody} صنف عهدة، ${result.counts.users} مستخدم.`
+                `✓ تم استعادة النسخة الاحتياطية بنجاح! تم استرجاع: ${parts.length > 0 ? parts.join('، ') : 'كافة البيانات المحددة'}.`
             )
             setParsedBackup(null)
             setRestoreFile(null)
@@ -184,8 +194,16 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
         try {
             const result = await restoreFromCloud(session)
+            const parts: string[] = []
+            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
+            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
+            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
+            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية بسجل التدقيق`)
+            if (result.counts.suppliers) parts.push(`${result.counts.suppliers} مورد`)
+            if (result.counts.settings) parts.push('إعدادات وشعار المؤسسة')
+
             setRestoreSuccessNotice(
-                `✓ تم استعادة وتحديث البيانات من سحابة Supabase بنجاح! تم جلب: ${result.counts.movements} حركة، ${result.counts.custody} صنف عهدة، ${result.counts.users} مستخدم.`
+                `✓ تم استعادة وتحديث البيانات من سحابة Supabase بنجاح! تم جلب: ${parts.length > 0 ? parts.join('، ') : 'كافة البيانات المزامنة'}.`
             )
         } catch (err) {
             console.error('Cloud restore error:', err)
@@ -203,7 +221,12 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         try {
             const result = await backupToSupabaseCloud(session)
             setLastCloudTime(result.timestamp)
-            setCloudBackupNotice(`تم النسخ السحابي بنجاح! تم تأكيد حفظ ${result.counts.movements} حركة و${result.counts.custody} صنف عهدة في Supabase.`)
+            const parts: string[] = []
+            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
+            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
+            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
+            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية تدقيق`)
+            setCloudBackupNotice(`تم النسخ السحابي بنجاح! تم تأكيد حفظ ومزامنة: ${parts.join(' و')} في Supabase.`)
             setTimeout(() => setCloudBackupNotice(''), 7000)
         } catch (err) {
             console.error('Cloud backup error:', err)
@@ -221,7 +244,9 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         try {
             const result = await exportLocalBackup(session)
             setLastLocalTime(result.timestamp)
-            setLocalBackupNotice(`تم تنزيل ملف النسخة الاحتياطية (${result.fileName}) على جهازك بنجاح!`)
+            setLocalBackupNotice(
+                `تم تنزيل النسخة الاحتياطية الشاملة (${result.fileName}) متضمنة كافة الحركات (${result.counts.movements}) والعهدة (${result.counts.custody}) والمستخدمين (${result.counts.users}) وسجل العمليات (${result.counts.auditLogs}) بنجاح!`
+            )
             setTimeout(() => setLocalBackupNotice(''), 7000)
         } catch (err) {
             console.error('Local backup error:', err)
@@ -874,6 +899,14 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         <strong>{parsedBackup.metadata.counts.users} مستخدم</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
+                                                        <span>سجل العمليات والتدقيق</span>
+                                                        <strong>{parsedBackup.metadata.counts.auditLogs || 0} عملية</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>الموردون المعتمدون</span>
+                                                        <strong>{parsedBackup.metadata.counts.suppliers || 0} مورد</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
                                                         <span>المؤسسة والعملة</span>
                                                         <strong>{parsedBackup.metadata.organization} ({parsedBackup.metadata.currency})</strong>
                                                     </div>
@@ -906,7 +939,23 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                                 checked={restoreOptions.restoreUsers}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreUsers: e.target.checked })}
                                                             />
-                                                            المستخدمون والصلاحيات ({parsedBackup.metadata.counts.users})
+                                                            المستخدمون وحسابات الدخول ({parsedBackup.metadata.counts.users})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={restoreOptions.restoreAuditLogs}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreAuditLogs: e.target.checked })}
+                                                            />
+                                                            سجل العمليات والتدقيق ({parsedBackup.metadata.counts.auditLogs || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={restoreOptions.restoreSuppliers}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreSuppliers: e.target.checked })}
+                                                            />
+                                                            سجل الموردين المعتمدين ({parsedBackup.metadata.counts.suppliers || 0})
                                                         </label>
                                                         <label className="restore-checkbox-label">
                                                             <input
@@ -963,7 +1012,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                             <div>
                                                 <h4>استعادة ومزامنة من سحابة Supabase</h4>
                                                 <span className="backup-card-desc">
-                                                    إعادة جلب ومزامنة كافة السجلات المخزنة في قاعدة بيانات Supabase إلى جهازك فورياً (الحركات، العهد، الإعدادات، المستخدمين).
+                                                    إعادة جلب ومزامنة كافة السجلات المخزنة في قاعدة بيانات Supabase إلى جهازك فورياً (الحركات، العهد، الإعدادات، المستخدمين، وسجل العمليات).
                                                 </span>
                                             </div>
                                         </div>
