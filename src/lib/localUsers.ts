@@ -44,6 +44,12 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
 
 export async function saveUserToCloud(user: LocalUser): Promise<void> {
   if (!supabase) return
+  // 1. Protected system accounts (e.g. marwan-desouky) are provisioned exclusively via cloud migrations/bootstrap
+  // and must never be queried or mutated via client-side sync, which would trigger 403 under RLS.
+  if (isProtectedUsername(user.username)) {
+    return
+  }
+
   try {
     const payload: Record<string, unknown> = {
       id: user.id,
@@ -66,11 +72,16 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       payload.password = user.password
     }
 
-    const { data: existing } = await supabase
+    const { data: existing, error: selectErr } = await supabase
       .from('app_users')
       .select('id, password')
       .eq('username', user.username.toLowerCase())
       .maybeSingle()
+
+    if (selectErr) {
+      // Direct client access blocked by RLS or restricted
+      return
+    }
 
     if (existing) {
       if (!payload.password && existing.password) {
@@ -87,30 +98,17 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
 
 export async function deleteUserFromCloud(id: string, username?: string): Promise<void> {
   if (!supabase) return
-  try {
-    // 1. Invoke admin-users Edge Function for clean Auth + Database cascade
-    try {
-      await supabase.functions.invoke('admin-users', {
-        body: {
-          action: 'delete_user',
-          userId: id,
-          username,
-        },
-      })
-    } catch (fnErr) {
-      console.warn('Edge function delete_user call error:', fnErr)
-    }
+  if (isProtectedUsername(username)) return
 
-    // 2. Direct hard delete from app_users table
-    const cleanUsername = username?.trim().toLowerCase()
-    if (cleanUsername) {
-      await supabase.from('app_users').delete().ilike('username', cleanUsername)
-      await supabase.from('user_invitations').delete().ilike('username', cleanUsername)
-      await supabase.from('telegram_user_sessions').delete().ilike('username', cleanUsername)
-    }
-    if (id) {
-      await supabase.from('app_users').delete().eq('id', id)
-    }
+  try {
+    // Invoke admin-users Edge Function for clean Auth + Database cascade
+    await supabase.functions.invoke('admin-users', {
+      body: {
+        action: 'delete_user',
+        userId: id,
+        username,
+      },
+    })
   } catch (err) {
     console.warn('Could not delete user from cloud:', err)
   }
@@ -125,11 +123,13 @@ export async function syncUsersWithCloud(): Promise<LocalUser[]> {
 
       // Cloud users take priority
       cloudUsers.forEach((u) => mergedMap.set(u.username.toLowerCase(), u))
-      // Add local users that might not have been pushed yet
+      // Add local users that might not have been pushed yet (excluding protected accounts)
       local.forEach((u) => {
         if (!mergedMap.has(u.username.toLowerCase())) {
           mergedMap.set(u.username.toLowerCase(), u)
-          void saveUserToCloud(u)
+          if (!isProtectedUsername(u.username)) {
+            void saveUserToCloud(u)
+          }
         }
       })
 
@@ -144,12 +144,9 @@ export async function syncUsersWithCloud(): Promise<LocalUser[]> {
       }
       return merged
     } else {
-      // If cloud is empty, seed with current local users
-      const local = loadLocalUsers()
-      for (const u of local) {
-        void saveUserToCloud(u)
-      }
-      return local
+      // If cloud is empty or inaccessible (e.g. unauthenticated or restricted RLS),
+      // rely on local users without attempting unauthorized direct inserts
+      return loadLocalUsers()
     }
   } catch {
     return loadLocalUsers()

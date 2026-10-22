@@ -124,4 +124,26 @@ describe('Enterprise Directory Authentication & User Provisioning Suite', () => 
     expect(loaded?.user.app_metadata.role).toBe('system_admin')
     expect(loaded?.user.app_metadata.system_admin).toBe(true)
   })
+
+  it('5. saveUserToCloud strictly skips protected account marwan-desouky without making network calls', async () => {
+    if (!supabase) return
+
+    const selectSpy = vi.fn()
+    vi.spyOn(supabase, 'from').mockReturnValue({ select: selectSpy } as any)
+
+    const founderUser: LocalUser = {
+      id: 'usr-admin-marwan',
+      username: 'marwan-desouky',
+      displayName: 'مروان دسوقي',
+      password: '',
+      role: 'system_admin',
+      activationCode: '',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    }
+
+    await saveUserToCloud(founderUser)
+
+    expect(selectSpy).not.toHaveBeenCalled()
+  })
 })
