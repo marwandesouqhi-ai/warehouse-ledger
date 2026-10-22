@@ -116,6 +116,15 @@
   --chart-4: #7457b7;
   --chart-5: #268c68;
 
+  /* Motion tokens */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-shift: 8px;
+  --dir: 1;
+
   font-size: 16px;
   line-height: var(--lh-body);
   font-family: 'IBM Plex Sans Arabic', Tahoma, 'Segoe UI', sans-serif;
@@ -125,6 +134,10 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+[dir="rtl"] {
+  --dir: -1;
 }
 
 :root[data-theme='dark'] {

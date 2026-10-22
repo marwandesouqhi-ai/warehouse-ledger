@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Navigate, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
   Activity,
@@ -234,6 +234,7 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
 }
 
 function App() {
+  const location = useLocation()
   const [darkMode, setDarkMode] = useState(loadDarkMode)
   const [movements, setMovements] = useState<FixtureMovement[]>(loadMovements)
   const [session, setSession] = useState<Session | null>(() => {
@@ -1459,7 +1460,8 @@ function App() {
         </div>
         {syncError && <div className="inline-message error" role="alert">{syncError}</div>}
 
-        <Routes>
+        <div key={location.pathname} className="route-content-container page-enter-motion">
+          <Routes>
           <Route
             path="/"
             element={
@@ -2213,7 +2215,8 @@ function App() {
               )
             }
           />
-        </Routes>
+          </Routes>
+        </div>
 
         {canManageRecords && editingMovement && (
           <div className="modal-backdrop" onClick={() => setEditingMovement(null)}>
