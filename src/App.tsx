@@ -1266,6 +1266,7 @@ function App() {
     }
     clearLocalSession()
     setSession(null)
+    navigate('/', { replace: true })
     if (supabase) void supabase.auth.signOut()
   }
 
@@ -1314,13 +1315,6 @@ function App() {
 
 
   if (!session) {
-    if (location.pathname === '/support') {
-      return (
-        <main className="auth-shell" dir="rtl" style={{ maxWidth: '960px', width: '100%', margin: '40px auto' }}>
-          <SupportPage session={null} />
-        </main>
-      )
-    }
     return (
       <AuthPage
         settings={settings}
