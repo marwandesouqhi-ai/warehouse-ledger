@@ -21,6 +21,7 @@ import {
   Eye,
   FileSpreadsheet,
   Filter,
+  Headphones,
   History,
   Info,
   LayoutDashboard,
@@ -93,6 +94,7 @@ import QualityPage from './pages/QualityPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
+import SupportPage from './pages/SupportPage'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
 import type { CustodyItem } from './lib/custody'
@@ -462,6 +464,11 @@ function App() {
     if (adminItems.length > 0) {
       sections.push({ id: 'admin', title: 'الإدارة والأمان', items: adminItems })
     }
+
+    const supportItems = [
+      { to: '/support', label: 'الدعم الفني', mark: '', icon: Headphones },
+    ]
+    sections.push({ id: 'support', title: 'المساعدة والدعم', items: supportItems })
 
     return sections
   }, [totalQualityIssues, session])
@@ -1304,7 +1311,16 @@ function App() {
     )
   }
 
+
+
   if (!session) {
+    if (location.pathname === '/support') {
+      return (
+        <main className="auth-shell" dir="rtl" style={{ maxWidth: '960px', width: '100%', margin: '40px auto' }}>
+          <SupportPage session={null} />
+        </main>
+      )
+    }
     return (
       <AuthPage
         settings={settings}
@@ -1435,6 +1451,26 @@ function App() {
             <button type="button" className="theme-toggle" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? 'تفعيل الوضع الفاتح' : 'تفعيل الوضع الداكن'} title={darkMode ? 'الوضع الفاتح' : 'الوضع الداكن'}>
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => navigate('/support')}
+              title="مركز الدعم الفني وتذاكر الموظفين"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                padding: '6px 10px',
+                height: '38px',
+                borderRadius: '8px',
+                fontWeight: 600,
+              }}
+            >
+              <Headphones size={15} style={{ color: 'var(--accent, #3b82f6)' }} />
+              <span className="hidden sm:inline">الدعم الفني</span>
+            </button>
+
             {session && (
               <div className="topbar-user-wrap" title={`الحساب الحالي: ${activeUserDisplayName}`}>
                 <span className="topbar-user-name">{activeUserDisplayName}</span>
@@ -2186,7 +2222,7 @@ function App() {
           <Route
             path="/audit"
             element={
-              (isSystemAdmin || can(session, 'view_audit')) ? (
+              isSystemAdmin ? (
                 <AuditLogPage session={session} />
               ) : (
                 <RestrictedScreen
@@ -2200,13 +2236,13 @@ function App() {
           <Route
             path="/users"
             element={
-              (isSystemAdmin || canAccessRoute(session, '/users')) ? (
+              isSystemAdmin ? (
                 <UsersPage session={session} />
               ) : (
                 <RestrictedScreen
                   title="المستخدمون والصلاحيات"
                   subtitle="إدارة الحسابات والأمان"
-                  message="إدارة الحسابات والصلاحيات وكلمات المرور مخصصة حصرياً لمدير النظام (System Admin) ومشرفي الأقسام."
+                  message="إدارة الحسابات والصلاحيات وكلمات المرور مخصصة حصرياً لمدير النظام (System Admin) فقط."
                 />
               )
             }
@@ -2214,7 +2250,7 @@ function App() {
           <Route
             path="/settings"
             element={
-              (isSystemAdmin || can(session, 'view_settings')) ? (
+              isSystemAdmin ? (
                 <SettingsPage settings={settings} darkMode={darkMode} session={session} onSave={handleSaveSettings} onToggleTheme={() => setDarkMode((value) => !value)} />
               ) : (
                 <RestrictedScreen
@@ -2224,6 +2260,10 @@ function App() {
                 />
               )
             }
+          />
+          <Route
+            path="/support"
+            element={<SupportPage session={session} />}
           />
           </Routes>
         </motion.div>

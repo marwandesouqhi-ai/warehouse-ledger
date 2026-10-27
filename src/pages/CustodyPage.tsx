@@ -60,6 +60,9 @@ import {
 import { AnimatePresence } from 'motion/react'
 import { CustodyItemHistoryModal } from '../components/CustodyItemHistoryModal'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
+import { InventorySettlementModal } from '../components/InventorySettlementModal'
+import { TechnicalInspectionModal } from '../components/TechnicalInspectionModal'
+import { OfficialInventoryReportModal } from '../components/OfficialInventoryReportModal'
 import { logAuditEvent } from '../lib/auditLogger'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
 import { matchesSearch } from '../lib/searchUtils'
@@ -207,6 +210,9 @@ export default function CustodyPage({
 
   const [historyItem, setHistoryItem] = useState<CustodyItem | null>(null)
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false)
+  const [isInspectionModalOpen, setIsInspectionModalOpen] = useState(false)
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false)
   const [permitInitialItems, setPermitInitialItems] = useState<CustodyItem[]>([])
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
 
@@ -710,6 +716,39 @@ export default function CustodyPage({
               <FileUp size={16} /> استيراد كشف Excel
             </button>
           )}
+
+          {/* Inventory Settlement Modal Button */}
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={() => setIsSettlementModalOpen(true)}
+            id="btn-open-settlement-modal"
+            title="فتح محضر التسوية الجردية والمطابقة الفعلية للمخزون"
+          >
+            <Calculator size={16} /> محضر التسوية الجردية
+          </button>
+
+          {/* Technical Inspection Modal Button */}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setIsInspectionModalOpen(true)}
+            id="btn-open-inspection-modal"
+            title="فتح محضر الفحص والاستلام الفني للواردات"
+          >
+            <FileCheck2 size={16} className="text-accent" /> محضر الفحص والاستلام
+          </button>
+
+          {/* Official Inventory Sheet Modal Button */}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setIsInventoryModalOpen(true)}
+            id="btn-open-inventory-modal"
+            title="معاينة وطباعة محضر كشف حصر وجرد العهدة الرسمي"
+          >
+            <Printer size={16} /> محضر الجرد (A4)
+          </button>
 
           {/* Official Government Permit Button */}
           <button
@@ -1537,6 +1576,34 @@ export default function CustodyPage({
 
       {/* 9. Official Disbursement / Inspection Permit Modal */}
       <AnimatePresence>
+        {isSettlementModalOpen && (
+          <InventorySettlementModal
+            allItems={items}
+            settings={settings}
+            currency={currency}
+            defaultWarehouseId={activeWarehouseId}
+            onClose={() => setIsSettlementModalOpen(false)}
+          />
+        )}
+
+        {isInspectionModalOpen && (
+          <TechnicalInspectionModal
+            settings={settings}
+            currency={currency}
+            onClose={() => setIsInspectionModalOpen(false)}
+          />
+        )}
+
+        {isInventoryModalOpen && (
+          <OfficialInventoryReportModal
+            warehouse={activeWarehouse}
+            items={items}
+            settings={settings}
+            currency={currency}
+            onClose={() => setIsInventoryModalOpen(false)}
+          />
+        )}
+
         {isPermitModalOpen && (
           <OfficialDisbursementPermitModal
             initialItems={permitInitialItems}

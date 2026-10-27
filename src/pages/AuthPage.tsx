@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import {
     CheckCircle2,
     Eye,
     EyeOff,
+    Headphones,
     KeyRound,
     LogIn,
     ShieldAlert,
@@ -855,6 +857,27 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             >
                                 نسيت كلمة المرور؟
                             </button>
+                        </div>
+
+                        <div style={{ textAlign: 'center', margin: '14px 0 6px' }}>
+                            <Link
+                                to="/support"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    color: '#4f46e5',
+                                    textDecoration: 'none',
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    backgroundColor: 'rgba(79, 70, 229, 0.08)'
+                                }}
+                            >
+                                <Headphones size={15} />
+                                <span>تواجه مشكلة أو عطل فني؟ الدعم الفني وفتح تذكرة</span>
+                            </Link>
                         </div>
 
                         <div className="auth-security-footer">

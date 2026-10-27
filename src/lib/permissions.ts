@@ -95,7 +95,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/imports':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/quality':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/audit':                ['system_admin'],   // يُفتح أيضاً بصلاحية view_audit
-  '/users':                ['system_admin', 'warehouse_admin', 'procurement_admin'],
+  '/users':                ['system_admin'],
   '/settings':             ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
   // إعادة توجيه من الراوتس القديمة — يُعامل نفس /purchases
   '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
@@ -220,6 +220,7 @@ export function can(
   if (role === 'system_admin') return true
 
   // فحص الصلاحيات الإضافية
+
   const extra = getExtraPermissions(session)
   if (extra.includes(permission)) return true
 
@@ -270,7 +271,7 @@ export function canViewPage(
   let session = sessionOrPage
   let page = pageOrSession as string
 
-  const knownPages = ['purchases', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement']
+  const knownPages = ['purchases', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support']
   if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
     page = sessionOrPage
     session = pageOrSession
@@ -278,7 +279,7 @@ export function canViewPage(
   if (page === 'procurement') page = 'purchases'
 
   const role = getEffectiveRole(session)
-  const extra = getExtraPermissions(session)
+
 
   switch (page) {
     case 'purchases':
@@ -292,11 +293,13 @@ export function canViewPage(
     case 'quality':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'audit':
-      return role === 'system_admin' || extra.includes('view_audit')
+      return role === 'system_admin'
     case 'users':
-      return ['system_admin', 'warehouse_admin', 'procurement_admin'].includes(role)
+      return role === 'system_admin'
     case 'settings':
-      return role === 'system_admin' || extra.includes('view_settings')
+      return role === 'system_admin'
+    case 'support':
+      return true
     default:
       return false
   }
@@ -312,7 +315,7 @@ export function canAccessRoute(
   path: string
 ): boolean {
   const role = getEffectiveRole(session)
-  const extra = getExtraPermissions(session)
+
 
   // نجرد المسار من الـ query string والـ hash
   const cleanPath = path.split('?')[0].split('#')[0]
@@ -328,8 +331,8 @@ export function canAccessRoute(
   if (allowedRoles.includes(role)) return true
 
   // فحص الصلاحيات الإضافية للمسارات المحمية
-  if (baseRoute === '/audit' && extra.includes('view_audit')) return true
-  if (baseRoute === '/settings' && extra.includes('view_settings')) return true
+
+
 
   return false
 }

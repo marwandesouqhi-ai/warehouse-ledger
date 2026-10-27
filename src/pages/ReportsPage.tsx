@@ -15,6 +15,8 @@ import {
   Search,
   ExternalLink,
   CheckCircle2,
+  Calculator,
+  ClipboardCheck,
 } from 'lucide-react'
 
 import {
@@ -30,6 +32,9 @@ import type { FixtureMovement } from '../lib/fixture'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
 import { AnimatePresence } from 'motion/react'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
+import { InventorySettlementModal } from '../components/InventorySettlementModal'
+import { TechnicalInspectionModal } from '../components/TechnicalInspectionModal'
+import { OfficialInventoryReportModal } from '../components/OfficialInventoryReportModal'
 
 interface ReportsPageProps {
   movements?: FixtureMovement[]
@@ -62,6 +67,9 @@ export default function ReportsPage({
   const [items] = useState<CustodyItem[]>(loadCustodyItems)
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false)
+  const [isInspectionModalOpen, setIsInspectionModalOpen] = useState(false)
+  const [inventoryModalWarehouse, setInventoryModalWarehouse] = useState<WarehouseDefinition | null>(null)
   const [permitInitialItems, setPermitInitialItems] = useState<CustodyItem[]>([])
   const [permitTargetWarehouseId, setPermitTargetWarehouseId] = useState<string>('fci')
   const [searchTerm, setSearchTerm] = useState('')
@@ -88,16 +96,7 @@ export default function ReportsPage({
     return items.filter((i) => i.condition === 'damaged')
   }, [items])
 
-  // Print single warehouse inventory sheet
-  function handlePrintWarehouseSheet(wh: WarehouseDefinition) {
-    setSelectedWarehouseForPrint(wh)
-    document.body.classList.add('printing-warehouse-sheet')
-    // Small timeout to allow state to settle before printing
-    setTimeout(() => {
-      window.print()
-    }, 150)
-  }
-
+  // Clean up printing class after print
   useEffect(() => {
     function cleanupPrint() {
       document.body.classList.remove('printing-warehouse-sheet')
@@ -147,6 +146,28 @@ export default function ReportsPage({
             <button
               type="button"
               className="primary-btn reports-primary-btn"
+              onClick={() => setIsSettlementModalOpen(true)}
+              id="btn-reports-settlement-modal"
+              title="فتح محضر التسوية الجردية والمطابقة الفعلية للمخزون"
+            >
+              <Calculator size={17} />
+              <span>محضر التسوية والمطابقة الجردية</span>
+            </button>
+
+            <button
+              type="button"
+              className="secondary-btn reports-secondary-btn"
+              onClick={() => setIsInspectionModalOpen(true)}
+              id="btn-reports-inspection-modal"
+              title="فتح محضر الفحص والاستلام الفني للواردات"
+            >
+              <ClipboardCheck size={17} className="text-accent" />
+              <span>محضر الفحص والاستلام</span>
+            </button>
+
+            <button
+              type="button"
+              className="secondary-btn reports-secondary-btn"
               onClick={() => {
                 setPermitInitialItems([])
                 setIsPermitModalOpen(true)
@@ -342,11 +363,14 @@ export default function ReportsPage({
                 <button
                   type="button"
                   className="secondary-btn reports-wh-btn-main"
-                  onClick={() => handlePrintWarehouseSheet(warehouse)}
-                  title={`طباعة محضر الجرد الرسمي A4 لكشف ${warehouse.name}`}
-                  aria-label={`طباعة كشف ${warehouse.name}`}
+                  onClick={() => {
+                    setSelectedWarehouseForPrint(warehouse)
+                    setInventoryModalWarehouse(warehouse)
+                  }}
+                  title={`معاينة وطباعة محضر الجرد الرسمي A4 لكشف ${warehouse.name}`}
+                  aria-label={`معاينة وطباعة كشف ${warehouse.name}`}
                 >
-                  <Printer size={13} /> طباعة الجرد (A4)
+                  <Printer size={13} /> محضر الجرد (A4)
                 </button>
 
                 <button
@@ -515,7 +539,7 @@ export default function ReportsPage({
         </div>
       </div>
 
-      {/* 5. Official Disbursement Permit Modal */}
+      {/* 5. Modals Overlays (Opened as Windows on Top of Current Page) */}
       <AnimatePresence>
         {isPermitModalOpen && (
           <OfficialDisbursementPermitModal
@@ -524,6 +548,34 @@ export default function ReportsPage({
             settings={settings}
             defaultWarehouseId={permitTargetWarehouseId}
             onClose={() => setIsPermitModalOpen(false)}
+          />
+        )}
+
+        {isSettlementModalOpen && (
+          <InventorySettlementModal
+            allItems={items}
+            settings={settings}
+            currency={currency}
+            defaultWarehouseId="main"
+            onClose={() => setIsSettlementModalOpen(false)}
+          />
+        )}
+
+        {isInspectionModalOpen && (
+          <TechnicalInspectionModal
+            settings={settings}
+            currency={currency}
+            onClose={() => setIsInspectionModalOpen(false)}
+          />
+        )}
+
+        {inventoryModalWarehouse && (
+          <OfficialInventoryReportModal
+            warehouse={inventoryModalWarehouse}
+            items={items}
+            settings={settings}
+            currency={currency}
+            onClose={() => setInventoryModalWarehouse(null)}
           />
         )}
       </AnimatePresence>
