@@ -17,6 +17,12 @@ import {
   Clock,
   Layers,
   DollarSign,
+  GraduationCap,
+  Cpu,
+  Stethoscope,
+  FlaskConical,
+  HeartPulse,
+  Laptop,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { findBestKnowledgeAnswer } from '../lib/chatbotKnowledge'
@@ -47,8 +53,8 @@ type WarehouseChatBotProps = {
 }
 
 const CATEGORY_CHIPS = [
-  { label: '📋 طلبات الصرف والأذون', query: 'كيف أقدم طلب صرف داخلي؟' },
   { label: '🏢 مخازن وكليات الجامعة الـ 8', query: 'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟' },
+  { label: '📋 طلبات الصرف والأذون', query: 'كيف أقدم طلب صرف داخلي؟' },
   { label: '🛒 فواتير الشراء والموردين', query: 'كيف أسجل فاتورة شراء جديدة؟' },
   { label: '📝 عقود التوريد والصيانة', query: 'ما هي عقود التوريد السارية حالياً؟' },
   { label: '⚖️ محاضر الفحص والجرد', query: 'ما هو محضر الفحص والاستلام ومحضر الجرد؟' },
@@ -56,6 +62,28 @@ const CATEGORY_CHIPS = [
   { label: '🛡️ الصلاحيات والمستخدمين', query: 'ما هي الأدوار والصلاحيات في المنظومة؟' },
   { label: '🎧 الدعم الفني وتليجرام', query: 'كيف أتواصل مع الدعم الفني؟' },
 ]
+
+function getWarehouseIcon(id: string) {
+  switch (id) {
+    case 'medicine':
+      return <Stethoscope size={15} />
+    case 'dentistry':
+      return <Sparkles size={15} />
+    case 'pharmacy':
+      return <FlaskConical size={15} />
+    case 'nursing':
+      return <HeartPulse size={15} />
+    case 'engineering':
+      return <Cpu size={15} />
+    case 'computers':
+      return <Laptop size={15} />
+    case 'management':
+      return <GraduationCap size={15} />
+    case 'main':
+    default:
+      return <Building2 size={15} />
+  }
+}
 
 export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -139,7 +167,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
     setInputText('')
     setIsTyping(true)
 
-    // 1. فحص فوري وسريع للأسئلة المباشرة عن أرصدة المخازن الـ 8 من قاعدة البيانات (استجابة فورية بدون تأخير)
+    // 1. فحص فوري وسريع للأسئلة المباشرة عن أرصدة المخازن الـ 8 من قاعدة البيانات
     const normalizedQuery = text.toLowerCase()
     const isWarehouseQuery =
       (normalizedQuery.includes('مخازن') || normalizedQuery.includes('مخزن')) &&
@@ -163,7 +191,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
         }
         setMessages((prev) => [...prev, botMsg])
         setIsTyping(false)
-      }, 200)
+      }, 180)
       return
     }
 
@@ -186,7 +214,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
         }
         setMessages((prev) => [...prev, botMsg])
         setIsTyping(false)
-      }, 200)
+      }, 180)
       return
     }
 
@@ -252,7 +280,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
 
       setMessages((prev) => [...prev, botMsg])
       setIsTyping(false)
-    }, 200)
+    }, 180)
   }
 
   const handleResetConversation = () => {
@@ -307,7 +335,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 <h3>المساعد الذكي لمنظومة المخازن</h3>
                 <span className="chatbot-status">
                   <span className="chatbot-status-dot" />
-                  خبير المخازن والتوريدات جاهز
+                  جامعة الزقازيق الأهلية • متزامن لحظياً
                 </span>
               </div>
             </div>
@@ -318,9 +346,9 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 type="button"
                 onClick={() => setIsMaximized((prev) => !prev)}
                 className="chatbot-icon-btn"
-                title={isMaximized ? 'استعادة الحجم المصغر' : 'تكبير النافذة لمشاهدة البيانات الحية'}
+                title={isMaximized ? 'استعادة الحجم المصغر' : 'تكبير الشاشة للوحة العمل والبيانات الحية'}
               >
-                {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
 
               {/* Reset Conversation Button */}
@@ -330,7 +358,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 className="chatbot-icon-btn"
                 title="بدء محادثة جديدة وتحديث البيانات"
               >
-                <RotateCcw size={15} />
+                <RotateCcw size={16} />
               </button>
 
               {/* Close Button */}
@@ -350,60 +378,96 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
             {/* Live Database Sidebar Panel (Visible when maximized on tablet/desktop) */}
             {isMaximized && (
               <div className="chatbot-live-sidebar" dir="rtl">
-                <div className="flex items-center justify-between pb-2 border-b border-line">
+                <div className="chatbot-sidebar-header">
                   <div className="flex items-center gap-2">
                     <Database size={16} className="text-primary" />
-                    <span className="text-xs font-bold text-ink">مزامنة قاعدة البيانات الحية</span>
+                    <span className="text-xs font-bold text-ink">لوحة المزامنة اللحظية</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={loadFreshContext}
-                    disabled={isRefreshingLive}
-                    className="p-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface-soft transition-colors"
-                    title="تحديث البيانات من السيرفر"
-                  >
-                    <RefreshCw size={13} className={isRefreshingLive ? 'animate-spin text-primary' : ''} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="chatbot-live-badge">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      مباشر
+                    </span>
+                    <button
+                      type="button"
+                      onClick={loadFreshContext}
+                      disabled={isRefreshingLive}
+                      className="p-1 rounded-lg text-muted hover:text-ink hover:bg-surface-soft transition-colors"
+                      title="تحديث البيانات من السيرفر"
+                    >
+                      <RefreshCw size={13} className={isRefreshingLive ? 'animate-spin text-primary' : ''} />
+                    </button>
+                  </div>
                 </div>
 
                 {liveContext && (
                   <>
-                    {/* Live KPIs */}
+                    {/* Modern Live KPIs */}
                     <div className="chatbot-sidebar-kpis">
-                      <div className="chatbot-sidebar-kpi">
-                        <span className="chatbot-sidebar-kpi-val flex items-center gap-1">
-                          <Layers size={14} className="text-primary" />
+                      {/* KPI 1: Items */}
+                      <div className="chatbot-kpi-modern" style={{ '--card-accent': '#0e7c86', '--card-bg': 'rgba(14, 124, 134, 0.1)' } as React.CSSProperties}>
+                        <div className="chatbot-kpi-top">
+                          <span className="chatbot-kpi-lbl">الأصناف المسجلة</span>
+                          <div className="chatbot-kpi-icon-wrap">
+                            <Layers size={14} />
+                          </div>
+                        </div>
+                        <span className="chatbot-kpi-val">
                           {liveContext.totalItemsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="chatbot-sidebar-kpi-lbl">صنف مسجل بالمنظومة</span>
+                        <span className="text-[10px] text-muted font-medium">
+                          {liveContext.totalCustodyUnits.toLocaleString('ar-EG')} وحدة عهدة
+                        </span>
                       </div>
 
-                      <div className="chatbot-sidebar-kpi">
-                        <span className="chatbot-sidebar-kpi-val flex items-center gap-1">
-                          <Clock size={14} className="text-amber-500" />
+                      {/* KPI 2: Pending Requests */}
+                      <div className="chatbot-kpi-modern" style={{ '--card-accent': '#f59e0b', '--card-bg': 'rgba(245, 158, 11, 0.1)' } as React.CSSProperties}>
+                        <div className="chatbot-kpi-top">
+                          <span className="chatbot-kpi-lbl">طلبات صرف معلقة</span>
+                          <div className="chatbot-kpi-icon-wrap">
+                            <Clock size={14} />
+                          </div>
+                        </div>
+                        <span className="chatbot-kpi-val text-amber-600">
                           {liveContext.pendingRequestsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="chatbot-sidebar-kpi-lbl">طلب صرف معلق</span>
+                        <span className="text-[10px] text-muted font-medium">
+                          بانتظار الاعتماد المخزني
+                        </span>
                       </div>
 
-                      <div className="chatbot-sidebar-kpi">
-                        <span className="chatbot-sidebar-kpi-val flex items-center gap-1">
-                          <DollarSign size={14} className="text-emerald-600" />
+                      {/* KPI 3: Contracts */}
+                      <div className="chatbot-kpi-modern" style={{ '--card-accent': '#10b981', '--card-bg': 'rgba(16, 185, 129, 0.1)' } as React.CSSProperties}>
+                        <div className="chatbot-kpi-top">
+                          <span className="chatbot-kpi-lbl">عقود التوريد</span>
+                          <div className="chatbot-kpi-icon-wrap">
+                            <DollarSign size={14} />
+                          </div>
+                        </div>
+                        <span className="chatbot-kpi-val text-emerald-600">
                           {liveContext.activeContractsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="chatbot-sidebar-kpi-lbl">عقد توريد سارٍ</span>
+                        <span className="text-[10px] text-muted font-medium">
+                          عقد توريد سارٍ بالجامعة
+                        </span>
                       </div>
 
-                      <div className="chatbot-sidebar-kpi">
-                        <span className="chatbot-sidebar-kpi-val flex items-center gap-1">
-                          <Building2 size={14} className="text-indigo-500" />
-                          8
+                      {/* KPI 4: Warehouses */}
+                      <div className="chatbot-kpi-modern" style={{ '--card-accent': '#6366f1', '--card-bg': 'rgba(99, 102, 241, 0.1)' } as React.CSSProperties}>
+                        <div className="chatbot-kpi-top">
+                          <span className="chatbot-kpi-lbl">المخازن والكليات</span>
+                          <div className="chatbot-kpi-icon-wrap">
+                            <Building2 size={14} />
+                          </div>
+                        </div>
+                        <span className="chatbot-kpi-val text-indigo-600">8</span>
+                        <span className="text-[10px] text-muted font-medium">
+                          مربوطة بالمخزن الرئيسي
                         </span>
-                        <span className="chatbot-sidebar-kpi-lbl">مخازن وكليات مربوطة</span>
                       </div>
                     </div>
 
-                    {/* Warehouses list */}
+                    {/* Warehouses list with interactive cards & college icons */}
                     <div className="chatbot-sidebar-card">
                       <div className="chatbot-sidebar-title">
                         <span>مخازن وكليات الجامعة (8)</span>
@@ -417,10 +481,16 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                             onClick={() =>
                               handleSend(`ما هي الأصناف والكميات المتوفرة في «${wh.name}»؟`)
                             }
-                            className="chatbot-warehouse-item"
+                            className="chatbot-wh-item-modern"
+                            title={`استعلام عن ${wh.name}`}
                           >
-                            <span className="font-semibold text-xs truncate max-w-[170px]">{wh.name}</span>
-                            <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">
+                            <div className="chatbot-wh-info">
+                              <div className="chatbot-wh-icon">
+                                {getWarehouseIcon(wh.id)}
+                              </div>
+                              <span className="chatbot-wh-name truncate max-w-[150px]">{wh.name}</span>
+                            </div>
+                            <span className="chatbot-wh-badge">
                               {wh.itemsCount} صنف ({wh.totalUnits} ق)
                             </span>
                           </button>
@@ -436,7 +506,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                           <Link
                             to="/disbursement-requests"
                             onClick={() => setIsOpen(false)}
-                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-bold"
                           >
                             عرض الكل <ChevronLeft size={11} />
                           </Link>
@@ -445,13 +515,13 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                           {liveContext.pendingRequests.slice(0, 3).map((r, i) => (
                             <div
                               key={i}
-                              className="text-xs p-2 rounded-lg bg-surface border border-line flex items-center justify-between"
+                              className="text-xs p-2.5 rounded-xl bg-surface border border-line flex items-center justify-between transition-colors hover:border-primary/40"
                             >
                               <div>
-                                <span className="font-bold text-ink">{r.item}</span>
-                                <span className="text-[10px] text-muted block">كلية {r.dept}</span>
+                                <span className="font-bold text-ink block">{r.item}</span>
+                                <span className="text-[10px] text-muted">طلب #{r.requestNumber} • كلية {r.dept}</span>
                               </div>
-                              <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                              <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/50">
                                 {r.qty} وحدة
                               </span>
                             </div>
@@ -471,7 +541,14 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 {messages.map((msg) => (
                   <div key={msg.id} className={`chatbot-msg-row ${msg.sender}`}>
                     <div className={`chatbot-bubble ${msg.sender}`}>
-                      {msg.text}
+                      {msg.sender === 'bot' && (
+                        <div className="chatbot-bot-header-pill">
+                          <Sparkles size={11} />
+                          <span>ZNU Copilot • المساعد الذكي</span>
+                        </div>
+                      )}
+
+                      <div className="leading-relaxed">{msg.text}</div>
 
                       {msg.actionUrl && (
                         <div>
@@ -481,15 +558,15 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                             className="chatbot-action-link"
                           >
                             <span>{msg.actionLabel || 'الانتقال للصفحة'}</span>
-                            <ExternalLink size={12} />
+                            <ExternalLink size={13} />
                           </Link>
                         </div>
                       )}
 
                       {msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
-                        <div className="mt-3 pt-2.5 border-t border-border/40 flex flex-col gap-1.5">
+                        <div className="mt-3.5 pt-3 border-t border-border/40 flex flex-col gap-1.5">
                           <span className="text-[11px] text-muted font-bold flex items-center gap-1">
-                            <HelpCircle size={11} /> أسئلة مقترحة:
+                            <HelpCircle size={12} /> مقترحات المتابعة:
                           </span>
                           <div className="flex flex-wrap gap-1.5">
                             {msg.suggestedPrompts.map((p, idx) => (
@@ -497,7 +574,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                                 key={idx}
                                 type="button"
                                 onClick={() => handleSend(p)}
-                                className="text-xs bg-muted/30 hover:bg-primary/10 hover:text-primary px-2 py-1 rounded-md text-right border border-border/40 transition-colors"
+                                className="text-xs bg-muted/30 hover:bg-primary/10 hover:text-primary px-2.5 py-1.5 rounded-lg text-right border border-border/40 transition-all font-medium"
                               >
                                 {p}
                               </button>
@@ -508,7 +585,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                     </div>
                     <span className="chatbot-timestamp">
                       {msg.timestamp}
-                      {msg.isAiGenerated && ' • بواسطة Gemini AI ✨'}
+                      {msg.isAiGenerated && ' • مدعوم بـ Gemini AI ✨'}
                     </span>
                   </div>
                 ))}
@@ -544,20 +621,22 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 }}
                 className="chatbot-footer-form"
               >
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="اسأل عن رصيد أي صنف، أو طلبات الصرف، العهدة، المخازن..."
-                  className="chatbot-input"
-                />
+                <div className="chatbot-input-wrapper">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="اسأل عن رصيد أي صنف، أو طلبات الصرف، العهدة، المخازن..."
+                    className="chatbot-input"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={!inputText.trim()}
                   className="chatbot-send-btn"
                   title="إرسال"
                 >
-                  <Send size={16} />
+                  <Send size={18} />
                 </button>
               </form>
             </div>
