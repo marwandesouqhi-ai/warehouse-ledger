@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { purgeLocalDemoData } from './purgeDemoData'
 
 export type AppNotification = {
   id: string
@@ -15,47 +16,28 @@ export type AppNotification = {
 
 const LOCAL_STORAGE_KEY = 'app_notifications_local'
 
-const DEFAULT_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'notif-1',
-    title: 'مرحباً بك في منظومة مخازن جامعة الزقازيق الأهلية',
-    body: 'تم تفعيل جميع الموديولات وإتاحة طلبات الصرف المباشرة والمساعد الذكي.',
-    type: 'success',
-    is_read: false,
-    action_url: '/',
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'notif-2',
-    title: 'تنبيه جرد دوري ربع سنوي',
-    body: 'يرجى مراجعة محاضر الجرد والتسوية لجميع المخازن والكليات وتدقيق الفروق.',
-    type: 'warning',
-    is_read: false,
-    action_url: '/reports',
-    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    id: 'notif-3',
-    title: 'تحديث بيانات الموردين وعقود التوريد',
-    body: 'تمت إضافة موديول إدارة العقود مع إمكانية متابعة تواريخ التجديد والانتهاء.',
-    type: 'info',
-    is_read: true,
-    action_url: '/purchases/contracts',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-]
+// Empty default - no mock or demo items
+const DEFAULT_NOTIFICATIONS: AppNotification[] = []
 
-function getLocalNotifications(): AppNotification[] {
+const DEMO_NOTIF_IDS = new Set(['notif-1', 'notif-2', 'notif-3'])
+
+export function getLocalNotifications(): AppNotification[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return DEFAULT_NOTIFICATIONS
+    const parsed: AppNotification[] = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_NOTIFICATIONS
+    const cleaned = parsed.filter((n) => !DEMO_NOTIF_IDS.has(n.id))
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned))
+    }
+    return cleaned
   } catch {
-    // ignore
+    return DEFAULT_NOTIFICATIONS
   }
-  return DEFAULT_NOTIFICATIONS
 }
 
-function saveLocalNotifications(items: AppNotification[]) {
+export function saveLocalNotifications(items: AppNotification[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
@@ -64,6 +46,9 @@ function saveLocalNotifications(items: AppNotification[]) {
 }
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
+  // Always clean local demo cache first
+  purgeLocalDemoData()
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -71,9 +56,10 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
-      if (!error && data && data.length > 0) {
-        saveLocalNotifications(data)
-        return data
+      if (!error && Array.isArray(data)) {
+        const cleaned = data.filter((n: AppNotification) => !DEMO_NOTIF_IDS.has(n.id))
+        saveLocalNotifications(cleaned)
+        return cleaned
       }
     } catch {
       // fallback
@@ -134,3 +120,14 @@ export async function createNotification(
   return newNotif
 }
 
+export async function deleteNotification(id: string): Promise<void> {
+  if (supabase) {
+    try {
+      await supabase.from('notifications').delete().eq('id', id)
+    } catch {
+      // fallback
+    }
+  }
+  const local = getLocalNotifications()
+  saveLocalNotifications(local.filter((n) => n.id !== id))
+}

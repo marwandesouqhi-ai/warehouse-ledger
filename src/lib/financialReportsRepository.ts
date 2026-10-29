@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { purgeLocalDemoData } from './purgeDemoData'
 
 export type FinancialReport = {
   id: string
@@ -23,52 +24,28 @@ export type FinancialReport = {
 
 const LOCAL_STORAGE_KEY = 'financial_reports_local'
 
-const DEFAULT_FINANCIAL_REPORTS: FinancialReport[] = [
-  {
-    id: 'fr-1',
-    report_number: 'RPT-FIN-2026-Q3',
-    report_title: 'تقرير المشتريات والتسويات المالية للربع الثالث 2026',
-    report_type: 'quarterly',
-    period_from: '2026-07-01',
-    period_to: '2026-09-30',
-    total_purchases: 1850000,
-    total_disbursements: 1420000,
-    budget_allocated: 2500000,
-    budget_remaining: 650000,
-    status: 'approved',
-    approved_by: 'أ.د. نائب رئيس الجامعة للشؤون المالية',
-    approved_at: '2026-10-05T12:00:00Z',
-    created_at: '2026-10-01T10:00:00Z',
-    updated_at: '2026-10-05T12:00:00Z',
-  },
-  {
-    id: 'fr-2',
-    report_number: 'RPT-FIN-2026-M10',
-    report_title: 'تقرير المصروفات والتوريدات لشهر أكتوبر 2026',
-    report_type: 'monthly',
-    period_from: '2026-10-01',
-    period_to: '2026-10-31',
-    total_purchases: 770000,
-    total_disbursements: 615000,
-    budget_allocated: 900000,
-    budget_remaining: 130000,
-    status: 'finalized',
-    created_at: '2026-10-27T08:00:00Z',
-    updated_at: '2026-10-28T14:30:00Z',
-  },
-]
+// Empty default - no mock or demo items
+const DEFAULT_FINANCIAL_REPORTS: FinancialReport[] = []
 
-function getLocalReports(): FinancialReport[] {
+const DEMO_REPORT_IDS = new Set(['fr-1', 'fr-2'])
+
+export function getLocalReports(): FinancialReport[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return DEFAULT_FINANCIAL_REPORTS
+    const parsed: FinancialReport[] = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_FINANCIAL_REPORTS
+    const cleaned = parsed.filter((f) => !DEMO_REPORT_IDS.has(f.id))
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned))
+    }
+    return cleaned
   } catch {
-    // ignore
+    return DEFAULT_FINANCIAL_REPORTS
   }
-  return DEFAULT_FINANCIAL_REPORTS
 }
 
-function saveLocalReports(items: FinancialReport[]) {
+export function saveLocalReports(items: FinancialReport[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
@@ -77,15 +54,19 @@ function saveLocalReports(items: FinancialReport[]) {
 }
 
 export async function fetchFinancialReports(): Promise<FinancialReport[]> {
+  // Always clean local demo cache first
+  purgeLocalDemoData()
+
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from('financial_reports')
         .select('*')
         .order('created_at', { ascending: false })
-      if (!error && data && data.length > 0) {
-        saveLocalReports(data)
-        return data
+      if (!error && Array.isArray(data)) {
+        const cleaned = data.filter((f: FinancialReport) => !DEMO_REPORT_IDS.has(f.id))
+        saveLocalReports(cleaned)
+        return cleaned
       }
     } catch {
       // fallback
@@ -148,3 +129,14 @@ export async function updateFinancialReportStatus(
   saveLocalReports(local.map((r) => (r.id === id ? { ...r, ...updates } : r)))
 }
 
+export async function deleteFinancialReport(id: string): Promise<void> {
+  if (supabase) {
+    try {
+      await supabase.from('financial_reports').delete().eq('id', id)
+    } catch {
+      // fallback
+    }
+  }
+  const local = getLocalReports()
+  saveLocalReports(local.filter((r) => r.id !== id))
+}

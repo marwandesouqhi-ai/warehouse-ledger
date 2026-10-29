@@ -13,13 +13,14 @@ import {
     Search,
     ShieldAlert,
     User,
-    UserPlus,
     X,
+    ShoppingCart,
+    HardDriveDownload,
 } from 'lucide-react'
 
 import { fetchAuditLogs, type AuditLogEntry } from '../lib/auditLogger'
 import { matchesSearch } from '../lib/searchUtils'
-import { checkIsSystemAdmin } from '../lib/supabase'
+import { checkIsSystemAdmin, supabase } from '../lib/supabase'
 
 type AuditLogPageProps = {
     session?: Session | null
@@ -50,18 +51,52 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
     }
 
     useEffect(() => {
-        if (isSystemAdmin) {
+        if (!isSystemAdmin) return
+        void loadLogs()
+
+        // 1. استماع فوري لأي أحداث داخلية متزامنة في نفس اللحظة
+        const handleLogChange = () => {
             void loadLogs()
+        }
+        window.addEventListener('audit-logs-changed', handleLogChange)
+
+        // 2. اشتراك لحظي في قناة Supabase Realtime لسجل المراقبة
+        let channel: any = null
+        if (supabase) {
+            try {
+                channel = supabase
+                    .channel('audit-logs-live-sync')
+                    .on(
+                        'postgres_changes',
+                        { event: 'INSERT', schema: 'public', table: 'audit_logs' },
+                        () => {
+                            void loadLogs()
+                        }
+                    )
+                    .subscribe()
+            } catch (err) {
+                console.warn('Realtime subscription failed:', err)
+            }
+        }
+
+        return () => {
+            window.removeEventListener('audit-logs-changed', handleLogChange)
+            if (channel && supabase) {
+                supabase.removeChannel(channel)
+            }
         }
     }, [isSystemAdmin])
 
     const filteredLogs = logs.filter((log) => {
         const matchesType =
             filterType === 'all' ||
-            (filterType === 'movement' && (log.entity_type === 'movement' || log.action.includes('حركة'))) ||
-            (filterType === 'invitation' && (log.entity_type === 'invitation' || log.action.includes('دعوة'))) ||
+            (filterType === 'movement' && (log.entity_type === 'movement' || log.entity_type === 'disbursement' || log.action.includes('حركة') || log.action.includes('صرف') || log.action.includes('إذن'))) ||
+            (filterType === 'procurement' && (log.entity_type === 'procurement' || log.entity_type === 'purchase_request' || log.entity_type === 'contract' || log.entity_type === 'quote' || log.action.includes('شراء') || log.action.includes('مورد') || log.action.includes('عقد') || log.action.includes('عرض أسعار'))) ||
+            (filterType === 'repair' && (log.entity_type === 'repair' || log.entity_type === 'quality' || log.action.includes('إصلاح') || log.action.includes('جودة') || log.action.includes('تنظيف'))) ||
+            (filterType === 'backup' && (log.entity_type === 'backup' || log.action.includes('نسخ') || log.action.includes('استعادة'))) ||
+            (filterType === 'invitation' && (log.entity_type === 'invitation' || log.entity_type === 'user' || log.action.includes('دعوة') || log.action.includes('مستخدم'))) ||
             (filterType === 'import' && (log.entity_type === 'import' || log.action.includes('استيراد'))) ||
-            (filterType === 'auth' && (log.entity_type === 'auth' || log.action.includes('دخول')))
+            (filterType === 'auth' && (log.entity_type === 'auth' || log.action.includes('دخول') || log.action.includes('خروج')))
 
         if (!matchesType) return false
         if (!searchTerm.trim()) return true
@@ -80,8 +115,9 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
 
     const todayStr = new Date().toISOString().slice(0, 10)
     const todayCount = logs.filter((l) => l.created_at?.slice(0, 10) === todayStr).length
-    const movementsCount = logs.filter((l) => l.entity_type === 'movement' || l.action.includes('حركة')).length
-    const invitesCount = logs.filter((l) => l.entity_type === 'invitation' || l.action.includes('دعوة')).length
+    const movementsCount = logs.filter((l) => l.entity_type === 'movement' || l.entity_type === 'disbursement' || l.action.includes('حركة') || l.action.includes('صرف')).length
+    const procurementCount = logs.filter((l) => l.entity_type === 'procurement' || l.entity_type === 'purchase_request' || l.entity_type === 'contract' || l.action.includes('شراء') || l.action.includes('عقد')).length
+    const backupRepairCount = logs.filter((l) => l.entity_type === 'backup' || l.entity_type === 'repair' || l.action.includes('نسخ') || l.action.includes('إصلاح')).length
 
     function formatTime(isoString: string) {
         try {
@@ -175,13 +211,18 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                 </div>
                 <div className="kpi-item tone-neutral">
                     <span className="kpi-icon"><Package size={18} /></span>
-                    <span className="kpi-label">عمليات الحركات</span>
+                    <span className="kpi-label">المخزن وحركات الصرف</span>
                     <strong>{movementsCount.toLocaleString('ar-EG')}</strong>
                 </div>
                 <div className="kpi-item tone-info">
-                    <span className="kpi-icon"><UserPlus size={18} /></span>
-                    <span className="kpi-label">دعوات ومستخدمين</span>
-                    <strong>{invitesCount.toLocaleString('ar-EG')}</strong>
+                    <span className="kpi-icon"><ShoppingCart size={18} /></span>
+                    <span className="kpi-label">المشتريات والتعاقدات</span>
+                    <strong>{procurementCount.toLocaleString('ar-EG')}</strong>
+                </div>
+                <div className="kpi-item tone-primary">
+                    <span className="kpi-icon"><HardDriveDownload size={18} /></span>
+                    <span className="kpi-label">النسخ الاحتياطي والإصلاح</span>
+                    <strong>{backupRepairCount.toLocaleString('ar-EG')}</strong>
                 </div>
             </div>
 
@@ -214,11 +255,14 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                             onChange={(event) => setFilterType(event.target.value)}
                             className="audit-type-select"
                         >
-                            <option value="all">كل العمليات</option>
-                            <option value="movement">حركات المخزن</option>
-                            <option value="invitation">الدعوات والمستخدمين</option>
-                            <option value="import">الاستيراد</option>
-                            <option value="auth">تسجيل الدخول</option>
+                            <option value="all">كل العمليات المسجلة</option>
+                            <option value="movement">حركات المخزن وأذونات الصرف</option>
+                            <option value="procurement">إدارة المشتريات والعروض والعقود</option>
+                            <option value="repair">الإصلاح الذاتي وفحص الجودة</option>
+                            <option value="backup">النسخ الاحتياطي والاستعادة</option>
+                            <option value="invitation">المستخدمون والدعوات</option>
+                            <option value="import">استيراد البيانات</option>
+                            <option value="auth">تسجيل الدخول والأمان</option>
                         </select>
                     </div>
 

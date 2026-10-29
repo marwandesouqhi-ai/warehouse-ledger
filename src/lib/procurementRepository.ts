@@ -9,6 +9,25 @@ import { supabase } from './supabase'
 import type { FixtureMovement } from './fixture'
 import { normalizeArabicName } from './arabicUtils'
 
+const LOCAL_STORAGE_KEY_PR = 'warehouse_purchase_requests_cache'
+
+export function getLocalPurchaseRequests(): PurchaseRequest[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PR)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalPurchaseRequests(items: PurchaseRequest[]): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_PR, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
 export type PurchaseType = 'direct' | 'practice' | 'tender'
 export type PurchasePriority = 'normal' | 'urgent'
 export type PurchaseRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected'
@@ -108,7 +127,7 @@ export interface PurchaseOrder {
  * جلب قائمة طلبات الشراء
  */
 export async function fetchPurchaseRequests(): Promise<PurchaseRequest[]> {
-  if (!supabase) return []
+  if (!supabase) return getLocalPurchaseRequests()
 
   try {
     const { data: requests, error } = await supabase
@@ -120,9 +139,9 @@ export async function fetchPurchaseRequests(): Promise<PurchaseRequest[]> {
       `)
       .order('created_at', { ascending: false })
 
-    if (error || !requests) return []
+    if (error || !requests) return getLocalPurchaseRequests()
 
-    return requests.map((r) => {
+    const mapped = requests.map((r) => {
       const items = (r.items || []) as PurchaseRequestItem[]
       const total_estimated_value = items.reduce(
         (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.estimated_price || item.estimated_unit_price) || 0),
@@ -143,8 +162,10 @@ export async function fetchPurchaseRequests(): Promise<PurchaseRequest[]> {
         items_summary,
       }
     })
+    saveLocalPurchaseRequests(mapped)
+    return mapped
   } catch {
-    return []
+    return getLocalPurchaseRequests()
   }
 }
 
@@ -275,13 +296,33 @@ export async function createPurchaseRequest(
     throw new Error(itemsErr.message || 'تعذر إضافة بنود طلب الشراء.')
   }
 
+  let resultReq: PurchaseRequest = createdReq
   if (submitImmediately) {
-    await submitPurchaseRequestRpc(createdReq.id)
-    const updated = await fetchPurchaseRequestById(createdReq.id)
-    return updated || createdReq
+    try {
+      await submitPurchaseRequestRpc(createdReq.id)
+      const updated = await fetchPurchaseRequestById(createdReq.id)
+      if (updated) resultReq = updated
+    } catch {
+      // ignore
+    }
   }
 
-  return createdReq
+  if (!resultReq.items_summary) {
+    resultReq.items = items.map((i, idx) => ({
+      id: `it-${Date.now()}-${idx}`,
+      request_id: resultReq.id,
+      item_name: i.item_name,
+      quantity: i.quantity,
+      unit: i.unit,
+      estimated_price: i.estimated_price,
+    }))
+    resultReq.total_estimated_value = items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.estimated_price) || 0), 0)
+    resultReq.items_summary = items.length === 1 ? items[0].item_name : `${items[0].item_name} و ${items.length - 1} أخرى`
+  }
+
+  const localList = getLocalPurchaseRequests()
+  saveLocalPurchaseRequests([resultReq, ...localList.filter((r) => r.id !== resultReq.id)])
+  return resultReq
 }
 
 /**

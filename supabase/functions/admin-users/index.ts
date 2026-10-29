@@ -1207,6 +1207,173 @@ ${recoveryLink}
       })
     }
 
+    // ─── ACTION: repair_data_quality ─────────────────────────────────────────
+    if (action === "repair_data_quality") {
+      try {
+        const { data: rpcData } = await supabaseAdmin.rpc("repair_movements_data_quality");
+        
+        await supabaseAdmin.from("audit_logs").insert({
+          user_id: caller.id,
+          user_email: caller.email,
+          action: "تشغيل أداة الإصلاح الذاتي لجودة البيانات وتصحيح الحركات",
+          entity_type: "data_quality_repair",
+          details: rpcData || {},
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: "تم إصلاح وتدقيق جميع سجلات الحركات وجودة البيانات بنجاح في قاعدة البيانات.",
+          result: rpcData || { total_repaired: 0 },
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        return new Response(JSON.stringify({
+          success: false,
+          error: "تعذر تشغيل أداة الإصلاح في قاعدة البيانات: " + errMsg,
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // ─── ACTION: purge_demo_data ─────────────────────────────────────────────
+    if (action === "purge_demo_data") {
+      if (!isSystemAdmin) {
+        return new Response(JSON.stringify({
+          error: "إجراء مسح البيانات التجريبية مقتصر على مدير النظام الرئيسي (System Admin).",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // 1. Delete from asset_movement_log
+      const { count: astCount } = await supabaseAdmin
+        .from("asset_movement_log")
+        .delete({ count: "exact" })
+        .or("asset_code.in.(ZNU-IT-001,ZNU-MED-044),id.like.ast-%")
+
+      // 2. Delete from supplier_contracts
+      const { count: cntCount } = await supabaseAdmin
+        .from("supplier_contracts")
+        .delete({ count: "exact" })
+        .or("contract_number.in.(CNT-2026-001,CNT-2026-002),id.like.cnt-%")
+
+      // 3. Delete from budget_plans
+      const { count: bgCount } = await supabaseAdmin
+        .from("budget_plans")
+        .delete({ count: "exact" })
+        .like("id", "bg-%")
+
+      // 4. Delete from financial_reports
+      const { count: frCount } = await supabaseAdmin
+        .from("financial_reports")
+        .delete({ count: "exact" })
+        .or("report_number.in.(RPT-FIN-2026-Q3,RPT-FIN-2026-M10),id.like.fr-%")
+
+      // 5. Delete from notifications
+      const { count: notifCount } = await supabaseAdmin
+        .from("notifications")
+        .delete({ count: "exact" })
+        .like("id", "notif-%")
+
+      // Log in audit logs
+      await supabaseAdmin.from("audit_logs").insert({
+        user_id: caller.id,
+        user_email: caller.email,
+        action: "تنظيف ومسح البيانات التجريبية من قاعدة البيانات بنجاح",
+        entity_type: "database_cleanup",
+        details: {
+          deleted_assets: astCount ?? 0,
+          deleted_contracts: cntCount ?? 0,
+          deleted_budgets: bgCount ?? 0,
+          deleted_reports: frCount ?? 0,
+          deleted_notifications: notifCount ?? 0,
+        },
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "تم مسح جميع البيانات التجريبية بنجاح من قاعدة البيانات والأنظمة الفرعية.",
+        purged: {
+          deleted_assets: astCount ?? 0,
+          deleted_contracts: cntCount ?? 0,
+          deleted_budgets: bgCount ?? 0,
+          deleted_reports: frCount ?? 0,
+          deleted_notifications: notifCount ?? 0,
+        },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    // ─── ACTION: get_system_backup_stats ─────────────────────────────────────
+    if (action === "get_system_backup_stats") {
+      try {
+        const { data: statsData, error: statsErr } = await supabaseAdmin.rpc("get_system_backup_stats");
+        if (!statsErr && statsData) {
+          return new Response(JSON.stringify({ success: true, stats: statsData }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch {
+        // fallback
+      }
+
+      const [
+        { count: movementsCount },
+        { count: custodyCount },
+        { count: usersCount },
+        { count: contractsCount },
+        { count: disbursementsCount },
+        { count: budgetCount },
+        { count: financialCount },
+        { count: assetsCount },
+        { count: ticketsCount },
+        { count: inspectionsCount },
+        { count: settlementsCount },
+      ] = await Promise.all([
+        supabaseAdmin.from("ledger_movements").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("custody").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("app_users").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("supplier_contracts").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("disbursement_requests").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("budget_plans").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("financial_reports").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("asset_movement_log").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("support_tickets").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("technical_inspections").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("inventory_settlements").select("*", { count: "exact", head: true }),
+      ]);
+
+      return new Response(JSON.stringify({
+        success: true,
+        stats: {
+          movements: movementsCount ?? 0,
+          custody: custodyCount ?? 0,
+          users: usersCount ?? 0,
+          contracts: contractsCount ?? 0,
+          disbursementRequests: disbursementsCount ?? 0,
+          budgetPlans: budgetCount ?? 0,
+          financialReports: financialCount ?? 0,
+          assetMovements: assetsCount ?? 0,
+          supportTickets: ticketsCount ?? 0,
+          technicalInspections: inspectionsCount ?? 0,
+          inventorySettlements: settlementsCount ?? 0,
+          timestamp: new Date().toISOString(),
+        },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ─── ACTION: reset_and_seed_system_admin (REJECTED / DISABLED) ───────────
     if (action === "reset_and_seed_system_admin") {
       return new Response(JSON.stringify({

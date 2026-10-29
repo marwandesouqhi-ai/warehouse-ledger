@@ -12,6 +12,7 @@ import {
   ArrowUpDown,
   ArrowUpRight,
   BarChart3,
+  Bot,
   Boxes,
   Building2,
   CalendarDays,
@@ -105,11 +106,13 @@ import AssetHistoryPage from './pages/AssetHistoryPage'
 import FinancialReportsPage from './pages/FinancialReportsPage'
 import BudgetPage from './pages/BudgetPage'
 import TelegramBotPage from './pages/TelegramBotPage'
+import ChatbotAdminPage from './pages/ChatbotAdminPage'
 import WarehouseChatBot from './components/WarehouseChatBot'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
 import type { CustodyItem } from './lib/custody'
 import { matchesSearch } from './lib/searchUtils'
+import { purgeLocalDemoData } from './lib/purgeDemoData'
 import './App.css'
 
 const storageKey = 'warehouse-ledger-movements'
@@ -319,12 +322,16 @@ function App() {
         // ignore
       }
     }
+    function handleMovementsSync() {
+      setMovements(loadMovements())
+    }
     function handleCustodySync() {
       setCustodyItems(loadCustodyItems())
     }
     window.addEventListener('settings-changed', handleSettingsSync)
     window.addEventListener('storage', handleSettingsSync)
     window.addEventListener('warehouse-ledger-updated', handleLedgerSync)
+    window.addEventListener('movements-changed', handleMovementsSync)
     window.addEventListener('custody-changed', handleCustodySync)
     window.addEventListener('custody-items-changed', handleCustodySync)
     return () => {
@@ -332,6 +339,7 @@ function App() {
       window.removeEventListener('settings-changed', handleSettingsSync)
       window.removeEventListener('storage', handleSettingsSync)
       window.removeEventListener('warehouse-ledger-updated', handleLedgerSync)
+      window.removeEventListener('movements-changed', handleMovementsSync)
       window.removeEventListener('custody-changed', handleCustodySync)
       window.removeEventListener('custody-items-changed', handleCustodySync)
     }
@@ -495,6 +503,9 @@ function App() {
     if (canViewPage(session, 'telegram_bot')) {
       adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: '', icon: Send })
     }
+    if (canViewPage(session, 'chatbot_admin')) {
+      adminItems.push({ to: '/chatbot-admin', label: 'إدارة وتوجيه المساعد الذكي', mark: 'AI', icon: Bot })
+    }
     if (canViewPage(session, 'settings')) {
       adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
     }
@@ -623,6 +634,7 @@ function App() {
   }, [systemDisplayName, settings.organization])
 
   useEffect(() => {
+    purgeLocalDemoData()
     function handleLocalAuth() {
       const local = getLocalSession()
       if (local) {
@@ -1309,8 +1321,7 @@ function App() {
   }
 
   if (authLoading) {
-    return <main className="auth-shell" dir="rtl"><p>جارٍ التحقق من جلسة الدخول...</p>  <WarehouseChatBot session={session} />
-      </main>
+    return <main className="auth-shell" dir="rtl"><p>جارٍ التحقق من جلسة الدخول...</p></main>
   }
 
   const isPendingActivation = (session?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
@@ -2297,6 +2308,20 @@ function App() {
             }
           />
           <Route
+            path="/chatbot-admin"
+            element={
+              isSystemAdmin ? (
+                <ChatbotAdminPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="إدارة وتوجيه المساعد الذكي"
+                  subtitle="صلاحية مقيدة"
+                  message="منصة توجيه المساعد الذكي وتعديل الأكواد مقتصرة حصرياً على مدير النظام (System Admin) فقط."
+                />
+              )
+            }
+          />
+          <Route
             path="/settings"
             element={
               isSystemAdmin ? (
@@ -2563,7 +2588,7 @@ function App() {
         </AnimatePresence>
 
 
-        <WarehouseChatBot session={session} />
+        {isSystemAdmin && <WarehouseChatBot session={session} />}
       </main>
     </div>
   )

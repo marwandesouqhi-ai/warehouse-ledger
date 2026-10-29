@@ -1,4 +1,15 @@
 import { supabase } from './supabase'
+import { purgeLocalDemoData } from './purgeDemoData'
+
+export type ContractAttachment = {
+  id: string
+  name: string
+  size: number
+  type: string
+  dataUrl?: string
+  storagePath?: string
+  uploadedAt: string
+}
 
 export type SupplierContract = {
   id: string
@@ -15,7 +26,7 @@ export type SupplierContract = {
   auto_renewal: boolean
   renewal_notice_days: number
   terms?: string
-  attachments?: unknown[]
+  attachments?: ContractAttachment[]
   linked_po_ids?: string[]
   created_by?: string
   created_by_email?: string
@@ -25,54 +36,28 @@ export type SupplierContract = {
 
 const LOCAL_STORAGE_KEY = 'supplier_contracts_local'
 
-const DEFAULT_CONTRACTS: SupplierContract[] = [
-  {
-    id: 'cnt-1',
-    contract_number: 'CNT-2026-001',
-    supplier_name: 'شركة مصر للأجهزة والحلول التقنية',
-    contract_title: 'عقد توريد وصيانة أجهزة معامل الحاسب الآلي',
-    contract_type: 'supply',
-    start_date: '2026-01-01',
-    end_date: '2026-12-31',
-    contract_value: 450000,
-    currency: 'EGP',
-    status: 'active',
-    auto_renewal: true,
-    renewal_notice_days: 30,
-    terms: 'توريد قطع غيار أصلية والالتزام بالصيانة الدورية كل شهرين.',
-    created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-  },
-  {
-    id: 'cnt-2',
-    contract_number: 'CNT-2026-002',
-    supplier_name: 'مؤسسة الدلتا للتجهيزات المعملية',
-    contract_title: 'عقد توريد كيماويات ومستهلكات معامل كلية العلوم',
-    contract_type: 'supply',
-    start_date: '2026-02-15',
-    end_date: '2026-11-15',
-    contract_value: 280000,
-    currency: 'EGP',
-    status: 'active',
-    auto_renewal: false,
-    renewal_notice_days: 45,
-    terms: 'التوريد طبقا لمحاضر الفحص الفني المعتمدة من الكلية.',
-    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 15).toISOString(),
-  },
-]
+// Empty default - no mock or demo items
+const DEFAULT_CONTRACTS: SupplierContract[] = []
 
-function getLocalContracts(): SupplierContract[] {
+const DEMO_CONTRACT_IDS = new Set(['cnt-1', 'cnt-2'])
+
+export function getLocalContracts(): SupplierContract[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return DEFAULT_CONTRACTS
+    const parsed: SupplierContract[] = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_CONTRACTS
+    const cleaned = parsed.filter((c) => !DEMO_CONTRACT_IDS.has(c.id))
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned))
+    }
+    return cleaned
   } catch {
-    // ignore
+    return DEFAULT_CONTRACTS
   }
-  return DEFAULT_CONTRACTS
 }
 
-function saveLocalContracts(items: SupplierContract[]) {
+export function saveLocalContracts(items: SupplierContract[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
@@ -81,15 +66,19 @@ function saveLocalContracts(items: SupplierContract[]) {
 }
 
 export async function fetchContracts(): Promise<SupplierContract[]> {
+  // Always clean local demo cache first
+  purgeLocalDemoData()
+
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from('supplier_contracts')
         .select('*')
         .order('created_at', { ascending: false })
-      if (!error && data && data.length > 0) {
-        saveLocalContracts(data)
-        return data
+      if (!error && Array.isArray(data)) {
+        const cleaned = data.filter((c: SupplierContract) => !DEMO_CONTRACT_IDS.has(c.id))
+        saveLocalContracts(cleaned)
+        return cleaned
       }
     } catch {
       // fallback
@@ -103,6 +92,7 @@ export async function createContract(
 ): Promise<SupplierContract> {
   const newContract: SupplierContract = {
     ...contract,
+    attachments: contract.attachments || [],
     id: `cnt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -112,7 +102,10 @@ export async function createContract(
     try {
       const { data, error } = await supabase
         .from('supplier_contracts')
-        .insert([contract])
+        .insert([{
+          ...contract,
+          attachments: contract.attachments || [],
+        }])
         .select()
         .single()
       if (!error && data) {
@@ -175,4 +168,3 @@ export async function deleteContract(id: string): Promise<void> {
   const local = getLocalContracts()
   saveLocalContracts(local.filter((c) => c.id !== id))
 }
-

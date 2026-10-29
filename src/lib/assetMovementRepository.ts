@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { purgeLocalDemoData } from './purgeDemoData'
 
 export type AssetMovement = {
   id: string
@@ -20,65 +21,34 @@ export type AssetMovement = {
 
 const LOCAL_STORAGE_KEY = 'asset_movements_local'
 
-const DEFAULT_MOVEMENTS: AssetMovement[] = [
-  {
-    id: 'ast-1',
-    asset_code: 'ZNU-IT-001',
-    asset_name: 'جهاز حاسب آلي مكتبي Core i7 Dell',
-    from_location: 'المخزن الرئيسي',
-    to_location: 'كلية الحاسبات والمعلومات - معمل 1',
-    movement_type: 'transfer',
-    quantity: 15,
-    condition_before: 'جديد بالكرتونة',
-    condition_after: 'ممتاز - تم التثبيت والتشغيل',
-    notes: 'تم التسليم بموجب محضر فحص واستلام',
-    performed_by: 'م. حسام علي',
-    performed_at: '2026-10-15T10:30:00Z',
-    created_at: '2026-10-15T10:30:00Z',
-  },
-  {
-    id: 'ast-2',
-    asset_code: 'ZNU-MED-044',
-    asset_name: 'ميكروسكوب ضوئي إكلينيكي ثنائي العدسات',
-    from_location: 'المخزن الرئيسي',
-    to_location: 'كلية الطب البشري - قسم الباثولوجي',
-    movement_type: 'transfer',
-    quantity: 10,
-    condition_before: 'جديد معتمد',
-    condition_after: 'جاهز للتشغيل والتدريس',
-    notes: 'توريد شركة التوريدات الطبية',
-    performed_by: 'د. خالد عبد الرحمن',
-    performed_at: '2026-10-20T11:00:00Z',
-    created_at: '2026-10-20T11:00:00Z',
-  },
-  {
-    id: 'ast-3',
-    asset_code: 'ZNU-IT-001',
-    asset_name: 'جهاز حاسب آلي مكتبي Core i7 Dell',
-    from_location: 'كلية الحاسبات والمعلومات - معمل 1',
-    to_location: 'ورشة الصيانة والدعم الفني',
-    movement_type: 'maintenance',
-    quantity: 1,
-    condition_before: 'عطل في وحدة التغذية (Power Supply)',
-    condition_after: 'قيد الإصلاح والفحص',
-    notes: 'تذكرة دعم فني رقم TKT-28589',
-    performed_by: 'فني الصيانة محمود إبراهيم',
-    performed_at: '2026-10-26T09:15:00Z',
-    created_at: '2026-10-26T09:15:00Z',
-  },
-]
+// Empty default - no mock or demo items
+const DEFAULT_MOVEMENTS: AssetMovement[] = []
 
-function getLocalAssetMovements(): AssetMovement[] {
+const DEMO_IDS = new Set(['ast-1', 'ast-2', 'ast-3'])
+
+export function getLocalAssetMovements(): AssetMovement[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return DEFAULT_MOVEMENTS
+    const parsed: AssetMovement[] = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_MOVEMENTS
+    // Filter out any stale mock demo records automatically
+    const cleaned = parsed.filter(
+      (m) =>
+        !DEMO_IDS.has(m.id) &&
+        !(m.asset_code === 'ZNU-IT-001' && m.notes?.includes('TKT-28589')) &&
+        !(m.asset_code === 'ZNU-MED-044')
+    )
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned))
+    }
+    return cleaned
   } catch {
-    // ignore
+    return DEFAULT_MOVEMENTS
   }
-  return DEFAULT_MOVEMENTS
 }
 
-function saveLocalAssetMovements(items: AssetMovement[]) {
+export function saveLocalAssetMovements(items: AssetMovement[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
@@ -87,6 +57,9 @@ function saveLocalAssetMovements(items: AssetMovement[]) {
 }
 
 export async function fetchAssetMovements(assetCode?: string): Promise<AssetMovement[]> {
+  // Always clean local demo cache first
+  purgeLocalDemoData()
+
   if (supabase) {
     try {
       let query = supabase.from('asset_movement_log').select('*').order('performed_at', { ascending: false })
@@ -94,9 +67,16 @@ export async function fetchAssetMovements(assetCode?: string): Promise<AssetMove
         query = query.eq('asset_code', assetCode)
       }
       const { data, error } = await query
-      if (!error && data && data.length > 0) {
-        saveLocalAssetMovements(data)
-        return data
+      if (!error && Array.isArray(data)) {
+        // Filter out demo records if any exist in the database
+        const cleaned = data.filter(
+          (m: AssetMovement) =>
+            !DEMO_IDS.has(m.id) &&
+            !(m.asset_code === 'ZNU-IT-001' && m.notes?.includes('TKT-28589')) &&
+            !(m.asset_code === 'ZNU-MED-044')
+        )
+        saveLocalAssetMovements(cleaned)
+        return cleaned
       }
     } catch {
       // fallback
@@ -136,3 +116,28 @@ export async function createAssetMovement(
   return newRecord
 }
 
+export async function deleteAssetMovement(id: string): Promise<boolean> {
+  if (supabase) {
+    try {
+      await supabase.from('asset_movement_log').delete().eq('id', id)
+    } catch {
+      // fallback
+    }
+  }
+
+  const local = getLocalAssetMovements()
+  const updated = local.filter((m) => m.id !== id)
+  saveLocalAssetMovements(updated)
+  return true
+}
+
+export async function clearAllAssetMovements(): Promise<void> {
+  if (supabase) {
+    try {
+      await supabase.rpc('purge_demo_test_data')
+    } catch {
+      // fallback
+    }
+  }
+  localStorage.removeItem(LOCAL_STORAGE_KEY)
+}

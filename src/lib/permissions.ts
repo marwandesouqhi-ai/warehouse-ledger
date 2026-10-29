@@ -100,12 +100,13 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/budget':                 ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin'],
   '/custody':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/reports':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor'],
-  '/imports':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/imports':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff'],
   '/quality':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/audit':                ['system_admin'],
   '/users':                ['system_admin'],
   '/settings':             ['system_admin'],
   '/telegram-bot':         ['system_admin'],
+  '/chatbot-admin':        ['system_admin'],
   '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
 }
 
@@ -279,7 +280,7 @@ export function canViewPage(
   let session = sessionOrPage
   let page = pageOrSession as string
 
-  const knownPages = ['purchases', 'suppliers', 'quotes', 'contracts', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support', 'requests', 'notifications', 'analytics', 'asset_history', 'financial_reports', 'budget', 'telegram_bot']
+  const knownPages = ['purchases', 'suppliers', 'quotes', 'contracts', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support', 'requests', 'notifications', 'analytics', 'asset_history', 'financial_reports', 'budget', 'telegram_bot', 'chatbot_admin']
   if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
     page = sessionOrPage
     session = pageOrSession
@@ -299,7 +300,7 @@ export function canViewPage(
     case 'reports':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor'].includes(role)
     case 'imports':
-      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff'].includes(role)
     case 'quality':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'audit':
@@ -309,6 +310,8 @@ export function canViewPage(
     case 'settings':
       return role === 'system_admin'
     case 'telegram_bot':
+      return role === 'system_admin'
+    case 'chatbot_admin':
       return role === 'system_admin'
     case 'contracts':
       return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)

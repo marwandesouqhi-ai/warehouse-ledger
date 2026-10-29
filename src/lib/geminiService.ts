@@ -10,6 +10,7 @@
  */
 
 import { getLiveWarehouseContext, queryLiveItemAvailability } from './chatbotLiveContext'
+import { getQualityIssuesSummary } from './dataQualityAutoRepair'
 
 const GEMINI_LOCAL_STORAGE_KEY = 'znu_gemini_api_key_secure'
 /**
@@ -132,8 +133,17 @@ async function buildSystemContextPrompt(): Promise<string> {
     ? ctx.recentMovements.map((m) => `  * [${m.type === 'in' ? 'وارد' : 'منصرف'}] ${m.item} (${m.qty} وحدة) - الطرف: ${m.party} - التاريخ: ${m.date}`).join('\n')
     : '  * لا توجد حركات حديثة.'
 
-  cachedSystemPrompt = `أنت «المساعد الذكي الرسمي لمنظومة إدارة مخازن وتوريدات جامعة الزقازيق الأهلية (ZNU)».
-مهمتك مساعدة أمناء المخازن، مديري التوريدات، عمداء الكليات، ومسؤولي العهد في الجامعة.
+  const quality = getQualityIssuesSummary()
+
+  const customDirectives =
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('znu_chatbot_custom_developer_directives') || ''
+      : ''
+
+  cachedSystemPrompt = `أنت «المساعد الذكي الرسمي ومحرر الأكواد البرمجية لمنظومة إدارة مخازن وتوريدات جامعة الزقازيق الأهلية (ZNU)».
+مهمتك مساعدة إدارة النظام وأمناء المخازن ومديري التوريدات، بالإضافة لعملك كمبرمج ومطور خبير (Senior Full-Stack Engineer & Database Administrator).
+
+${customDirectives ? `تعليمات التطوير المخصصة من مدير النظام:\n${customDirectives}\n` : ''}
 
 معلومات وبيانات المنظومة الحية المتزامنة لحظياً من قاعدة البيانات (Supabase & Ledger):
 ========================================================================
@@ -142,6 +152,8 @@ async function buildSystemContextPrompt(): Promise<string> {
 - القيمة التقديرية الإجمالية للمخزون: ${ctx.totalCustodyValue.toLocaleString()} جنيه مصري.
 - عدد طلبات الصرف المعلقة (بانتظار الاعتماد): ${ctx.pendingRequestsCount} طلب.
 - عدد عقود التوريد السارية: ${ctx.activeContractsCount} عقد (${ctx.expiringContractsCount} عقد يقترب من الانتهاء).
+- فحص مركز جودة البيانات: إجمالي ${quality.total} تنبيه (${quality.notes} ملاحظة، ${quality.warnings} تحذير، ${quality.errors} خطأ).
+- أداة الإصلاح الذاتي التلقائي (Autonomous Auto-Repair Tool): لديك أداة برمجية متصلة تفحص وتعالج مشاكل الجودة آلياً (تحويل الأسعار المخزنة كنص لأرقام قياسية، تعيين أرقام الفواتير الناقصة، وتصحيح التواريخ). إذا طلب المستخدم منك إصلاح المشاكل، أو تصحيح الأخطاء، أخبره بأنك قمت بتشغيل أداة الإصلاح الذاتي ووجهه إلى /quality.
 
 المخازن والكليات الثمانية (8) الحالية وأرصدتها:
 ${warehousesSummary}
@@ -159,20 +171,50 @@ ${budgetSummary}
 ${recentMovesSummary}
 ========================================================================
 
-قواعد وإرشادات الإجابة:
+قدرات المبرمج ومحرر الأكواد الذكي (AI Full-Stack Developer & DBA Capabilities):
+- معمارية الواجهة: React 18, TypeScript, Tailwind CSS, Vite.
+- معمارية الباك إند: Supabase Deno Edge Functions (admin-users, telegram-bot).
+- معمارية قاعدة البيانات (PostgreSQL): تضم 16 جدولاً سحابياً مؤمناً بـ RLS:
+  1. ledger_movements / movements (حركات الوارد والمنصرف)
+  2. custody (كشف العهدة المخزنية)
+  3. supplier_contracts (عقود الموردين والمرفقات)
+  4. disbursement_requests (طلبات الصرف الداخلي)
+  5. budget_plans (الميزانية والتخطيط المالي)
+  6. financial_reports (التقارير المالية الدورية)
+  7. asset_movement_log (سجل تتبع حركة الأصول)
+  8. support_tickets (تذاكر الدعم الفني)
+  9. technical_inspections (محاضر الفحص الفني)
+  10. inventory_settlements (محاضر التسوية الجردية)
+  11. app_users (المستخدمون والصلاحيات)
+  12. audit_logs (سجل العمليات والتدقيق)
+  13. telegram_bot_settings (إعدادات بوت التيليجرام)
+  14. notifications (نظام الإشعارات)
+  15. suppliers (الموردون المعتمدون)
+  16. settings (إعدادات المؤسسة والشعار)
+- عندما يطلب منك مدير النظام تعديل شيء في السيستم أو كتابة كود:
+  1. اكتب كوداً برمجياً جاهزاً ودقيقاً مع ذكر اسم الملف ومساره.
+  2. اكتب كود الهجرة PostgreSQL Migration متضمناً سياسات أمان RLS والفهارس.
+  3. التزم دائماً بالتزامن الثلاثي: تطبيق التعديلات في الفرونت والباك إند وقاعدة البيانات معاً.
+  4. الالتزام الصارم بعدم النشر على Vercel نهائياً والحفاظ على حسابات النظام المشرف (marwan-desouky).
+  5. رابط صفحة إدارة الشات بوت وتوليد الأكواد: /chatbot-admin
+
+قواعد وإرشادات الإجابة العامة:
 1. أجب دائماً باللغة العربية الفصحى الواضحة والمهنية والودودة باختصار وتركيز.
-2. نسق الإجابات باستخدام Markdown (عناوين، نقاط، خط عريض للبيانات الهامة والأرقام).
+2. نسق الإجابات والأكواد باستخدام Markdown وأقواس الكود البرمجي (Code Blocks).
 3. عند السؤال عن رصيد صنف أو مكانه، استشهد بالأرقام والمخازن المذكورة أعلاه بدقة.
-4. إذا سأل المستخدم عن إجراءات أو لوائح (صرف داخلي، تسوية جردية، فحص واستلام، مناقصات)، اشرح له الخطوات المعتمدة بالجامعة بالترتيب.
-5. وفر روابط الصفحات في إجابتك عند الحاجة في سطر منفصل، مثل:
+4. وفر روابط الصفحات في إجابتك عند الحاجة في سطر منفصل، مثل:
+   - رابط صفحة إدارة الشات بوت البرمجي: /chatbot-admin
    - رابط صفحة طلبات الصرف: /disbursement-requests
    - رابط صفحة العقود: /contracts
+   - رابط صفحة عروض الأسعار وأوامر الشراء: /purchases/quotes
    - رابط صفحة الميزانية: /budget
+   - رابط صفحة مركز جودة البيانات: /quality
    - رابط صفحة الفحص والجرد: /inventory-analytics
    - رابط صفحة سجل حركة الأصول: /asset-history
    - رابط صفحة فواتير الشراء: /purchases
+   - رابط صفحة سجل العمليات والتدقيق: /audit
    - رابط صفحة الدعم الفني: /support
-6. بيانات الدعم الفني الرسمية: هاتف/واتساب 01011488621، بريد: marwandesowky2@gmail.com.`
+5. بيانات الدعم الفني الرسمية: هاتف/واتساب 01011488621، بريد: marwandesowky2@gmail.com.`
 
   lastPromptCacheTime = now
   return cachedSystemPrompt
@@ -212,8 +254,6 @@ export async function testGeminiConnection(keyToTest?: string): Promise<{ succes
       lastErrorMsg = errorData?.error?.message || `فشل الاتصال برمز (${res.status})`
     }
     return { success: false, message: `خطأ من سيرفر Gemini: ${lastErrorMsg}` }
-
-    return { success: true, message: 'تم التحقق من صحة مفتاح Gemini API بنجاح! 🟢' }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     return { success: false, message: `تعذر الوصول لخدمة Gemini: ${message}` }
@@ -344,6 +384,9 @@ export async function askGeminiWithContext(
   } else if (candidate.includes('/purchases')) {
     actionUrl = '/purchases'
     actionLabel = 'الانتقال لفواتير الشراء'
+  } else if (candidate.includes('/quality')) {
+    actionUrl = '/quality'
+    actionLabel = 'الانتقال لمركز جودة البيانات'
   } else if (candidate.includes('/support')) {
     actionUrl = '/support'
     actionLabel = 'الانتقال للدعم الفني'

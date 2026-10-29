@@ -37,6 +37,8 @@ import {
     restoreLocalBackup,
     restoreFromCloud,
     type SystemBackupPayload,
+    type RestoreOptions,
+    type SystemBackupCounts,
 } from '../lib/backup'
 
 type SettingsPageProps = {
@@ -116,18 +118,69 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
     const [restoreFile, setRestoreFile] = useState<File | null>(null)
     const [parsedBackup, setParsedBackup] = useState<SystemBackupPayload | null>(null)
     const [restoreValidationError, setRestoreValidationError] = useState('')
-    const [restoreOptions, setRestoreOptions] = useState({
+    const [restoreOptions, setRestoreOptions] = useState<RestoreOptions>({
         restoreMovements: true,
         restoreCustody: true,
         restoreUsers: true,
         restoreSettings: true,
         restoreAuditLogs: true,
         restoreSuppliers: true,
+        restoreContracts: true,
+        restoreDisbursementRequests: true,
+        restoreBudgetPlans: true,
+        restoreFinancialReports: true,
+        restoreAssetMovements: true,
+        restoreSupportTickets: true,
+        restoreTechnicalInspections: true,
+        restoreInventorySettlements: true,
+        restoreTelegramSettings: true,
+        restoreNotifications: true,
     })
     const [isRestoringLocal, setIsRestoringLocal] = useState(false)
     const [isRestoringCloud, setIsRestoringCloud] = useState(false)
     const [restoreSuccessNotice, setRestoreSuccessNotice] = useState('')
     const [restoreError, setRestoreError] = useState('')
+
+    function toggleAllRestoreOptions(select: boolean) {
+        setRestoreOptions({
+            restoreMovements: select,
+            restoreCustody: select,
+            restoreUsers: select,
+            restoreSettings: select,
+            restoreAuditLogs: select,
+            restoreSuppliers: select,
+            restoreContracts: select,
+            restoreDisbursementRequests: select,
+            restoreBudgetPlans: select,
+            restoreFinancialReports: select,
+            restoreAssetMovements: select,
+            restoreSupportTickets: select,
+            restoreTechnicalInspections: select,
+            restoreInventorySettlements: select,
+            restoreTelegramSettings: select,
+            restoreNotifications: select,
+        })
+    }
+
+    function formatCountsSummary(counts: SystemBackupCounts): string {
+        const parts: string[] = []
+        if (counts.movements) parts.push(`${counts.movements} حركة`)
+        if (counts.custody) parts.push(`${counts.custody} صنف عهدة`)
+        if (counts.contracts) parts.push(`${counts.contracts} عقد مورد بالمرفقات`)
+        if (counts.disbursementRequests) parts.push(`${counts.disbursementRequests} طلب صرف`)
+        if (counts.budgetPlans) parts.push(`${counts.budgetPlans} بند موازنة`)
+        if (counts.financialReports) parts.push(`${counts.financialReports} تقرير مالي`)
+        if (counts.assetMovements) parts.push(`${counts.assetMovements} حركة أصول`)
+        if (counts.supportTickets) parts.push(`${counts.supportTickets} تذكرة دعم`)
+        if (counts.technicalInspections) parts.push(`${counts.technicalInspections} محضر فحص`)
+        if (counts.inventorySettlements) parts.push(`${counts.inventorySettlements} تسوية جردية`)
+        if (counts.users) parts.push(`${counts.users} مستخدم`)
+        if (counts.auditLogs) parts.push(`${counts.auditLogs} عملية تدقيق`)
+        if (counts.suppliers) parts.push(`${counts.suppliers} مورد`)
+        if (counts.notifications) parts.push(`${counts.notifications} إشعار`)
+        if (counts.settings) parts.push('إعدادات وشعار المؤسسة')
+        return parts.length > 0 ? parts.join('، ') : 'كافة البيانات المحددة'
+    }
 
     async function handleRestoreFileChange(event: ChangeEvent<HTMLInputElement>) {
         const file = event.currentTarget.files?.[0]
@@ -164,16 +217,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                 setDraft(parsedBackup.data.settings)
                 onSave(parsedBackup.data.settings)
             }
-            const parts: string[] = []
-            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
-            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
-            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
-            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية بسجل التدقيق`)
-            if (result.counts.suppliers) parts.push(`${result.counts.suppliers} مورد`)
-            if (result.counts.settings) parts.push('إعدادات وشعار المؤسسة')
-
             setRestoreSuccessNotice(
-                `✓ تم استعادة النسخة الاحتياطية بنجاح! تم استرجاع: ${parts.length > 0 ? parts.join('، ') : 'كافة البيانات المحددة'}.`
+                `✓ تم استعادة النسخة الاحتياطية بنجاح! تم استرجاع: ${formatCountsSummary(result.counts)}.`
             )
             setParsedBackup(null)
             setRestoreFile(null)
@@ -193,16 +238,8 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
         try {
             const result = await restoreFromCloud(session)
-            const parts: string[] = []
-            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
-            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
-            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
-            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية بسجل التدقيق`)
-            if (result.counts.suppliers) parts.push(`${result.counts.suppliers} مورد`)
-            if (result.counts.settings) parts.push('إعدادات وشعار المؤسسة')
-
             setRestoreSuccessNotice(
-                `✓ تم استعادة وتحديث البيانات من سحابة Supabase بنجاح! تم جلب: ${parts.length > 0 ? parts.join('، ') : 'كافة البيانات المزامنة'}.`
+                `✓ تم استعادة وتحديث البيانات من سحابة Supabase بنجاح! تم جلب: ${formatCountsSummary(result.counts)}.`
             )
         } catch (err) {
             console.error('Cloud restore error:', err)
@@ -220,12 +257,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         try {
             const result = await backupToSupabaseCloud(session)
             setLastCloudTime(result.timestamp)
-            const parts: string[] = []
-            if (result.counts.movements) parts.push(`${result.counts.movements} حركة`)
-            if (result.counts.custody) parts.push(`${result.counts.custody} صنف عهدة`)
-            if (result.counts.users) parts.push(`${result.counts.users} مستخدم`)
-            if (result.counts.auditLogs) parts.push(`${result.counts.auditLogs} عملية تدقيق`)
-            setCloudBackupNotice(`تم النسخ السحابي بنجاح! تم تأكيد حفظ ومزامنة: ${parts.join(' و')} في Supabase.`)
+            setCloudBackupNotice(`تم النسخ السحابي الشامل بنجاح! تم حفظ ومزامنة: ${formatCountsSummary(result.counts)} في سحابة Supabase.`)
             setTimeout(() => setCloudBackupNotice(''), 7000)
         } catch (err) {
             console.error('Cloud backup error:', err)
@@ -244,7 +276,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             const result = await exportLocalBackup(session)
             setLastLocalTime(result.timestamp)
             setLocalBackupNotice(
-                `تم تنزيل النسخة الاحتياطية الشاملة (${result.fileName}) متضمنة كافة الحركات (${result.counts.movements}) والعهدة (${result.counts.custody}) والمستخدمين (${result.counts.users}) وسجل العمليات (${result.counts.auditLogs}) بنجاح!`
+                `تم تنزيل النسخة الاحتياطية الشاملة (${result.fileName}) متضمنة: ${formatCountsSummary(result.counts)} بنجاح!`
             )
             setTimeout(() => setLocalBackupNotice(''), 7000)
         } catch (err) {
@@ -886,23 +918,55 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
 
                                                 <div className="restore-preview-stats">
                                                     <div className="restore-stat-item">
-                                                        <span>الحركات المسجلة</span>
-                                                        <strong>{parsedBackup.metadata.counts.movements} حركة</strong>
+                                                        <span>الحركات وسجل المخزن</span>
+                                                        <strong>{parsedBackup.metadata.counts.movements || 0} حركة</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
                                                         <span>أصناف العهدة</span>
-                                                        <strong>{parsedBackup.metadata.counts.custody} صنف</strong>
+                                                        <strong>{parsedBackup.metadata.counts.custody || 0} صنف</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
-                                                        <span>المستخدمون</span>
-                                                        <strong>{parsedBackup.metadata.counts.users} مستخدم</strong>
+                                                        <span>عقود الموردين والمرفقات</span>
+                                                        <strong>{parsedBackup.metadata.counts.contracts || 0} عقد</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>طلبات الصرف الداخلي</span>
+                                                        <strong>{parsedBackup.metadata.counts.disbursementRequests || 0} طلب</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>الميزانية والتخطيط</span>
+                                                        <strong>{parsedBackup.metadata.counts.budgetPlans || 0} بند</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>التقارير المالية الدورية</span>
+                                                        <strong>{parsedBackup.metadata.counts.financialReports || 0} تقرير</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>سجل حركة الأصول</span>
+                                                        <strong>{parsedBackup.metadata.counts.assetMovements || 0} أصل</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>تذاكر وبلاغات الدعم</span>
+                                                        <strong>{parsedBackup.metadata.counts.supportTickets || 0} تذكرة</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>محاضر الفحص الفني</span>
+                                                        <strong>{parsedBackup.metadata.counts.technicalInspections || 0} محضر</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>محاضر التسوية الجردية</span>
+                                                        <strong>{parsedBackup.metadata.counts.inventorySettlements || 0} تسوية</strong>
+                                                    </div>
+                                                    <div className="restore-stat-item">
+                                                        <span>المستخدمون وحسابات الدخول</span>
+                                                        <strong>{parsedBackup.metadata.counts.users || 0} مستخدم</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
                                                         <span>سجل العمليات والتدقيق</span>
                                                         <strong>{parsedBackup.metadata.counts.auditLogs || 0} عملية</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
-                                                        <span>الموردون المعتمدون</span>
+                                                        <span>الموردون والشركات</span>
                                                         <strong>{parsedBackup.metadata.counts.suppliers || 0} مورد</strong>
                                                     </div>
                                                     <div className="restore-stat-item">
@@ -912,38 +976,137 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                 </div>
 
                                                 <div className="border-top-line">
-                                                    <span className="font-xs font-semibold text-ink block mb-2">
-                                                        حدد البيانات التي ترغب في استعادتها:
-                                                    </span>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="font-xs font-semibold text-ink block">
+                                                            حدد البيانات التي ترغب في استعادتها من النسخة الاحتياطية:
+                                                        </span>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="text-xs text-primary underline hover:opacity-80"
+                                                                onClick={() => toggleAllRestoreOptions(true)}
+                                                            >
+                                                                تحديد الكل
+                                                            </button>
+                                                            <span className="text-muted text-xs">|</span>
+                                                            <button
+                                                                type="button"
+                                                                className="text-xs text-muted underline hover:text-foreground"
+                                                                onClick={() => toggleAllRestoreOptions(false)}
+                                                            >
+                                                                إلغاء التحديد
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                     <div className="restore-options-grid">
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreMovements}
+                                                                checked={!!restoreOptions.restoreMovements}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreMovements: e.target.checked })}
                                                             />
-                                                            سجل الحركات ({parsedBackup.metadata.counts.movements})
+                                                            سجل الحركات ({parsedBackup.metadata.counts.movements || 0})
                                                         </label>
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreCustody}
+                                                                checked={!!restoreOptions.restoreCustody}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreCustody: e.target.checked })}
                                                             />
-                                                            أصناف العهدة ({parsedBackup.metadata.counts.custody})
+                                                            أصناف العهدة ({parsedBackup.metadata.counts.custody || 0})
                                                         </label>
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreUsers}
+                                                                checked={!!restoreOptions.restoreContracts}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreContracts: e.target.checked })}
+                                                            />
+                                                            عقود الموردين والمرفقات ({parsedBackup.metadata.counts.contracts || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreDisbursementRequests}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreDisbursementRequests: e.target.checked })}
+                                                            />
+                                                            طلبات الصرف الداخلي ({parsedBackup.metadata.counts.disbursementRequests || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreBudgetPlans}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreBudgetPlans: e.target.checked })}
+                                                            />
+                                                            الميزانية والتخطيط ({parsedBackup.metadata.counts.budgetPlans || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreFinancialReports}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreFinancialReports: e.target.checked })}
+                                                            />
+                                                            التقارير المالية ({parsedBackup.metadata.counts.financialReports || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreAssetMovements}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreAssetMovements: e.target.checked })}
+                                                            />
+                                                            سجل حركة الأصول ({parsedBackup.metadata.counts.assetMovements || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreSupportTickets}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreSupportTickets: e.target.checked })}
+                                                            />
+                                                            تذاكر الدعم الفني ({parsedBackup.metadata.counts.supportTickets || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreTechnicalInspections}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreTechnicalInspections: e.target.checked })}
+                                                            />
+                                                            محاضر الفحص الفني ({parsedBackup.metadata.counts.technicalInspections || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreInventorySettlements}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreInventorySettlements: e.target.checked })}
+                                                            />
+                                                            محاضر التسوية الجردية ({parsedBackup.metadata.counts.inventorySettlements || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreTelegramSettings}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreTelegramSettings: e.target.checked })}
+                                                            />
+                                                            إعدادات بوت التيليجرام
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreNotifications}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreNotifications: e.target.checked })}
+                                                            />
+                                                            نظام الإشعارات والتنبيهات ({parsedBackup.metadata.counts.notifications || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreUsers}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreUsers: e.target.checked })}
                                                             />
-                                                            المستخدمون وحسابات الدخول ({parsedBackup.metadata.counts.users})
+                                                            المستخدمون وحسابات الدخول ({parsedBackup.metadata.counts.users || 0})
                                                         </label>
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreAuditLogs}
+                                                                checked={!!restoreOptions.restoreAuditLogs}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreAuditLogs: e.target.checked })}
                                                             />
                                                             سجل العمليات والتدقيق ({parsedBackup.metadata.counts.auditLogs || 0})
@@ -951,7 +1114,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreSuppliers}
+                                                                checked={!!restoreOptions.restoreSuppliers}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreSuppliers: e.target.checked })}
                                                             />
                                                             سجل الموردين المعتمدين ({parsedBackup.metadata.counts.suppliers || 0})
@@ -959,7 +1122,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         <label className="restore-checkbox-label">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={restoreOptions.restoreSettings}
+                                                                checked={!!restoreOptions.restoreSettings}
                                                                 onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreSettings: e.target.checked })}
                                                             />
                                                             إعدادات وشعار المؤسسة

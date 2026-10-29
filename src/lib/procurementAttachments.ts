@@ -1,19 +1,25 @@
 /**
  * src/lib/procurementAttachments.ts
  *
- * خدمة إدارة المرفقات السحابية لموديول المشتريات (Supabase Storage: procurement-attachments).
- * تنبيه أمني: هذه الخدمة مكتملة ومختبرة في طبقة الكود، وموقوفة في واجهات المستخدم (Standby)
- * بانتظار الموافقة الصريحة لتفعيل أزرار الرفع.
+ * خدمة إدارة المرفقات السحابية والمحلية لموديولات المشتريات والعقود والعهدة.
+ * تدعم الرفع إلى Supabase Storage والتخزين الذاتي Base64 للحفظ بدون إنترنت أو في النسخ الاحتياطية.
  */
 
 import { supabase } from './supabase'
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+
 export const ALLOWED_ATTACHMENT_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/gif',
   'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
 ]
 
 export interface AttachmentValidationResult {
@@ -22,7 +28,7 @@ export interface AttachmentValidationResult {
 }
 
 /**
- * التحقق من نوع وحجم الملف قبل محاولة الرفع
+ * التحقق من نوع وحجم الملف قبل محاولة الرفع أو المعالجة
  */
 export function validateAttachmentFile(file: File): AttachmentValidationResult {
   if (!file) {
@@ -36,10 +42,15 @@ export function validateAttachmentFile(file: File): AttachmentValidationResult {
     }
   }
 
-  if (!ALLOWED_ATTACHMENT_MIME_TYPES.includes(file.type)) {
+  // السماح بملفات الصور والمستندات
+  if (
+    !ALLOWED_ATTACHMENT_MIME_TYPES.includes(file.type) &&
+    !file.type.startsWith('image/') &&
+    !file.name.match(/\.(pdf|doc|docx|xls|xlsx|txt|png|jpg|jpeg|webp)$/i)
+  ) {
     return {
       isValid: false,
-      error: 'نوع الملف غير مدعوم. الأنواع المسموح بها فقط: مستندات PDF أو صور (JPEG, PNG, WebP).',
+      error: 'نوع الملف غير مدعوم. يرجى اختيار ملف مستند (PDF, Word, Excel) أو صورة (JPG, PNG, WebP).',
     }
   }
 
@@ -47,13 +58,46 @@ export function validateAttachmentFile(file: File): AttachmentValidationResult {
 }
 
 /**
- * رفع ملف مرفق إلى الـ Bucket السحابي
+ * تحويل الملف إلى Base64 Data URL لحفظه محلياً وفي النسخ الاحتياطية
+ */
+export function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('تعذر قراءة محتوى الملف'))
+      }
+    }
+    reader.onerror = () => reject(reader.error || new Error('فشلت قراءة الملف'))
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * تنزيل المرفق تلقائياً إلى جهاز المستخدم
+ */
+export function downloadAttachment(urlOrDataUrl: string, fileName: string): void {
+  if (typeof document === 'undefined') return
+  const anchor = document.createElement('a')
+  anchor.href = urlOrDataUrl
+  anchor.download = fileName || 'مستند_مرفق'
+  anchor.target = '_blank'
+  anchor.rel = 'noopener noreferrer'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+}
+
+/**
+ * رفع ملف مرفق إلى الـ Bucket السحابي (procurement-attachments)
  */
 export async function uploadProcurementAttachment(
-  entityFolder: 'requests' | 'quotes' | 'orders',
+  entityFolder: 'requests' | 'quotes' | 'orders' | 'contracts',
   entityId: string,
   file: File
-): Promise<{ path: string }> {
+): Promise<{ path: string; publicUrl?: string }> {
   if (!supabase) throw new Error('لا يوجد اتصال بقاعدة البيانات السحابية.')
 
   const validation = validateAttachmentFile(file)
@@ -76,13 +120,21 @@ export async function uploadProcurementAttachment(
     throw new Error(error?.message || 'تعذر رفع الملف المرفق إلى التخزين السحابي.')
   }
 
-  return { path: data.path }
+  let publicUrl: string | undefined
+  try {
+    const { data: publicData } = supabase.storage.from('procurement-attachments').getPublicUrl(data.path)
+    publicUrl = publicData.publicUrl
+  } catch {
+    // ignore
+  }
+
+  return { path: data.path, publicUrl }
 }
 
 /**
  * إنشاء رابط مؤقت موقع لقراءة / تحميل المرفق بأمان
  */
-export async function getSignedAttachmentUrl(path: string, expiresInSeconds = 300): Promise<string> {
+export async function getSignedAttachmentUrl(path: string, expiresInSeconds = 3600): Promise<string> {
   if (!supabase) throw new Error('لا يوجد اتصال بقاعدة البيانات السحابية.')
 
   const { data, error } = await supabase.storage

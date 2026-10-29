@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { purgeLocalDemoData } from './purgeDemoData'
 
 export type BudgetPlan = {
   id: string
@@ -18,68 +19,28 @@ export type BudgetPlan = {
 
 const LOCAL_STORAGE_KEY = 'budget_plans_local'
 
-const DEFAULT_BUDGET_PLANS: BudgetPlan[] = [
-  {
-    id: 'bg-1',
-    fiscal_year: 2026,
-    department: 'كلية الهندسة',
-    category: 'أجهزة ومعدات معملية',
-    allocated_amount: 1200000,
-    spent_amount: 850000,
-    remaining_amount: 350000,
-    status: 'active',
-    notes: 'معامل الميكاترونكس والذكاء الاصطناعي',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'bg-2',
-    fiscal_year: 2026,
-    department: 'كلية الطب البشري',
-    category: 'مستلزمات وأجهزة طبية',
-    allocated_amount: 1500000,
-    spent_amount: 980000,
-    remaining_amount: 520000,
-    status: 'active',
-    notes: 'معامل التشريح والأنسجة والتحاليل',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'bg-3',
-    fiscal_year: 2026,
-    department: 'المستودعات والمخازن',
-    category: 'مستلزمات مكتبية وتعبئة',
-    allocated_amount: 300000,
-    spent_amount: 210000,
-    remaining_amount: 90000,
-    status: 'active',
-    notes: 'أدوات مكتبية ومستلزمات إدارية وتشغيلية',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'bg-4',
-    fiscal_year: 2026,
-    department: 'إدارة تكنولوجيا المعلومات (IT)',
-    category: 'شبكات وسيرفرات وحواسيب',
-    allocated_amount: 950000,
-    spent_amount: 720000,
-    remaining_amount: 230000,
-    status: 'active',
-    notes: 'تحديث البنية التحتية وتجهيز قاعات الامتحانات',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-]
+// Empty default - no mock or demo items
+const DEFAULT_BUDGET_PLANS: BudgetPlan[] = []
 
-function getLocalBudgetPlans(): BudgetPlan[] {
+const DEMO_BUDGET_IDS = new Set(['bg-1', 'bg-2', 'bg-3', 'bg-4'])
+
+export function getLocalBudgetPlans(): BudgetPlan[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return DEFAULT_BUDGET_PLANS
+    const parsed: BudgetPlan[] = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_BUDGET_PLANS
+    const cleaned = parsed.filter((b) => !DEMO_BUDGET_IDS.has(b.id))
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned))
+    }
+    return cleaned
   } catch {
-    // ignore
+    return DEFAULT_BUDGET_PLANS
   }
-  return DEFAULT_BUDGET_PLANS
 }
 
-function saveLocalBudgetPlans(items: BudgetPlan[]) {
+export function saveLocalBudgetPlans(items: BudgetPlan[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
@@ -88,6 +49,9 @@ function saveLocalBudgetPlans(items: BudgetPlan[]) {
 }
 
 export async function fetchBudgetPlans(fiscalYear?: number): Promise<BudgetPlan[]> {
+  // Always clean local demo cache first
+  purgeLocalDemoData()
+
   if (supabase) {
     try {
       let query = supabase.from('budget_plans').select('*').order('allocated_amount', { ascending: false })
@@ -95,9 +59,10 @@ export async function fetchBudgetPlans(fiscalYear?: number): Promise<BudgetPlan[
         query = query.eq('fiscal_year', fiscalYear)
       }
       const { data, error } = await query
-      if (!error && data && data.length > 0) {
-        saveLocalBudgetPlans(data)
-        return data
+      if (!error && Array.isArray(data)) {
+        const cleaned = data.filter((b: BudgetPlan) => !DEMO_BUDGET_IDS.has(b.id))
+        saveLocalBudgetPlans(cleaned)
+        return cleaned
       }
     } catch {
       // fallback
@@ -189,4 +154,3 @@ export async function deleteBudgetPlan(id: string): Promise<void> {
   const local = getLocalBudgetPlans()
   saveLocalBudgetPlans(local.filter((p) => p.id !== id))
 }
-

@@ -100,17 +100,58 @@ export async function fetchMovements(_ownerId?: string): Promise<FixtureMovement
 export async function saveMovements(movements: FixtureMovement[], ownerId?: string): Promise<FixtureMovement[]> {
     if (movements.length === 0) return []
 
-    const rows = movements.map((movement) => toRow(movement, ownerId))
-    const { data, error } = await getClient()
-        .from('movements')
-        .upsert(rows, {
-            onConflict: 'fingerprint',
-            ignoreDuplicates: true,
-        })
-        .select('*')
+    const withUuid = movements.filter((m) => {
+        const idStr = String(m.id ?? '')
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
+    })
 
-    if (error) throw error
-    return (data as MovementRow[]).map(fromRow)
+    const withoutUuid = movements.filter((m) => {
+        const idStr = String(m.id ?? '')
+        return !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
+    })
+
+    const results: MovementRow[] = []
+
+    // 1. تحديث الحركات السابقة ذات المعرف UUID عبر onConflict: 'id' لمنع تعارض المفتاح الأساسي (movements_pkey)
+    if (withUuid.length > 0) {
+        const rowsWithId = withUuid.map((m) => toRow(m, ownerId))
+        const { data, error } = await getClient()
+            .from('movements')
+            .upsert(rowsWithId, {
+                onConflict: 'id',
+            })
+            .select('*')
+
+        if (error) {
+            console.warn('Warning during ID-based movement upsert:', error)
+        } else if (data) {
+            results.push(...(data as MovementRow[]))
+        }
+    }
+
+    // 2. إدراج الحركات الجديدة بدون معرف عبر onConflict: 'fingerprint' مع توليد UUID جديد في قاعدة البيانات
+    if (withoutUuid.length > 0) {
+        const rowsWithoutId = withoutUuid.map((m) => {
+            const row = toRow(m, ownerId)
+            delete row.id
+            return row
+        })
+        const { data, error } = await getClient()
+            .from('movements')
+            .upsert(rowsWithoutId, {
+                onConflict: 'fingerprint',
+                ignoreDuplicates: true,
+            })
+            .select('*')
+
+        if (error) {
+            console.warn('Warning during fingerprint-based movement upsert:', error)
+        } else if (data) {
+            results.push(...(data as MovementRow[]))
+        }
+    }
+
+    return results.map(fromRow)
 }
 
 export async function updateMovement(movement: FixtureMovement, _ownerId?: string): Promise<FixtureMovement> {

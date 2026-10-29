@@ -23,6 +23,7 @@ import {
   FlaskConical,
   HeartPulse,
   Laptop,
+  Wrench,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { findBestKnowledgeAnswer } from '../lib/chatbotKnowledge'
@@ -36,6 +37,11 @@ import {
   hasGeminiApiKey,
   askGeminiWithContext,
 } from '../lib/geminiService'
+import {
+  runDataQualityAutoRepair,
+  getQualityIssuesSummary,
+} from '../lib/dataQualityAutoRepair'
+import { isSystemAdmin } from '../lib/permissions'
 
 type Message = {
   id: string
@@ -53,6 +59,7 @@ type WarehouseChatBotProps = {
 }
 
 const CATEGORY_CHIPS = [
+  { label: '🛠️ أداة إصلاح مشاكل الجودة آلياً', query: 'أصلح مشاكل جودة البيانات وتصحيح الأسعار والفواتير الآن' },
   { label: '🏢 مخازن وكليات الجامعة الـ 8', query: 'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟' },
   { label: '📋 طلبات الصرف والأذون', query: 'كيف أقدم طلب صرف داخلي؟' },
   { label: '🛒 فواتير الشراء والموردين', query: 'كيف أسجل فاتورة شراء جديدة؟' },
@@ -86,12 +93,32 @@ function getWarehouseIcon(id: string) {
 }
 
 export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
+  const isAdmin = isSystemAdmin(session)
+  if (!isAdmin) {
+    return null
+  }
+
   const [isOpen, setIsOpen] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
 
   // Live database context state
   const [liveContext, setLiveContext] = useState<LiveWarehouseContext | null>(null)
   const [isRefreshingLive, setIsRefreshingLive] = useState(false)
+  const [qualityCount, setQualityCount] = useState(0)
+
+  // Listen to data changes to keep quality issue counts live
+  useEffect(() => {
+    const updateQualityCount = () => {
+      setQualityCount(getQualityIssuesSummary().total)
+    }
+    updateQualityCount()
+    window.addEventListener('movements-changed', updateQualityCount)
+    window.addEventListener('storage', updateQualityCount)
+    return () => {
+      window.removeEventListener('movements-changed', updateQualityCount)
+      window.removeEventListener('storage', updateQualityCount)
+    }
+  }, [])
 
   // Chat conversation state
   const [messages, setMessages] = useState<Message[]>([])
@@ -167,8 +194,65 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
     setInputText('')
     setIsTyping(true)
 
-    // 1. فحص فوري وسريع للأسئلة المباشرة عن أرصدة المخازن الـ 8 من قاعدة البيانات
     const normalizedQuery = text.toLowerCase()
+
+    // 0. تشغيل أداة الإصلاح الذاتي التلقائي لجودة البيانات (Autonomous Data Quality Auto-Repair Tool)
+    const isRepairQuery =
+      normalizedQuery.includes('صلح') ||
+      normalizedQuery.includes('أصلح') ||
+      normalizedQuery.includes('اصلاح') ||
+      normalizedQuery.includes('إصلاح') ||
+      normalizedQuery.includes('عالج') ||
+      normalizedQuery.includes('حل المشاكل') ||
+      normalizedQuery.includes('حل المشكلة') ||
+      normalizedQuery.includes('تنظيف البيانات') ||
+      normalizedQuery.includes('auto repair') ||
+      normalizedQuery.includes('auto fix') ||
+      normalizedQuery.includes('fix quality') ||
+      (normalizedQuery.includes('جودة') && (normalizedQuery.includes('تنبيه') || normalizedQuery.includes('أخطاء') || normalizedQuery.includes('مشكل')))
+
+    if (isRepairQuery) {
+      try {
+        const report = await runDataQualityAutoRepair(session?.user?.id)
+        const botMsg: Message = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: `🛠️ **أداة الإصلاح الذاتي قامت بمعالجة سجل الحركات بنجاح!**\n\n` +
+            `تم فحص السجل وتصحيح المشاكل عبر كافة الطبقات بالتزامن:\n` +
+            `• **الأسعار المخزنة كنص:** تم تحويل **${report.fixedPriceCount}** سعر إلى أرقام قياسية صالحة للحسابات.\n` +
+            `• **أرقام الفواتير الناقصة:** تم استخراج وتعيين **${report.fixedInvoiceCount}** رقم فاتورة رسمي.\n` +
+            `• **التواريخ وأذون الصرف:** تم تدقيق وتصحيح **${report.fixedDateCount + report.fixedPermitCount}** حركة.\n` +
+            `• **إجمالي الحركات التي تم تصحيحها:** **${report.totalRepairedRows}** حركة.\n` +
+            `• **تنبيهات مركز الجودة الآن:** انخفضت من **${report.initialFindingsCount}** تنبيه إلى **${report.remainingFindingsCount}** (سجل سليم 100% 🟢).\n\n` +
+            `💾 تم حفظ التعديلات في التخزين المحلي ومزامنتها في قاعدة بيانات Supabase سحابياً!`,
+          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          actionUrl: '/quality',
+          actionLabel: 'الانتقال لمركز جودة البيانات ومعاينة النتيجة',
+          suggestedPrompts: [
+            'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
+            'هل يوجد لابتوب أو أجهزة حاسب بالمخازن؟',
+            'ما هي طلبات الصرف المعلقة الآن؟',
+          ],
+        }
+        setMessages((prev) => [...prev, botMsg])
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const botMsg: Message = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: `⚠️ واجهت أداة الإصلاح الذاتي مشكلة أثناء معالجة البيانات: ${errMsg}`,
+          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          actionUrl: '/quality',
+          actionLabel: 'الانتقال لمركز جودة البيانات',
+        }
+        setMessages((prev) => [...prev, botMsg])
+      } finally {
+        setIsTyping(false)
+      }
+      return
+    }
+
+    // 1. فحص فوري وسريع للأسئلة المباشرة عن أرصدة المخازن الـ 8 من قاعدة البيانات
     const isWarehouseQuery =
       (normalizedQuery.includes('مخازن') || normalizedQuery.includes('مخزن')) &&
       (normalizedQuery.includes('كليات') || normalizedQuery.includes('رصيد') || normalizedQuery.includes('ارصد') || normalizedQuery.includes('أرصد') || normalizedQuery.includes('جامع'))
@@ -465,6 +549,27 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                           مربوطة بالمخزن الرئيسي
                         </span>
                       </div>
+
+                      {/* KPI 5: Quality Findings & Auto-Repair Tool */}
+                      <div
+                        className="chatbot-kpi-modern cursor-pointer hover:border-primary transition-all"
+                        style={{ '--card-accent': qualityCount > 0 ? '#f59e0b' : '#10b981', '--card-bg': qualityCount > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)' } as React.CSSProperties}
+                        onClick={() => handleSend('أصلح مشاكل جودة البيانات وتصحيح الأسعار والفواتير الآن')}
+                        title="انقر لتشغيل أداة الإصلاح الذاتي آلياً"
+                      >
+                        <div className="chatbot-kpi-top">
+                          <span className="chatbot-kpi-lbl">تنبيهات الجودة</span>
+                          <div className="chatbot-kpi-icon-wrap">
+                            <Wrench size={14} />
+                          </div>
+                        </div>
+                        <span className={`chatbot-kpi-val ${qualityCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {qualityCount.toLocaleString('ar-EG')}
+                        </span>
+                        <span className="text-[10px] text-muted font-medium">
+                          {qualityCount > 0 ? 'انقر للإصلاح الذاتي 🛠️' : 'سجل سليم 100% 🟢'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Warehouses list with interactive cards & college icons */}
@@ -536,6 +641,25 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
 
             {/* Chat Conversation Area */}
             <div className="chatbot-chat-area">
+              {/* Active Data Quality Warning Banner with 1-Click Auto-Repair */}
+              {qualityCount > 0 && (
+                <div className="mx-3 my-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <Wrench size={16} className="text-amber-600 shrink-0" />
+                    <span>
+                      تم اكتشاف <strong>{qualityCount.toLocaleString('ar-EG')} تنبيه جودة</strong> (أسعار كنص، فواتير غير مسجلة).
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm shrink-0 flex items-center gap-1"
+                    onClick={() => handleSend('أصلح مشاكل جودة البيانات وتصحيح الأسعار والفواتير الآن')}
+                  >
+                    <Sparkles size={12} /> إصلاح آلي
+                  </button>
+                </div>
+              )}
+
               {/* Messages Body */}
               <div className="chatbot-body">
                 {messages.map((msg) => (

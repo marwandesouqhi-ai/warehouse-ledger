@@ -24,10 +24,14 @@ import {
   fetchPurchaseOrders,
   markPoReceivedRpc,
   markPoInvoicedRpc,
+  createPurchaseRequest,
   type PurchaseRequest,
   type SupplierQuote,
   type PurchaseOrder,
+  type PurchaseType,
+  type PurchasePriority,
 } from '../../lib/procurementRepository'
+import { ShoppingCart, Trash2 } from 'lucide-react'
 import { fetchActiveSuppliers, type Supplier } from '../../lib/suppliersRepository'
 import { logAuditEvent } from '../../lib/auditLogger'
 import type { AppSettings } from '../../lib/settings'
@@ -74,6 +78,119 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   const [quoteNotes, setQuoteNotes] = useState('')
 
   const activeUserName = session?.user?.user_metadata?.displayName || session?.user?.email || 'موظف مشتريات'
+
+  // Create Purchase Request Form State
+  const [isCreateRequestModalOpen, setIsCreateRequestModalOpen] = useState(false)
+  const [createReqSubmitting, setCreateReqSubmitting] = useState(false)
+  const [createReqError, setCreateReqError] = useState('')
+  const [reqDept, setReqDept] = useState('كلية الهندسة')
+  const [reqPurchaseType, setReqPurchaseType] = useState<PurchaseType>('practice')
+  const [reqBudgetLine, setReqBudgetLine] = useState('موازنة معامل وأجهزة 2026 / 2027')
+  const [reqPriority, setReqPriority] = useState<PurchasePriority>('normal')
+  const [reqNeededBy, setReqNeededBy] = useState(
+    new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10)
+  )
+  const [reqRequestedBy, setReqRequestedBy] = useState(activeUserName)
+  const [reqJustification, setReqJustification] = useState('')
+  const [reqSubmitImmediately, setReqSubmitImmediately] = useState(true)
+  const [reqItems, setReqItems] = useState([
+    { item_name: '', quantity: 1, unit: 'قطعة', estimated_price: 0 },
+  ])
+
+  function handleAddReqItem() {
+    setReqItems((prev) => [
+      ...prev,
+      { item_name: '', quantity: 1, unit: 'قطعة', estimated_price: 0 },
+    ])
+  }
+
+  function handleRemoveReqItem(index: number) {
+    if (reqItems.length <= 1) return
+    setReqItems((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function handleReqItemChange(index: number, field: string, value: any) {
+    setReqItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    )
+  }
+
+  const totalReqEstimatedValue = useMemo(() => {
+    return reqItems.reduce(
+      (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.estimated_price) || 0),
+      0
+    )
+  }, [reqItems])
+
+  async function handleCreatePurchaseRequest(e: React.FormEvent) {
+    e.preventDefault()
+    setCreateReqError('')
+
+    if (!reqDept.trim()) {
+      setCreateReqError('يرجى تحديد أو كتابة اسم القسم أو الكلية الطالبة.')
+      return
+    }
+    if (!reqJustification.trim()) {
+      setCreateReqError('يرجى توضيح مبررات وأسباب طلب الشراء.')
+      return
+    }
+    const validItems = reqItems.filter((i) => i.item_name.trim().length > 0)
+    if (validItems.length === 0) {
+      setCreateReqError('يجب إدخال اسم صنف واحد على الأقل.')
+      return
+    }
+
+    setCreateReqSubmitting(true)
+    try {
+      const created = await createPurchaseRequest(
+        {
+          department: reqDept.trim(),
+          purchase_type: reqPurchaseType,
+          budget_line: reqBudgetLine.trim(),
+          priority: reqPriority,
+          needed_by: reqNeededBy || null,
+          requested_by: reqRequestedBy.trim() || activeUserName,
+          justification: reqJustification.trim(),
+          created_by: activeUserName,
+          created_by_id: session?.user?.id || null,
+        },
+        validItems.map((i) => ({
+          item_name: i.item_name.trim(),
+          quantity: Number(i.quantity) || 1,
+          unit: i.unit.trim() || 'قطعة',
+          estimated_price: Number(i.estimated_price) || 0,
+        })),
+        reqSubmitImmediately
+      )
+
+      await logAuditEvent({
+        action: `إنشاء طلب شراء جديد: ${created.request_no} للقسم ${reqDept}`,
+        entity_type: 'purchase_request',
+        entity_id: created.id,
+        details: {
+          request_no: created.request_no,
+          department: reqDept,
+          total_estimated: totalReqEstimatedValue,
+          items_count: validItems.length,
+        },
+        user: session?.user,
+      })
+
+      setSuccessMessage(`تم إنشاء طلب الشراء بنجاح! رقم الطلب: «${created.request_no}» بمبلغ تقديري ${totalReqEstimatedValue.toLocaleString('ar-EG')} ج.م.`)
+      setIsCreateRequestModalOpen(false)
+      setReqJustification('')
+      setReqItems([{ item_name: '', quantity: 1, unit: 'قطعة', estimated_price: 0 }])
+
+      // Reload requests list and select the new request
+      const updatedList = await fetchPurchaseRequests()
+      setRequests(updatedList)
+      setSelectedRequestId(created.id)
+    } catch (err) {
+      setCreateReqError(err instanceof Error ? err.message : 'تعذر إنشاء طلب الشراء.')
+    } finally {
+      setCreateReqSubmitting(false)
+    }
+  }
 
   // Load initial data
   async function loadInitialData() {
@@ -331,16 +448,27 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           </h2>
           <span>مقارنة عروض الموردين للمفاضلة الفنية والمالية، اختيار العرض الأفضل، وإصدار أوامر الشراء</span>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadInitialData()}
-          disabled={loading}
-          className="quotes-refresh-btn"
-          aria-label="تحديث بيانات عروض الأسعار"
-        >
-          <RefreshCw size={14} className={loading ? 'spin' : ''} />
-          <span>{loading ? 'جاري التحميل...' : 'تحديث البيانات'}</span>
-        </button>
+        <div className="flex gap-2 items-center flex-wrap">
+          <button
+            type="button"
+            onClick={() => void loadInitialData()}
+            disabled={loading}
+            className="quotes-refresh-btn"
+            aria-label="تحديث بيانات عروض الأسعار"
+          >
+            <RefreshCw size={14} className={loading ? 'spin' : ''} />
+            <span>{loading ? 'جاري التحميل...' : 'تحديث البيانات'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreateRequestModalOpen(true)}
+            className="primary-btn inline-flex items-center gap-1.5"
+            style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+          >
+            <Plus size={16} />
+            <span>إنشاء طلب شراء جديد</span>
+          </button>
+        </div>
       </div>
 
       {successMessage && (
@@ -457,8 +585,19 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
         </div>
       ) : !selectedRequestId ? (
         <div className="empty-state card-surface text-center p-8 border-dashed border-line">
-          <FileSpreadsheet size={40} className="opacity-35 mb-2" />
-          <h3>اختر طلب شراء لاستعراض ومقارنة عروض الأسعار</h3>
+          <FileSpreadsheet size={44} className="opacity-35 mb-3 text-primary mx-auto" />
+          <h3 className="text-base font-bold text-ink mb-1">اختر طلب شراء لاستعراض ومقارنة عروض الأسعار</h3>
+          <p className="text-xs text-muted mb-4 max-w-md mx-auto">
+            يمكنك اختيار طلب شراء سابق من القائمة المنسدلة أعلاه، أو البدء فوراً بإنشاء طلب شراء جديد وتحديد بنود التوريد المطلوبة.
+          </p>
+          <button
+            type="button"
+            className="primary-btn inline-flex items-center gap-1.5"
+            onClick={() => setIsCreateRequestModalOpen(true)}
+          >
+            <Plus size={16} />
+            <span>إنشاء طلب شراء جديد الآن</span>
+          </button>
         </div>
       ) : quotes.length === 0 ? (
         <div className="empty-state card-surface text-center p-8 border-dashed border-line">
@@ -827,6 +966,250 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'جارٍ الحفظ...' : 'تسجيل العرض'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: New Purchase Request */}
+      {isCreateRequestModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsCreateRequestModalOpen(false)}>
+          <div className="modal-dialog max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <div className="modal-title-icon">
+                  <ShoppingCart size={18} />
+                </div>
+                <div>
+                  <h3>إنشاء طلب شراء وتوريد جديد</h3>
+                  <span className="modal-subtitle">إدراج بيانات الاحتياج، البنود والمواصفات، والاعتمادات المالية</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setIsCreateRequestModalOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePurchaseRequest} className="modal-body p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {createReqError && (
+                <div className="inline-message error text-xs">
+                  <AlertTriangle size={15} />
+                  <span>{createReqError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  القسم / الكلية الطالبة *
+                  <select
+                    value={reqDept}
+                    onChange={(e) => setReqDept(e.target.value)}
+                    className="p-2 border rounded bg-background text-sm"
+                  >
+                    <option value="المخزن الرئيسي (قسم الوارد)">المخزن الرئيسي (قسم الوارد)</option>
+                    <option value="كلية الهندسة">كلية الهندسة</option>
+                    <option value="كلية الطب البشري">كلية الطب البشري</option>
+                    <option value="كلية الصيدلة">كلية الصيدلة</option>
+                    <option value="كلية طب الأسنان">كلية طب الأسنان</option>
+                    <option value="كلية الحاسبات والذكاء الاصطناعي">كلية الحاسبات والذكاء الاصطناعي</option>
+                    <option value="كلية العلوم">كلية العلوم</option>
+                    <option value="كلية التمريض">كلية التمريض</option>
+                    <option value="إدارة الشؤون الهندسية والصيانة">إدارة الشؤون الهندسية والصيانة</option>
+                    <option value="إدارة تقنية المعلومات والشبكات">إدارة تقنية المعلومات والشبكات</option>
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  نوع الشراء / آلية التعاقد *
+                  <select
+                    value={reqPurchaseType}
+                    onChange={(e) => setReqPurchaseType(e.target.value as PurchaseType)}
+                    className="p-2 border rounded bg-background text-sm"
+                  >
+                    <option value="practice">ممارسة محدودة (عروض أسعار ومقارنة)</option>
+                    <option value="direct">أمر شراء مباشر (احتياج فوري)</option>
+                    <option value="tender">مناقصة عامة رسمية</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  بند الموازنة والتمويل
+                  <input
+                    type="text"
+                    value={reqBudgetLine}
+                    onChange={(e) => setReqBudgetLine(e.target.value)}
+                    placeholder="مثال: موازنة توريدات المعامل 2026"
+                    className="p-2 border rounded bg-background text-sm"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  درجة الأولوية *
+                  <select
+                    value={reqPriority}
+                    onChange={(e) => setReqPriority(e.target.value as PurchasePriority)}
+                    className="p-2 border rounded bg-background text-sm"
+                  >
+                    <option value="normal">عادي (توريد اعتيادي مجدول)</option>
+                    <option value="urgent">عاجل جداً (احتياج طارئ)</option>
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  تاريخ الحاجة المطلوب
+                  <input
+                    type="date"
+                    value={reqNeededBy}
+                    onChange={(e) => setReqNeededBy(e.target.value)}
+                    className="p-2 border rounded bg-background text-sm"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  اسم المسؤول مقدم الطلب
+                  <input
+                    type="text"
+                    value={reqRequestedBy}
+                    onChange={(e) => setReqRequestedBy(e.target.value)}
+                    className="p-2 border rounded bg-background text-sm"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  مبررات وأسباب الشراء *
+                  <input
+                    type="text"
+                    required
+                    value={reqJustification}
+                    onChange={(e) => setReqJustification(e.target.value)}
+                    placeholder="مثال: حاجة المعامل للأجهزة لبدء الفصل الدراسي الجديد"
+                    className="p-2 border rounded bg-background text-sm"
+                  />
+                </label>
+              </div>
+
+              {/* Dynamic Items Table */}
+              <div className="border rounded-lg p-3 bg-muted/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink">قائمة الأصناف والبنود المطلوبة</span>
+                  <button
+                    type="button"
+                    onClick={handleAddReqItem}
+                    className="secondary-btn text-xs py-1 px-2.5 inline-flex items-center gap-1"
+                  >
+                    <Plus size={13} /> إضافة صنف آخر
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {reqItems.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-background p-2 rounded border text-xs">
+                      <div className="col-span-12 sm:col-span-5">
+                        <input
+                          type="text"
+                          required
+                          placeholder="اسم الصنف والمواصفات *"
+                          value={item.item_name}
+                          onChange={(e) => handleReqItemChange(idx, 'item_name', e.target.value)}
+                          className="w-full p-1.5 border rounded text-xs"
+                        />
+                      </div>
+                      <div className="col-span-4 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          placeholder="الكمية"
+                          value={item.quantity}
+                          onChange={(e) => handleReqItemChange(idx, 'quantity', e.target.value ? Number(e.target.value) : '')}
+                          className="w-full p-1.5 border rounded text-xs text-center"
+                        />
+                      </div>
+                      <div className="col-span-4 sm:col-span-2">
+                        <select
+                          value={item.unit}
+                          onChange={(e) => handleReqItemChange(idx, 'unit', e.target.value)}
+                          className="w-full p-1.5 border rounded text-xs"
+                        >
+                          <option value="قطعة">قطعة</option>
+                          <option value="جهاز">جهاز</option>
+                          <option value="كرتونة">كرتونة</option>
+                          <option value="باكتة">باكتة</option>
+                          <option value="متر">متر</option>
+                          <option value="طقم">طقم</option>
+                        </select>
+                      </div>
+                      <div className="col-span-3 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="السعر التقديري"
+                          value={item.estimated_price || ''}
+                          onChange={(e) => handleReqItemChange(idx, 'estimated_price', e.target.value ? Number(e.target.value) : 0)}
+                          className="w-full p-1.5 border rounded text-xs text-center"
+                        />
+                      </div>
+                      <div className="col-span-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReqItem(idx)}
+                          disabled={reqItems.length <= 1}
+                          className="text-destructive p-1 hover:bg-destructive/10 rounded disabled:opacity-30"
+                          title="حذف البند"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center pt-2 border-t text-xs">
+                  <span className="text-muted">إجمالي التكلفة التقديرية للطلب:</span>
+                  <strong className="text-sm font-bold text-emerald-600">
+                    {totalReqEstimatedValue.toLocaleString('ar-EG')} ج.م
+                  </strong>
+                </div>
+              </div>
+
+              <div className="p-3 bg-muted/20 rounded flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={reqSubmitImmediately}
+                    onChange={(e) => setReqSubmitImmediately(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span>اعتماد الطلب فوراً وتحويله لمرحلة جمع عروض الأسعار</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setIsCreateRequestModalOpen(false)}
+                  disabled={createReqSubmitting}
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  disabled={createReqSubmitting}
+                >
+                  {createReqSubmitting ? 'جارٍ الإنشاء...' : 'حفظ واعتماد طلب الشراء'}
                 </button>
               </div>
             </form>

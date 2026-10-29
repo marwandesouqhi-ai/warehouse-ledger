@@ -14,12 +14,15 @@ import {
   RotateCw,
   CheckCircle2,
   FileCheck,
+  Trash2,
 } from 'lucide-react'
 import {
   fetchAssetMovements,
   createAssetMovement,
+  deleteAssetMovement,
   type AssetMovement,
 } from '../lib/assetMovementRepository'
+import { purgeDatabaseDemoData } from '../lib/purgeDemoData'
 import { logAuditEvent } from '../lib/auditLogger'
 
 type AssetHistoryPageProps = {
@@ -130,6 +133,39 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
     }
   }
 
+  const handleDeleteMovement = async (id: string, code: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف حركة الأصل (${code})؟`)) {
+      return
+    }
+    await deleteAssetMovement(id)
+    setMovements((prev) => prev.filter((m) => m.id !== id))
+    setSuccessMessage(`تم حذف حركة الأصل (${code}) بنجاح.`)
+    void logAuditEvent({
+      action: `حذف حركة الأصل: ${code}`,
+      entity_type: 'asset_history',
+      user: session?.user,
+    })
+  }
+
+  const handlePurgeDemo = async () => {
+    if (!window.confirm('هل أنت متأكد من مسح جميع البيانات التجريبية والمحاكاة من النظام وقاعدة البيانات؟')) {
+      return
+    }
+    setIsLoading(true)
+    try {
+      const res = await purgeDatabaseDemoData()
+      await loadData()
+      setSuccessMessage(res.message || 'تم تنظيف ومسح البيانات التجريبية بنجاح.')
+      void logAuditEvent({
+        action: 'مسح وتنظيف البيانات التجريبية من النظام',
+        entity_type: 'asset_history',
+        user: session?.user,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <section className="page-stack">
       {/* Header */}
@@ -143,6 +179,15 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
           <p>متابعة حركة كل أصل ومعدة: من استلام التوريد، تسليم الكليات، الصيانة، وحتى الإعدام الجردي</p>
         </div>
         <div className="headline-actions mr-auto flex gap-2">
+          <button
+            type="button"
+            className="secondary-btn text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+            onClick={handlePurgeDemo}
+            disabled={isLoading}
+            title="مسح أي بيانات تجريبية سابقة من قاعدة البيانات والكاش"
+          >
+            <Trash2 size={16} /> مسح البيانات التجريبية
+          </button>
           <button type="button" className="secondary-btn" onClick={loadData} disabled={isLoading}>
             <RotateCw size={16} className={isLoading ? 'animate-spin' : ''} /> تحديث
           </button>
@@ -221,14 +266,20 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                 <th>الكمية</th>
                 <th>الحالة والملاحظات</th>
                 <th>المسؤول / التاريخ</th>
+                <th className="w-16 text-center">إجراءات</th>
               </tr>
             </thead>
             <tbody>
               {filteredMovements.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="table-empty text-center py-8">
-                    <History size={32} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-muted">لا توجد حركات أصول مطابقة للبحث الحالي.</p>
+                  <td colSpan={9} className="table-empty text-center py-12">
+                    <History size={40} className="mx-auto mb-3 opacity-30 text-teal-600" />
+                    <p className="text-base font-semibold text-foreground">لا توجد حركات أصول مسجلة حالياً</p>
+                    <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+                      {searchTerm || typeFilter !== 'all'
+                        ? 'لا توجد نتائج تطابق معايير البحث والتصفية المحددة.'
+                        : 'تم تنظيف النظام بالكامل. يمكنك توثيق حركة جديدة للأجهزة والمعدات بالنقر على زر «تسجيل حركة أصل جديدة» أعلاه.'}
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -267,6 +318,16 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                         <time className="text-xs text-muted block">
                           {new Date(m.performed_at).toLocaleDateString('ar-EG')}
                         </time>
+                      </td>
+                      <td className="text-center">
+                        <button
+                          type="button"
+                          className="icon-action-btn hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded transition-colors"
+                          onClick={() => handleDeleteMovement(m.id, m.asset_code)}
+                          title="حذف حركة الأصل"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   )
@@ -445,4 +506,3 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
     </section>
   )
 }
-

@@ -34,6 +34,9 @@ function saveLocalAuditLog(entry: AuditLogEntry) {
         const current = getLocalAuditLogs()
         const updated = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 150)
         localStorage.setItem(localAuditLogsKey, JSON.stringify(updated))
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('audit-logs-changed', { detail: entry }))
+        }
     } catch {
         // ignore
     }

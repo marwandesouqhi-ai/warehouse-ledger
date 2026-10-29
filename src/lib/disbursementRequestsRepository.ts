@@ -25,7 +25,7 @@ export type DisbursementRequest = {
 
 const LOCAL_STORAGE_KEY = 'disbursement_requests_local'
 
-function getLocalRequests(): DisbursementRequest[] {
+export function getLocalRequests(): DisbursementRequest[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
     return raw ? JSON.parse(raw) : []
@@ -34,7 +34,7 @@ function getLocalRequests(): DisbursementRequest[] {
   }
 }
 
-function saveLocalRequests(items: DisbursementRequest[]) {
+export function saveLocalRequests(items: DisbursementRequest[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items))
   } catch {
