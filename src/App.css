@@ -5076,86 +5076,122 @@
     background: #ffffff !important;
   }
 
-  /* 2. Hide all screen dashboard components */
+  /* 2. Unconditionally hide all non-printable chrome and screen navigation */
   .sidebar,
   .topbar,
   .workspace-meta,
   .app-shell > aside,
   .no-print,
+  .sync-banner,
+  .inline-message,
   .reports-header-card,
   .reports-category-grid,
   .reports-wh-section,
   .reports-tech-grid,
-  .reports-module > :not(.official-custody-print-document),
-  .custody-module > :not(.official-custody-print-document),
-  .content-area > :not(.official-custody-print-document):not(.modal-backdrop),
-  .modal-backdrop:not(:has(#printable-official-permit)),
   .toast-container,
   .pwa-sidebar-card,
   .pwa-topbar-btn,
   .pwa-bottom-bar,
   .mobile-nav-toggle,
+  .chatbot-floating-widget,
+  .modal-header,
+  .modal-footer,
+  .modal-close-btn,
+  .permit-left-col,
+  .permit-preview-topbar,
+  .table-toolbar,
+  .page-header-actions,
+  .search-filter-bar,
+  .pagination-wrap,
   button,
   .action-btn {
     display: none !important;
   }
 
-  /* When printing the warehouse sheet from ReportsPage or CustodyPage */
-  body.printing-warehouse-sheet .content-area > :not(.official-custody-print-document),
-  body.printing-warehouse-sheet .reports-module > :not(.official-custody-print-document),
-  body.printing-warehouse-sheet .reports-header-card,
-  body.printing-warehouse-sheet .reports-category-grid,
-  body.printing-warehouse-sheet .reports-wh-section,
-  body.printing-warehouse-sheet .reports-tech-grid,
-  body.printing-warehouse-sheet .modal-backdrop {
+  /* 3. When ANY Modal is Open: Isolate and print ONLY the modal document */
+  body:has(.modal-backdrop) .content-area > :not(.modal-backdrop),
+  body:has(.modal-backdrop) .reports-module > :not(.modal-backdrop),
+  body:has(.modal-backdrop) .custody-module > :not(.modal-backdrop),
+  body:has(.modal-backdrop) .official-custody-print-document,
+  body.printing-official-permit .official-custody-print-document {
     display: none !important;
   }
 
-  body.printing-warehouse-sheet .official-custody-print-document {
-    display: block !important;
-  }
-
-  /* When printing the official disbursement/addition permit modal */
-  body:has(#printable-official-permit) .official-custody-print-document,
-  body.printing-official-permit .official-custody-print-document,
-  body:has(#printable-official-permit) .content-area,
-  body.printing-official-permit .content-area {
-    display: none !important;
-  }
-
-  .modal-backdrop:has(#printable-official-permit),
-  body.printing-official-permit .modal-backdrop {
+  .modal-backdrop {
     display: block !important;
     position: static !important;
     background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    width: 100% !important;
-  }
-
-  .modal-backdrop:has(#printable-official-permit) .official-permit-dialog,
-  body.printing-official-permit .official-permit-dialog {
-    display: block !important;
-    position: static !important;
-    max-width: 100% !important;
     width: 100% !important;
     height: auto !important;
     max-height: none !important;
     box-shadow: none !important;
     border: none !important;
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0 !important;
     overflow: visible !important;
+    z-index: auto !important;
   }
 
-  .modal-backdrop:has(#printable-official-permit) .modal-header,
-  .modal-backdrop:has(#printable-official-permit) .no-print,
-  .modal-backdrop:has(#printable-official-permit) button,
-  body.printing-official-permit .modal-header,
-  body.printing-official-permit .no-print,
-  body.printing-official-permit button {
-    display: none !important;
+  .modal-dialog {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+
+  .modal-body-scroll,
+  .permit-modal-body-scroll {
+    display: block !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Modal Form Controls: Clean Print Appearance */
+  .modal-dialog input,
+  .modal-dialog select,
+  .modal-dialog textarea {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: inherit !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    outline: none !important;
+  }
+
+  /* Case A: Official Disbursement/Addition Permit (#printable-official-permit) */
+  .official-permit-body-grid {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .permit-right-col-preview {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   #printable-official-permit {
@@ -5164,7 +5200,11 @@
     box-shadow: none !important;
     border: 1.5px solid #000000 !important;
     margin: 0 !important;
-    page-break-inside: avoid;
+    padding: 16px !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
     position: static !important;
   }
 
@@ -5175,6 +5215,48 @@
 
   #printable-official-permit > .print-watermark {
     z-index: 0 !important;
+  }
+
+  /* Case B: Official Inventory Report Modal (.official-inventory-modal-dialog) */
+  .official-inventory-modal-dialog .card-surface {
+    box-shadow: none !important;
+    border: 1.5px solid #000000 !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 14px !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Case C: Technical Inspection Modal (.technical-inspection-modal-dialog) */
+  .technical-inspection-modal-dialog .card-surface {
+    box-shadow: none !important;
+    border: 1px solid #0f172a !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Case D: Settlement Modal (.settlement-modal-dialog) */
+  .settlement-modal-dialog .card-surface {
+    box-shadow: none !important;
+    border: 1px solid #0f172a !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* 4. When NO Modal is Open: Print the official custody inventory sheet only */
+  body:not(:has(.modal-backdrop)) .content-area > :not(.official-custody-print-document),
+  body:not(:has(.modal-backdrop)) .reports-module > :not(.official-custody-print-document),
+  body:not(:has(.modal-backdrop)) .custody-module > :not(.official-custody-print-document) {
+    display: none !important;
+  }
+
+  body:not(:has(.modal-backdrop)) .official-custody-print-document {
+    display: block !important;
   }
 
   /* 3. Official Print Document Container: Fills 100% of A4 printable width */
