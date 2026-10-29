@@ -321,18 +321,6 @@ export default function PurchasesPage({
           </h2>
           <span>سجل فواتير وأذون التوريد المعتمدة لمخازن الجامعة، ومتابعة الكميات والمبالغ الإجمالية</span>
         </div>
-        <div className="headline-actions">
-          {userCanAdd && (
-            <button
-              type="button"
-              className="primary-btn inline-flex items-center gap-1"
-              onClick={() => setActiveTab(activeTab === 'add' ? 'list' : 'add')}
-            >
-              {activeTab === 'add' ? <ArrowRight size={17} /> : <Plus size={17} />}
-              <span>{activeTab === 'add' ? 'الرجوع لسجل الفواتير' : 'تسجيل فاتورة شراء جديدة'}</span>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* KPI Cards */}

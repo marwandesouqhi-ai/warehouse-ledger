@@ -22,7 +22,6 @@ import {
     Sun,
     Trash2,
     Upload,
-    UsersRound,
     Warehouse,
 } from 'lucide-react'
 
@@ -1048,30 +1047,6 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                 </div>
                             </div>
                         )}
-                    </section>
-                )}
-
-                {/* Users & Permissions Shortcut Card (System Admin only) */}
-                {isSystemAdmin && (
-                    <section className="card-surface settings-section border-dashed border-line">
-                        <div className="flex items-center justify-between flex-wrap gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="feature-icon-box">
-                                    <UsersRound size={22} />
-                                </div>
-                                <div>
-                                    <h4 className="m-0 mb-1 text-base text-ink">المستخدمون والصلاحيات</h4>
-                                    <span className="font-sm text-muted">
-                                        تم فصل إدارة الحسابات، الصلاحيات، الدعوات وتغيير كلمات المرور في صفحة مستقلة.
-                                    </span>
-                                </div>
-                            </div>
-
-                            <Link to="/users" className="primary-btn inline-flex items-center gap-2">
-                                الانتقال لصفحة المستخدمين
-                                <ArrowLeft size={16} />
-                            </Link>
-                        </div>
                     </section>
                 )}
             </form>
