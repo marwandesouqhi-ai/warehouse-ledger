@@ -8825,7 +8825,6 @@
     background: var(--surface);
     box-shadow: var(--shadow-sm);
     overflow: auto;
-    scrollbar-color: var(--line-strong) transparent;
   }
 
   .table-card table,
@@ -9096,12 +9095,6 @@
       gap: var(--space-2);
       overflow-x: auto;
       overscroll-behavior-inline: contain;
-    }
-
-    @supports (scrollbar-width: thin) {
-      .nav {
-        scrollbar-width: thin;
-      }
     }
 
     .nav-section {
@@ -11149,7 +11142,6 @@ a {
   gap: 8px;
   overflow-x: auto;
   white-space: nowrap;
-  scrollbar-width: none;
 }
 
 .chatbot-prompts-bar::-webkit-scrollbar {
