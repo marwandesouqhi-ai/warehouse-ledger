@@ -12,7 +12,18 @@
 import { getLiveWarehouseContext, queryLiveItemAvailability } from './chatbotLiveContext'
 
 const GEMINI_LOCAL_STORAGE_KEY = 'znu_gemini_api_key_secure'
-const DEFAULT_MODEL = 'gemini-3-flash-preview'
+/**
+ * قائمة النماذج المعتمدة مع إمكانية التبديل التلقائي الذكي:
+ * يتم تجربة النماذج الأخف والأسرع ذات الحصص اليومية العالية أولاً،
+ * وفي حال وصول أي نموذج لحد الحصة اليومية المجانية (429 Quota Exceeded) أو انشغال الخادم (503)،
+ * ينتقل النظام فوراً وبشكل شفاف للنموذج التالي لضمان استمرارية الخدمة.
+ */
+export const CANDIDATE_MODELS = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-3-flash-preview',
+]
 
 let cachedSystemPrompt: string | null = null
 let lastPromptCacheTime = 0
@@ -177,26 +188,30 @@ export async function testGeminiConnection(keyToTest?: string): Promise<{ succes
   }
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: 'قل كلمة "مرحباً" فقط للتأكد من الاتصال.' }],
-          },
-        ],
-      }),
-    })
+    let lastErrorMsg = ''
+    for (const model of CANDIDATE_MODELS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: 'قل كلمة "مرحباً" فقط للتأكد من الاتصال.' }],
+            },
+          ],
+        }),
+      })
 
-    if (!res.ok) {
+      if (res.ok) {
+        return { success: true, message: `تم التحقق من صحة مفتاح Gemini API بنجاح (${model})! 🟢` }
+      }
       const errorData = await res.json().catch(() => ({}))
-      const errMsg = errorData?.error?.message || `فشل الاتصال برمز (${res.status})`
-      return { success: false, message: `خطأ من سيرفر Gemini: ${errMsg}` }
+      lastErrorMsg = errorData?.error?.message || `فشل الاتصال برمز (${res.status})`
     }
+    return { success: false, message: `خطأ من سيرفر Gemini: ${lastErrorMsg}` }
 
     return { success: true, message: 'تم التحقق من صحة مفتاح Gemini API بنجاح! 🟢' }
   } catch (err: unknown) {
@@ -248,50 +263,64 @@ export async function askGeminiWithContext(
     parts: [{ text: currentPromptText }],
   })
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
+  let candidateText: string | null = null
+  let lastError: Error | null = null
 
-  // إعداد مهلة زمنية كافية (12 ثانية) لاستيعاب معالجة وتوليد الرد بالكامل دون قطع الاتصال مبكراً
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 12000)
+  // تجربة النماذج بالترتيب مع التبديل التلقائي الذكي عند نفاد الحصة (429) أو بطء الاستجابة
+  for (const model of CANDIDATE_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
 
-  let response: Response
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        contents: formattedContents,
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 800,
-          topP: 0.95,
-        },
-      }),
-    })
-  } catch (fetchErr) {
-    clearTimeout(timeoutId)
-    throw fetchErr
-  }
-  clearTimeout(timeoutId)
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemPrompt }],
+          },
+          contents: formattedContents,
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 800,
+            topP: 0.95,
+          },
+        }),
+      })
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}))
-    const errorMsg = errorBody?.error?.message || `HTTP ${response.status}`
-    throw new Error(`GEMINI_API_ERROR: ${errorMsg}`)
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        const errorMsg = errorBody?.error?.message || `HTTP ${response.status}`
+        console.warn(`Gemini model ${model} failed (${response.status}): ${errorMsg}. Trying next candidate...`)
+        lastError = new Error(`GEMINI_API_ERROR (${model}): ${errorMsg}`)
+        continue
+      }
+
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (text && typeof text === 'string' && text.trim().length > 0) {
+        candidateText = text.trim()
+        break
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId)
+      const isAbort = (err as Error)?.name === 'AbortError'
+      console.warn(`Gemini model ${model} failed (${isAbort ? 'Timeout' : 'Network/Error'}). Trying next candidate...`, err)
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
   }
 
-  const data = await response.json()
-  const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text
-
-  if (!candidate || typeof candidate !== 'string') {
-    throw new Error('EMPTY_GEMINI_RESPONSE')
+  if (!candidateText) {
+    throw lastError || new Error('EMPTY_GEMINI_RESPONSE')
   }
+
+  const candidate = candidateText
 
   // استخراج رابط توجيه إذا وجد في الرد
   let actionUrl: string | undefined
