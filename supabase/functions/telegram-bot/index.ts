@@ -837,14 +837,55 @@ serve(async (req: Request) => {
       return new Response("ok", { headers: corsHeaders })
     }
 
+    // ─── DYNAMIC BOT SETTINGS FROM DATABASE ─────────────────────────────────
+    let botSettings = null
+    try {
+      const { data } = await supabaseAdmin
+        .from("telegram_bot_settings")
+        .select("*")
+        .eq("id", "default")
+        .maybeSingle()
+      botSettings = data
+    } catch {
+      // fallback
+    }
+
+    // فحص وضع الصيانة
+    if (botSettings && botSettings.is_enabled === false) {
+      const notice = botSettings.bot_status_notice || "عذراً، البوت في فترة تحديث وصيانة مجدولة حالياً. يُرجى مراجعة إدارة مخازن جامعة الزقازيق الأهلية."
+      await sendTelegramMessage(botToken, chatId, notice)
+      return new Response("ok", { headers: corsHeaders })
+    }
+
+    const dynamicWelcomeMessage = botSettings?.welcome_message || WELCOME_MESSAGE
+    const dynamicHelpMessage = botSettings?.help_message || `📌 أوامر بوت مخازن وتوريدات جامعة الزقازيق الأهلية:
+
+/start - بدء تقديم طلب تسجيل حساب جديد
+/status - متابعة حالة طلب التسجيل الخاص بك
+/help - عرض رسالة المساعدة وقنوات الدعم الفني`
+
+    // ─── COMMAND: /help ──────────────────────────────────────────────────────
+    if (text === "/help") {
+      let helpText = dynamicHelpMessage
+      if (botSettings?.support_contact_text) {
+        helpText += `\n\n${botSettings.support_contact_text}`
+      }
+      await sendTelegramMessage(botToken, chatId, helpText)
+      return new Response("ok", { headers: corsHeaders })
+    }
+
     // ─── COMMAND: /start ─────────────────────────────────────────────────────
     if (text === "/start") {
+      if (botSettings && botSettings.allow_registration === false) {
+        await sendTelegramMessage(botToken, chatId, `${dynamicWelcomeMessage}\n\n⚠️ تنويه: باب التسجيل الإلكتروني مغلق مؤقتاً بناءً على تعليمات الإدارة.`)
+        return new Response("ok", { headers: corsHeaders })
+      }
       const keyboard = {
         inline_keyboard: [
           [{ text: "بدء التسجيل", callback_data: "register_start" }],
         ],
       }
-      await sendTelegramMessage(botToken, chatId, WELCOME_MESSAGE, keyboard)
+      await sendTelegramMessage(botToken, chatId, dynamicWelcomeMessage, keyboard)
       return new Response("ok", { headers: corsHeaders })
     }
 
@@ -1079,9 +1120,10 @@ serve(async (req: Request) => {
         p_telegram_user_id: tgUserId,
       })
 
-      // Optional administrator Telegram notification if TELEGRAM_ADMIN_CHAT_ID is configured
-      const adminChatId = Deno.env.get("TELEGRAM_ADMIN_CHAT_ID")
-      if (adminChatId) {
+      // Optional administrator Telegram notification if configured in DB or env
+      const adminChatId = botSettings?.admin_chat_id?.trim() || Deno.env.get("TELEGRAM_ADMIN_CHAT_ID")
+      const shouldNotifyAdmin = botSettings?.notify_admin_on_registration !== false
+      if (adminChatId && shouldNotifyAdmin) {
         const { data: requestDetails } = await supabaseAdmin
           .from("registration_requests")
           .select("id, full_name, requested_department, requested_role")

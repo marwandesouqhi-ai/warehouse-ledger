@@ -104,6 +104,7 @@ import ContractsPage from './pages/ContractsPage'
 import AssetHistoryPage from './pages/AssetHistoryPage'
 import FinancialReportsPage from './pages/FinancialReportsPage'
 import BudgetPage from './pages/BudgetPage'
+import TelegramBotPage from './pages/TelegramBotPage'
 import WarehouseChatBot from './components/WarehouseChatBot'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
@@ -490,6 +491,9 @@ function App() {
     }
     if (canViewPage(session, 'users')) {
       adminItems.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
+    }
+    if (canViewPage(session, 'telegram_bot')) {
+      adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: 'تفاعلي', icon: Send })
     }
     if (canViewPage(session, 'settings')) {
       adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
@@ -2274,6 +2278,20 @@ function App() {
                   title="المستخدمون والصلاحيات"
                   subtitle="إدارة الحسابات والأمان"
                   message="إدارة الحسابات والصلاحيات وكلمات المرور مخصصة حصرياً لمدير النظام (System Admin) فقط."
+                />
+              )
+            }
+          />
+          <Route
+            path="/telegram-bot"
+            element={
+              canAccessRoute(session, '/telegram-bot') ? (
+                <TelegramBotPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="إدارة بوت تيليجرام"
+                  subtitle="صلاحية مقيدة"
+                  message="إدارة وتخصيص بوت تيليجرام مقتصرة حصرياً على مديري النظام والمشرفين المعتمدين."
                 />
               )
             }

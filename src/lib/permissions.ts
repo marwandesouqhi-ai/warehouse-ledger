@@ -105,6 +105,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/audit':                ['system_admin'],
   '/users':                ['system_admin'],
   '/settings':             ['system_admin'],
+  '/telegram-bot':         ['system_admin', 'admin'],
   '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
 }
 
@@ -278,7 +279,7 @@ export function canViewPage(
   let session = sessionOrPage
   let page = pageOrSession as string
 
-  const knownPages = ['purchases', 'suppliers', 'quotes', 'contracts', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support', 'requests', 'notifications', 'analytics', 'asset_history', 'financial_reports', 'budget']
+  const knownPages = ['purchases', 'suppliers', 'quotes', 'contracts', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support', 'requests', 'notifications', 'analytics', 'asset_history', 'financial_reports', 'budget', 'telegram_bot']
   if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
     page = sessionOrPage
     session = pageOrSession
@@ -307,6 +308,8 @@ export function canViewPage(
       return role === 'system_admin'
     case 'settings':
       return role === 'system_admin'
+    case 'telegram_bot':
+      return ['system_admin', 'admin'].includes(role)
     case 'contracts':
       return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
     case 'requests':
