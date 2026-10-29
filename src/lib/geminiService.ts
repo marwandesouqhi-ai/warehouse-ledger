@@ -250,9 +250,9 @@ export async function askGeminiWithContext(
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
-  // إعداد مهلة زمنية صارمة (3.5 ثانية) لضمان عدم تعليق الشات بوت أبداً
+  // إعداد مهلة زمنية كافية (12 ثانية) لاستيعاب معالجة وتوليد الرد بالكامل دون قطع الاتصال مبكراً
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 3500)
+  const timeoutId = setTimeout(() => controller.abort(), 12000)
 
   let response: Response
   try {
