@@ -138,17 +138,17 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
         <div className="quality-summary error">
           <AlertCircle size={18} />
           <span>أخطاء</span>
-          <strong>{counts.error.toLocaleString('ar-EG')}</strong>
+          <strong>{counts.error === 0 ? '0' : counts.error.toLocaleString('ar-EG')}</strong>
         </div>
         <div className="quality-summary warn">
           <ShieldAlert size={18} />
           <span>تحذيرات</span>
-          <strong>{counts.warn.toLocaleString('ar-EG')}</strong>
+          <strong>{counts.warn === 0 ? '0' : counts.warn.toLocaleString('ar-EG')}</strong>
         </div>
         <div className="quality-summary info">
           <Info size={18} />
           <span>ملاحظات</span>
-          <strong>{counts.info.toLocaleString('ar-EG')}</strong>
+          <strong>{counts.info === 0 ? '0' : counts.info.toLocaleString('ar-EG')}</strong>
         </div>
       </div>
 

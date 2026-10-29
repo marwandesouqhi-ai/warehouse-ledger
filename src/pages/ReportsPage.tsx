@@ -211,22 +211,22 @@ export default function ReportsPage({
     <section className="reports-module content-area">
       {/* Scope Switcher for Full Admins */}
       {scope === 'full' && (
-        <div className="card-surface p-3 mb-4 no-print flex gap-3 flex-wrap items-center rounded-xl border border-divider">
-          <div className="flex items-center gap-2">
+        <div className="reports-scope-switcher no-print">
+          <div className="reports-scope-switcher-info">
             <Sparkles size={18} className="text-accent" />
-            <strong className="font-sm text-ink">القسم المستهدف للتقارير الرسمية:</strong>
+            <span>القسم المستهدف للتقارير الرسمية:</span>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="reports-scope-switcher-tabs">
             <button
               type="button"
-              className={`secondary-btn ${reportsDepartment === 'warehouse' ? 'active' : ''}`}
+              className={`reports-scope-tab-btn ${reportsDepartment === 'warehouse' ? 'active' : ''}`}
               onClick={() => setReportsDepartment('warehouse')}
             >
               <Building2 size={16} /> تقارير وسجلات المخازن والعهدة (8 كليات)
             </button>
             <button
               type="button"
-              className={`secondary-btn ${reportsDepartment === 'procurement' ? 'active' : ''}`}
+              className={`reports-scope-tab-btn ${reportsDepartment === 'procurement' ? 'active' : ''}`}
               onClick={() => setReportsDepartment('procurement')}
             >
               <ShoppingCart size={16} /> تقارير ومستندات إدارة المشتريات والتوريدات
@@ -382,7 +382,7 @@ export default function ReportsPage({
           </div>
 
           {/* 3. Detailed Procurement Invoices Table */}
-          <div className="card-surface reports-wh-section no-print">
+          <div className="card-surface table-card reports-purchases-table-card no-print">
             <div className="reports-wh-head">
               <div>
                 <h3 className="reports-wh-title">
@@ -394,7 +394,7 @@ export default function ReportsPage({
               </div>
 
               <div className="reports-wh-search-wrap">
-                <div className="toolbar-search m-0">
+                <div className="toolbar-search">
                   <Search size={15} />
                   <input
                     type="search"
@@ -406,19 +406,19 @@ export default function ReportsPage({
               </div>
             </div>
 
-            <div className="table-scroll-container">
-              <table>
+            <div className="movement-table-wrap purchases-table-wrap">
+              <table className="purchases-reports-table">
                 <thead>
                   <tr>
-                    <th>م</th>
-                    <th>تاريخ التوريد</th>
-                    <th>رقم الفاتورة</th>
-                    <th>المورد / الشركة</th>
-                    <th>الصنف المورد</th>
-                    <th>الكمية الواردة</th>
-                    <th>سعر الوحدة</th>
-                    <th>القيمة الإجمالية</th>
-                    <th>ملاحظات</th>
+                    <th style={{ width: '56px', textAlign: 'center' }}>م</th>
+                    <th style={{ width: '130px', textAlign: 'center' }}>تاريخ التوريد</th>
+                    <th style={{ width: '180px', textAlign: 'center' }}>رقم الفاتورة</th>
+                    <th style={{ width: '200px' }}>المورد / الشركة</th>
+                    <th style={{ minWidth: '260px' }}>الصنف المورد</th>
+                    <th style={{ width: '110px', textAlign: 'center' }}>الكمية الواردة</th>
+                    <th style={{ width: '130px', textAlign: 'left' }}>سعر الوحدة</th>
+                    <th style={{ width: '150px', textAlign: 'left' }}>القيمة الإجمالية</th>
+                    <th style={{ width: '160px' }}>ملاحظات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -435,15 +435,41 @@ export default function ReportsPage({
                       const total = qty * price
                       return (
                         <tr key={m.id || idx}>
-                          <td>{idx + 1}</td>
-                          <td><code>{m.date || '—'}</code></td>
-                          <td><strong className="text-accent">{m.inv || '—'}</strong></td>
-                          <td>{m.from || 'مورد عام'}</td>
-                          <td className="font-semibold">{m.item}</td>
-                          <td><span className="qty-in-tag">+{qty}</span></td>
-                          <td>{formatCurrency(price, currency)}</td>
-                          <td className="table-value-cell font-bold">{formatCurrency(total, currency)}</td>
-                          <td className="text-muted font-sm">{m.notes || '—'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="purchases-serial-pill font-mono">{idx + 1}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="purchases-date-badge font-mono" dir="ltr">{m.date || '—'}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="purchases-inv-badge font-mono" dir="ltr">{m.inv || '—'}</span>
+                          </td>
+                          <td>
+                            <strong className="purchases-supplier-col">{m.from || 'مورد عام'}</strong>
+                          </td>
+                          <td>
+                            <div className="purchases-item-name font-semibold text-ink" title={m.item}>
+                              {m.item}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="qty-in-tag" dir="ltr">+{qty.toLocaleString('ar-EG')}</span>
+                          </td>
+                          <td style={{ textAlign: 'left' }}>
+                            <span className="font-mono text-ink font-semibold" dir="ltr">
+                              {formatCurrency(price, currency)}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'left' }}>
+                            <strong className="table-value-cell font-mono text-accent" dir="ltr">
+                              {formatCurrency(total, currency)}
+                            </strong>
+                          </td>
+                          <td>
+                            <span className="cell-sub" title={m.notes || ''}>
+                              {m.notes || '—'}
+                            </span>
+                          </td>
                         </tr>
                       )
                     })
@@ -453,23 +479,26 @@ export default function ReportsPage({
             </div>
 
             {/* Procurement Summary Strip */}
-            <div className="p-4 mt-3 bg-surface-subtle border border-divider rounded-lg flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-4 flex-wrap">
-                <div>
-                  <span className="text-xs text-muted block">إجمالي الإنفاق على المشتريات:</span>
-                  <strong className="text-lg text-ink font-bold">{formatCurrency(procurementStats.totalSpend, currency)}</strong>
+            <div className="procurement-summary-strip">
+              <div className="procurement-summary-metrics">
+                <div className="procurement-metric-box">
+                  <span className="procurement-metric-label">إجمالي الإنفاق على المشتريات:</span>
+                  <strong className="procurement-metric-val">{formatCurrency(procurementStats.totalSpend, currency)}</strong>
                 </div>
-                <div className="border-r border-divider pr-4">
-                  <span className="text-xs text-muted block">عدد فواتير الشراء:</span>
-                  <strong className="text-lg text-ink font-bold">{procurementStats.count} فاتورة</strong>
+                <div className="procurement-metric-divider" />
+                <div className="procurement-metric-box">
+                  <span className="procurement-metric-label">عدد فواتير الشراء:</span>
+                  <strong className="procurement-metric-val">{procurementStats.count} فاتورة</strong>
                 </div>
-                <div className="border-r border-divider pr-4">
-                  <span className="text-xs text-muted block">الموردون المعتمدون:</span>
-                  <strong className="text-lg text-ink font-bold">{procurementStats.suppliersCount} مورد</strong>
+                <div className="procurement-metric-divider" />
+                <div className="procurement-metric-box">
+                  <span className="procurement-metric-label">الموردون المعتمدون:</span>
+                  <strong className="procurement-metric-val">{procurementStats.suppliersCount} مورد</strong>
                 </div>
-                <div className="border-r border-divider pr-4">
-                  <span className="text-xs text-muted block">متوسط قيمة الفاتورة:</span>
-                  <strong className="text-lg text-accent font-bold">{formatCurrency(procurementStats.avgInvoice, currency)}</strong>
+                <div className="procurement-metric-divider" />
+                <div className="procurement-metric-box">
+                  <span className="procurement-metric-label">متوسط قيمة الفاتورة:</span>
+                  <strong className="procurement-metric-val accent">{formatCurrency(procurementStats.avgInvoice, currency)}</strong>
                 </div>
               </div>
 
@@ -664,7 +693,7 @@ export default function ReportsPage({
           </div>
 
           <div className="reports-wh-search-wrap">
-            <div className="toolbar-search m-0">
+            <div className="toolbar-search">
               <Search size={15} />
               <input
                 type="search"
