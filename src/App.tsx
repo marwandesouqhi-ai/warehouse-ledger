@@ -456,72 +456,121 @@ function App() {
       items: Array<{ to: string; label: string; mark: string; icon: typeof LayoutDashboard }>
     }> = []
 
-    const warehouseItems = [
-      { to: '/', label: 'الرئيسية (التحليلات)', mark: '', icon: LayoutDashboard },
-    ]
-    if (canViewPage(session, 'requests')) {
-      warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: '', icon: ClipboardList })
-    }
-    if (canViewPage(session, 'custody')) {
-      warehouseItems.push({ to: '/custody', label: 'عهدة المخازن', mark: '', icon: Building2 })
-    }
-    if (canViewPage(session, 'asset_history')) {
-      warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: '', icon: History })
-    }
-    if (canViewPage(session, 'reports')) {
-      warehouseItems.push({ to: '/reports', label: 'التقارير الرسمية', mark: '', icon: FileSpreadsheet })
-    }
-    if (canViewPage(session, 'imports')) {
-      warehouseItems.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
-    }
-    if (canViewPage(session, 'quality')) {
-      warehouseItems.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues}` : '', icon: ShieldAlert })
-    }
-    sections.push({ id: 'warehouse', title: 'إدارة المخزن والتشغيل', items: warehouseItems })
+    const scope = getDashboardScope(session)
 
-    const procurementItems = []
-    if (canViewPage(session, 'purchases')) {
-      procurementItems.push({ to: '/purchases', label: 'فواتير وتوريدات الشراء', mark: '', icon: ShoppingCart })
-      procurementItems.push({ to: '/purchases/suppliers', label: 'إدارة الموردين والشركات', mark: '', icon: Building2 })
-      procurementItems.push({ to: '/purchases/quotes', label: 'عروض الأسعار وأوامر الشراء', mark: '', icon: FileSpreadsheet })
-      procurementItems.push({ to: '/purchases/contracts', label: 'عقود الموردين', mark: '', icon: FileText })
-    }
-    if (procurementItems.length > 0) {
-      sections.push({ id: 'procurement', title: 'المشتريات والتوريدات', items: procurementItems })
-    }
+    if (scope === 'purchases_only') {
+      // ── قسم المشتريات مخصص لموظفي ومشرفي المشتريات فقط ──
+      const procurementItems = [
+        { to: '/', label: 'الرئيسية (لوحة المشتريات)', mark: '', icon: LayoutDashboard },
+        { to: '/purchases', label: 'فواتير وتوريدات الشراء', mark: '', icon: ShoppingCart },
+        { to: '/purchases/suppliers', label: 'إدارة الموردين والشركات', mark: '', icon: Building2 },
+        { to: '/purchases/quotes', label: 'عروض الأسعار وأوامر الشراء', mark: '', icon: FileSpreadsheet },
+        { to: '/purchases/contracts', label: 'عقود الموردين', mark: '', icon: FileText },
+        { to: '/reports', label: 'تقارير المشتريات والتوريد', mark: '', icon: FileSpreadsheet },
+        { to: '/imports', label: 'استيراد فواتير Excel', mark: '', icon: Upload },
+      ]
+      sections.push({ id: 'procurement', title: 'إدارة المشتريات والتوريدات', items: procurementItems })
+    } else if (scope === 'warehouse_only') {
+      // ── قسم المخازن مخصص لموظفي ومشرفي المخازن فقط ──
+      const warehouseItems = [
+        { to: '/', label: 'الرئيسية (لوحة المخازن)', mark: '', icon: LayoutDashboard },
+      ]
+      if (canViewPage(session, 'requests')) {
+        warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: '', icon: ClipboardList })
+      }
+      if (canViewPage(session, 'custody')) {
+        warehouseItems.push({ to: '/custody', label: 'عهدة المخازن وأصول الكليات', mark: '', icon: Building2 })
+      }
+      if (canViewPage(session, 'asset_history')) {
+        warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: '', icon: History })
+      }
+      if (canViewPage(session, 'analytics')) {
+        warehouseItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: '', icon: BarChart3 })
+      }
+      if (canViewPage(session, 'quality')) {
+        warehouseItems.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues}` : '', icon: ShieldAlert })
+      }
+      if (canViewPage(session, 'reports')) {
+        warehouseItems.push({ to: '/reports', label: 'تقارير العهدة والمخزون', mark: '', icon: FileSpreadsheet })
+      }
+      if (canViewPage(session, 'imports')) {
+        warehouseItems.push({ to: '/imports', label: 'استيراد بيانات المخزن', mark: '', icon: Upload })
+      }
+      sections.push({ id: 'warehouse', title: 'إدارة المخزن والتشغيل', items: warehouseItems })
+    } else {
+      // ── لوحة القيادة الموحدة والشاملة للإدارة والسيستم أدمن ──
+      const overviewItems = [
+        { to: '/', label: 'الرئيسية (المنظومة الموحدة)', mark: '', icon: LayoutDashboard },
+      ]
+      sections.push({ id: 'overview', title: 'القيادة الاستراتيجية', items: overviewItems })
 
-    const analyticsItems = []
-    if (canViewPage(session, 'analytics')) {
-      analyticsItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: '', icon: BarChart3 })
-    }
-    if (canViewPage(session, 'financial_reports')) {
-      analyticsItems.push({ to: '/financial-reports', label: 'التقارير المالية الدورية', mark: '', icon: FileSpreadsheet })
-    }
-    if (canViewPage(session, 'budget')) {
-      analyticsItems.push({ to: '/budget', label: 'الميزانية والتخطيط', mark: '', icon: CircleDollarSign })
-    }
-    if (analyticsItems.length > 0) {
-      sections.push({ id: 'analytics_and_finance', title: 'التحليلات والموازنة', items: analyticsItems })
-    }
+      const warehouseItems = []
+      if (canViewPage(session, 'requests')) {
+        warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: '', icon: ClipboardList })
+      }
+      if (canViewPage(session, 'custody')) {
+        warehouseItems.push({ to: '/custody', label: 'عهدة المخازن وأصول الكليات', mark: '', icon: Building2 })
+      }
+      if (canViewPage(session, 'asset_history')) {
+        warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: '', icon: History })
+      }
+      if (canViewPage(session, 'quality')) {
+        warehouseItems.push({ to: '/quality', label: 'فحص جودة المخزون', mark: totalQualityIssues > 0 ? `${totalQualityIssues}` : '', icon: ShieldAlert })
+      }
+      if (warehouseItems.length > 0) {
+        sections.push({ id: 'warehouse', title: 'إدارة المخازن والتشغيل', items: warehouseItems })
+      }
 
-    const adminItems = []
-    if (canViewPage(session, 'audit')) {
-      adminItems.push({ to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History })
-    }
-    if (canViewPage(session, 'users')) {
-      adminItems.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
-    }
-    if (canViewPage(session, 'telegram_bot')) {
-      adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: '', icon: Send })
-    }
-    if (canViewPage(session, 'chatbot_admin')) {
-      adminItems.push({ to: '/chatbot-admin', label: 'إدارة وتوجيه المساعد الذكي', mark: 'AI', icon: Bot })
-    }
-    if (canViewPage(session, 'settings')) {
-      adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
-    }
-    if (adminItems.length > 0) {
-      sections.push({ id: 'admin', title: 'الإدارة والأمان', items: adminItems })
+      const procurementItems = []
+      if (canViewPage(session, 'purchases')) {
+        procurementItems.push({ to: '/purchases', label: 'فواتير وتوريدات الشراء', mark: '', icon: ShoppingCart })
+        procurementItems.push({ to: '/purchases/suppliers', label: 'إدارة الموردين والشركات', mark: '', icon: Building2 })
+        procurementItems.push({ to: '/purchases/quotes', label: 'عروض الأسعار وأوامر الشراء', mark: '', icon: FileSpreadsheet })
+        procurementItems.push({ to: '/purchases/contracts', label: 'عقود الموردين', mark: '', icon: FileText })
+      }
+      if (procurementItems.length > 0) {
+        sections.push({ id: 'procurement', title: 'المشتريات والتوريدات', items: procurementItems })
+      }
+
+      const analyticsItems = []
+      if (canViewPage(session, 'analytics')) {
+        analyticsItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: '', icon: BarChart3 })
+      }
+      if (canViewPage(session, 'financial_reports')) {
+        analyticsItems.push({ to: '/financial-reports', label: 'التقارير المالية الدورية', mark: '', icon: FileSpreadsheet })
+      }
+      if (canViewPage(session, 'budget')) {
+        analyticsItems.push({ to: '/budget', label: 'الميزانية والتخطيط', mark: '', icon: CircleDollarSign })
+      }
+      if (canViewPage(session, 'reports')) {
+        analyticsItems.push({ to: '/reports', label: 'التقارير الشاملة', mark: '', icon: FileSpreadsheet })
+      }
+      if (canViewPage(session, 'imports')) {
+        analyticsItems.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
+      }
+      if (analyticsItems.length > 0) {
+        sections.push({ id: 'analytics_and_finance', title: 'التحليلات والموازنة', items: analyticsItems })
+      }
+
+      const adminItems = []
+      if (canViewPage(session, 'audit')) {
+        adminItems.push({ to: '/audit', label: 'سجل العمليات والتدقيق', mark: '', icon: History })
+      }
+      if (canViewPage(session, 'users')) {
+        adminItems.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
+      }
+      if (canViewPage(session, 'telegram_bot')) {
+        adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: '', icon: Send })
+      }
+      if (canViewPage(session, 'chatbot_admin')) {
+        adminItems.push({ to: '/chatbot-admin', label: 'إدارة وتوجيه المساعد الذكي', mark: 'AI', icon: Bot })
+      }
+      if (canViewPage(session, 'settings')) {
+        adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })
+      }
+      if (adminItems.length > 0) {
+        sections.push({ id: 'admin', title: 'الإدارة والأمان', items: adminItems })
+      }
     }
 
     const supportItems = [
@@ -1566,9 +1615,9 @@ function App() {
           <Route
             path="/"
             element={
-              <section className="dashboard-grid">
-                {/* 1. Hero Overview Executive Banner */}
-                {dashboardScope === 'purchases_only' ? (
+              dashboardScope === 'purchases_only' ? (
+                /* ─── 1. لوحة تحليلات إدارة المشتريات والتوريدات المخصصة ─── */
+                <section className="dashboard-grid purchases-only-dashboard">
                   <div className="hero-overview-card card-surface">
                     <div className="hero-main-content">
                       <div className="hero-status-tag tone-emerald">
@@ -1591,10 +1640,24 @@ function App() {
                         <button type="button" className="outline-btn" onClick={() => navigate('/purchases/suppliers')}>
                           <Building2 size={16} /> إدارة الموردين
                         </button>
+                        <button type="button" className="outline-btn" onClick={() => navigate('/purchases/contracts')}>
+                          <FileText size={16} /> عقود الموردين
+                        </button>
                       </div>
                     </div>
                   </div>
-                ) : (
+
+                  <div className="mt-2">
+                    <ProcurementAnalyticsDashboard
+                      movements={movements}
+                      currency={settings.currency}
+                      isDashboardEmbed={false}
+                    />
+                  </div>
+                </section>
+              ) : dashboardScope === 'warehouse_only' ? (
+                /* ─── 2. لوحة تحليلات إدارة المخازن والتشغيل المخصصة ─── */
+                <section className="dashboard-grid warehouse-only-dashboard">
                   <div className="hero-overview-card card-surface">
                     <div className="hero-main-content">
                       <div className={`hero-status-tag tone-${stockStatusConfig.tone}`}>
@@ -1603,11 +1666,17 @@ function App() {
                         <span className="hero-divider">•</span>
                         <span>{settings.organization} ({settings.department})</span>
                       </div>
-                      <h2 className="hero-title">لوحة التحكم والمؤشرات التشغيلية للمستودع</h2>
+                      <h2 className="hero-title">لوحة التحكم والمؤشرات التشغيلية للمستودع والعهدة</h2>
                       <p className="hero-desc">
                         تم صرف <strong>{issuedPercentage}</strong> من إجمالي قيمة الوارد (<strong>{summary.qty_out.toLocaleString('ar-EG')}</strong> من <strong>{summary.qty_in.toLocaleString('ar-EG')}</strong> وحدة)، مع رصيد متبقٍ بقيمة <strong>{formatCurrency(summary.remaining_value, settings.currency)}</strong> موزع على <strong>{summary.pending_rows.toLocaleString('ar-EG')}</strong> بنداً بانتظار استكمال الصرف.
                       </p>
                       <div className="hero-actions">
+                        <button type="button" className="primary-btn" onClick={() => navigate('/requests')}>
+                          <ClipboardList size={16} /> طلبات الصرف الداخلي
+                        </button>
+                        <button type="button" className="outline-btn" onClick={() => navigate('/custody')}>
+                          <Building2 size={16} /> جرد عهد الكليات
+                        </button>
                         <button type="button" className="outline-btn" onClick={() => navigate('/quality')}>
                           <ShieldAlert size={17} /> فحص الجودة ({totalQualityIssues} ملاحظة)
                         </button>
@@ -1637,468 +1706,856 @@ function App() {
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* 2. Unified Analytics Switcher */}
-                <div className="card-surface dashboard-analytics-bar">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 size={18} className="text-accent" />
-                    <strong className="font-sm text-ink">لوحة التحليلات والإحصائيات الشاملة للمؤسسة:</strong>
+                  {/* Operational Micro-Gauges Strip */}
+                  <div className="operational-strip">
+                    <div className="op-gauge-card card-surface">
+                      <div className="op-head">
+                        <span className="op-icon tone-emerald"><Percent size={16} /></span>
+                        <span className="op-label">معدل دوران المخزون</span>
+                      </div>
+                      <div className="op-val">{turnoverRate}%</div>
+                      <div className="op-progress-track">
+                        <div className="op-progress-bar tone-emerald" style={{ width: `${Math.min(100, Math.max(5, turnoverRateNum))}%` }} />
+                      </div>
+                      <div className="op-foot">نسبة المنصرف من إجمالي الوارد</div>
+                    </div>
+
+                    <div className="op-gauge-card card-surface">
+                      <div className="op-head">
+                        <span className="op-icon tone-cyan"><CheckCircle2 size={16} /></span>
+                        <span className="op-label">اكتمال أذونات الصرف</span>
+                      </div>
+                      <div className="op-val">{fulfillmentRatio}%</div>
+                      <div className="op-progress-track">
+                        <div className="op-progress-bar tone-cyan" style={{ width: `${Math.min(100, Math.max(5, fulfillmentRatio))}%` }} />
+                      </div>
+                      <div className="op-foot">{completedMovements} إذن صرف مكتمل كلياً</div>
+                    </div>
+
+                    <div className="op-gauge-card card-surface">
+                      <div className="op-head">
+                        <span className="op-icon tone-amber"><CircleDollarSign size={16} /></span>
+                        <span className="op-label">متوسط تكلفة الوحدة</span>
+                      </div>
+                      <div className="op-val">{formatCurrency(avgUnitCost, settings.currency)}</div>
+                      <div className="op-foot">المعدل المالي لكل وحدة واردة</div>
+                    </div>
+
+                    <div className="op-gauge-card card-surface">
+                      <div className="op-head">
+                        <span className="op-icon tone-indigo"><ShieldAlert size={16} /></span>
+                        <span className="op-label">مؤشر سلامة البيانات</span>
+                      </div>
+                      <div className="op-val">{qualityHealthScore}%</div>
+                      <div className="op-progress-track">
+                        <div className="op-progress-bar tone-indigo" style={{ width: `${qualityHealthScore}%` }} />
+                      </div>
+                      <div className="op-foot">{totalQualityIssues === 0 ? 'سجلات نموذجية 100%' : `${totalQualityIssues} ملاحظة تحت التدقيق`}</div>
+                    </div>
                   </div>
 
-                  <div className="flex gap-2 flex-wrap">
-                    {dashboardScope !== 'purchases_only' && (
+                  {/* 6 Main Warehouse KPI Cards */}
+                  <div className="kpi-grid">
+                    {kpis.map(({ id, label, value, badge, sub, tone, icon: Icon }) => (
+                      <div key={id} className={`kpi-card card-surface tone-${tone}`}>
+                        <div className="kpi-header-row">
+                          <span className="kpi-icon-box">
+                            <Icon size={20} strokeWidth={2.1} />
+                          </span>
+                          <span className="kpi-badge">{badge}</span>
+                        </div>
+                        <div className="kpi-label-text">{label}</div>
+                        <strong className="kpi-main-val">{value}</strong>
+                        <div className="kpi-footer-note">{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dynamic Analytics & Timeline Chart */}
+                  <div className="content-grid">
+                    <div className="card-surface analytics-card">
+                      <div className="section-head chart-section-head">
+                        <div>
+                          <h2><ChartNoAxesCombined size={19} /> التوزيع الزمني وحركة التوريد والصرف</h2>
+                          <span>تحليل حركة الوارد والمنصرف المالي والكمي عبر الفترات المسجلة</span>
+                        </div>
+                        <div className="chart-metric-switch">
+                          <button
+                            type="button"
+                            className={`switch-btn ${chartMetric === 'value' ? 'active' : ''}`}
+                            onClick={() => setChartMetric('value')}
+                          >
+                            القيمة المالية ({settings.currency})
+                          </button>
+                          <button
+                            type="button"
+                            className={`switch-btn ${chartMetric === 'qty' ? 'active' : ''}`}
+                            onClick={() => setChartMetric('qty')}
+                          >
+                            كميات الوحدات
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="chart-canvas-wrap">
+                        <div className="chart-bars-area" aria-label="مخطط حركة المخزن">
+                          {monthlyStats.map((item) => {
+                            const valIn = chartMetric === 'value' ? item.inValue : item.inQty
+                            const valOut = chartMetric === 'value' ? item.outValue : item.outQty
+                            const heightIn = Math.max(12, Math.round((valIn / maxChartVal) * 100))
+                            const heightOut = Math.max(10, Math.round((valOut / maxChartVal) * 100))
+                            const isHovered = hoveredMonthKey === item.key
+
+                            return (
+                              <div
+                                key={item.key}
+                                className={`chart-bar-group ${isHovered ? 'hovered' : ''}`}
+                                onMouseEnter={() => setHoveredMonthKey(item.key)}
+                                onMouseLeave={() => setHoveredMonthKey(null)}
+                              >
+                                {isHovered && (
+                                  <div className="chart-tooltip">
+                                    <div className="tooltip-title">{item.label}</div>
+                                    <div className="tooltip-row in">
+                                      <span>الوارد:</span>
+                                      <strong>{chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : `${item.inQty.toLocaleString('ar-EG')} وحدة`}</strong>
+                                    </div>
+                                    <div className="tooltip-row out">
+                                      <span>المنصرف:</span>
+                                      <strong>{chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : `${item.outQty.toLocaleString('ar-EG')} وحدة`}</strong>
+                                    </div>
+                                    <div className="tooltip-row info">
+                                      <span>الحركات:</span>
+                                      <span>{item.count} حركة مسجلة</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="bars-pair">
+                                  <div
+                                    className="bar bar-received"
+                                    style={{ height: `${heightIn}%` }}
+                                    title={`وارد: ${chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : item.inQty}`}
+                                  />
+                                  <div
+                                    className="bar bar-issued"
+                                    style={{ height: `${heightOut}%` }}
+                                    title={`منصرف: ${chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : item.outQty}`}
+                                  />
+                                </div>
+                                <span className="month-axis-label">{item.label}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="chart-legend-footer">
+                        <div className="legend-chip in">
+                          <span className="legend-dot in-dot" />
+                          <span>الوارد: {chartMetric === 'value' ? formatCurrency(summary.total_value, settings.currency) : `${summary.qty_in.toLocaleString('ar-EG')} وحدة`}</span>
+                        </div>
+                        <div className="legend-chip out">
+                          <span className="legend-dot out-dot" />
+                          <span>المنصرف: {chartMetric === 'value' ? formatCurrency(summary.issued_value, settings.currency) : `${summary.qty_out.toLocaleString('ar-EG')} وحدة`}</span>
+                        </div>
+                        <div className="legend-chip bal">
+                          <span className="legend-dot bal-dot" />
+                          <span>المتبقي: {chartMetric === 'value' ? formatCurrency(summary.remaining_value, settings.currency) : `${netStockUnits.toLocaleString('ar-EG')} وحدة`}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Custody & Assets across the 8 Colleges */}
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={19} className="text-accent" />
+                        <h3 className="m-0 text-lg font-bold text-ink">
+                          إحصائيات وتحليلات عهد وأصول كليات المؤسسة (8 كليات)
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary-btn btn-sm"
+                        onClick={() => navigate('/reports')}
+                      >
+                        <FileSpreadsheet size={14} /> الانتقال لمركز التقارير
+                      </button>
+                    </div>
+
+                    <CustodyAnalyticsDashboard
+                      items={custodyItems}
+                      currency={settings.currency}
+                      onSelectWarehouse={(whId) => navigate(`/custody?warehouse=${whId}`)}
+                      onExportAllExcel={() => navigate('/reports')}
+                    />
+                  </div>
+
+                  {/* Recent Warehouse Movements Table */}
+                  <div className="lower-grid">
+                    <div className="card-surface table-card">
+                      <div className="section-head table-section-head">
+                        <div>
+                          <h2><ClipboardList size={18} /> أحدث حركات المستودع</h2>
+                          <span>متابعة فورية لحركات الإضافة والصرف</span>
+                        </div>
+                        <div className="table-filter-pills">
+                          <button
+                            type="button"
+                            className={`filter-tab ${tableFilter === 'all' ? 'active' : ''}`}
+                            onClick={() => setTableFilter('all')}
+                          >
+                            الكل ({movements.length})
+                          </button>
+                          <button
+                            type="button"
+                            className={`filter-tab ${tableFilter === 'full' ? 'active' : ''}`}
+                            onClick={() => setTableFilter('full')}
+                          >
+                            مكتمل ({completedMovements})
+                          </button>
+                          <button
+                            type="button"
+                            className={`filter-tab ${tableFilter === 'part' ? 'active' : ''}`}
+                            onClick={() => setTableFilter('part')}
+                          >
+                            جزئي ({partialMovements})
+                          </button>
+                          <button
+                            type="button"
+                            className={`filter-tab ${tableFilter === 'pending' ? 'active' : ''}`}
+                            onClick={() => setTableFilter('pending')}
+                          >
+                            معلق ({pendingMovements})
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="table-scroll-container">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>الصنف والمصدر</th>
+                              <th>المستلم</th>
+                              <th>الكميات (وارد / منصرف)</th>
+                              <th>الحالة</th>
+                              <th>القيمة</th>
+                              <th className="actions-header">الإجراءات</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredRecentMovements.length === 0 ? (
+                              <tr>
+                                <td className="table-empty" colSpan={6}>لا توجد حركات مسجلة ضمن هذا التصنيف.</td>
+                              </tr>
+                            ) : (
+                              filteredRecentMovements.map((movement, idx) => {
+                                const derived = deriveMovement(movement, idx)
+                                const value = derived.total ?? 0
+                                const status = derived.status === 'full' ? 'مكتمل'
+                                  : derived.status === 'part' ? 'جزئي'
+                                    : derived.status === 'over' ? 'تجاوز'
+                                      : 'معلق'
+
+                                return (
+                                  <tr key={movement.id || idx}>
+                                    <td>
+                                      <div className="cell-item-name">{movement.item}</div>
+                                      <small className="cell-sub">{movement.from ? `المورد: ${movement.from}` : 'بدون مورد'}</small>
+                                    </td>
+                                    <td>
+                                      <span className="recipient-badge">{movement.to || 'غير محدد'}</span>
+                                    </td>
+                                    <td className="quantity-cell">
+                                      <span className="qty-in-tag">+{movement.qin}</span>
+                                      <span className="qty-sep">/</span>
+                                      <span className="qty-out-tag">-{movement.qout}</span>
+                                    </td>
+                                    <td>
+                                      <span className={`status-pill ${status === 'مكتمل' ? 'ok' : status === 'جزئي' ? 'warn' : 'info'}`}>
+                                        {status}
+                                      </span>
+                                    </td>
+                                    <td className="table-value-cell">
+                                      <strong>{formatCurrency(value, settings.currency)}</strong>
+                                    </td>
+                                    <td className="actions-cell">
+                                      {canEdit ? (
+                                        <div className="action-buttons-wrap">
+                                          <button
+                                            type="button"
+                                            className="table-action-btn edit-action-btn"
+                                            onClick={() => setEditingMovement(movement)}
+                                            title="تعديل الحركة"
+                                            aria-label={`تعديل حركة ${movement.item}`}
+                                          >
+                                            <Pencil size={14} />
+                                            <span>تعديل</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="table-action-btn delete-action-btn"
+                                            onClick={() => setDeletingMovement(movement)}
+                                            title="حذف الحركة"
+                                            aria-label={`حذف حركة ${movement.item}`}
+                                          >
+                                            <Trash2 size={14} />
+                                            <span>حذف</span>
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="read-only-badge" title="صلاحية قراءة وعرض فقط">
+                                          <Eye size={13} /> عرض فقط
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="table-card-footer">
+                        <button type="button" className="text-link-btn" onClick={() => navigate('/analytics')}>
+                          عرض تحليلات الدوران الكاملة <ArrowLeft size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="stack-column">
+                      <div className="card-surface info-card">
+                        <div className="section-head">
+                          <div>
+                            <h2><ShieldAlert size={18} /> جودة وصحة البيانات</h2>
+                            <span>فحص دوري لسلامة السجلات والأذونات</span>
+                          </div>
+                          <span className="score-pill">{qualityHealthScore}% سليم</span>
+                        </div>
+
+                        <div className="quality-list">
+                          {qualityCards.length === 0 ? (
+                            <div className="quality-empty">
+                              <CheckCircle2 size={24} className="ok-icon" />
+                              <span>كافة البيانات مكتملة وخالية من الملاحظات!</span>
+                            </div>
+                          ) : (
+                            qualityCards.map(({ rule, count, level, text }) => (
+                              <div key={rule} className={`quality-item ${level}`}>
+                                <span className="quality-text">{text}</span>
+                                <strong className="quality-badge">{count}</strong>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <button type="button" className="outline-btn w-full mt-2" onClick={() => navigate('/quality')}>
+                          فتح تقرير الجودة الكامل <ArrowLeft size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              ) : (
+                /* ─── 3. المنظومة الموحدة الشاملة (الأدمن ومدير النظام) ─── */
+                <section className="dashboard-grid admin-unified-dashboard">
+                  <div className="hero-overview-card card-surface unified-hero">
+                    <div className="hero-main-content">
+                      <div className="hero-status-tag tone-indigo">
+                        <span className="live-pulse-dot" />
+                        <span>المنظومة الموحدة الشاملة</span>
+                        <span className="hero-divider">•</span>
+                        <span>المخازن والمشتريات والعهدة</span>
+                      </div>
+                      <h2 className="hero-title">اللوحة القيادية الموحدة للمخازن والمشتريات</h2>
+                      <p className="hero-desc">
+                        نظرة استراتيجية متكاملة لجامعة الزقازيق الأهلية تجمع بين رصيد المخزون، معدلات دوران الأصناف، عهد الكليات الـ 8، وتدفقات الإنفاق والموردين وأوامر الشراء.
+                      </p>
+                      <div className="hero-actions">
+                        <button type="button" className="primary-btn" onClick={() => navigate('/purchases?tab=add')}>
+                          <Plus size={16} /> إضافة توريد شراء
+                        </button>
+                        <button type="button" className="secondary-btn" onClick={() => navigate('/requests')}>
+                          <ClipboardList size={16} /> طلبات الصرف
+                        </button>
+                        <button type="button" className="outline-btn" onClick={() => navigate('/reports')}>
+                          <FileSpreadsheet size={16} /> التقارير الموحدة
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="hero-meter-wrap">
+                      <div className="circular-meter">
+                        <svg viewBox="0 0 100 100" className="meter-svg">
+                          <circle className="meter-bg" cx="50" cy="50" r="40" />
+                          <circle
+                            className="meter-bar"
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            strokeDasharray="251.2"
+                            strokeDashoffset={251.2 - (251.2 * Math.min(100, Math.max(0, turnoverRateNum))) / 100}
+                          />
+                        </svg>
+                        <div className="meter-content">
+                          <span className="meter-val">{turnoverRate}%</span>
+                          <span className="meter-lbl">دوران المخزون</span>
+                        </div>
+                      </div>
+                      <div className="meter-sub">
+                        <span>سلامة البيانات: <strong>{qualityHealthScore}%</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dual Department Switcher Tabs for Admins */}
+                  <div className="card-surface dashboard-analytics-bar">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 size={18} className="text-accent" />
+                      <strong className="font-sm text-ink">لوحة التحليلات والإحصائيات الشاملة للمؤسسة:</strong>
+                    </div>
+
+                    <div className="flex gap-2 flex-wrap">
                       <button
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'all' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('all')}
                       >
-                        <Sparkles size={14} /> التحليل الشامل الموحد
+                        <Sparkles size={14} /> المنظومة الموحدة الشاملة (القسمين)
                       </button>
-                    )}
 
-                    {/* تبويب تحليلات المشتريات — يظهر لموظفي المشتريات والإدارة */}
-                    {dashboardScope !== 'warehouse_only' && (
-                      <button
-                        type="button"
-                        className={`secondary-btn ${dashboardAnalyticsTab === 'procurement' ? 'active' : ''}`}
-                        onClick={() => setDashboardAnalyticsTab('procurement')}
-                      >
-                        <Receipt size={14} /> تحليلات إدارة المشتريات
-                      </button>
-                    )}
-
-                    {/* تبويب تحليلات حركة الوارد والمنصرف — يظهر لموظفي المخازن والإدارة */}
-                    {dashboardScope !== 'purchases_only' && (
                       <button
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'movements' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('movements')}
                       >
-                        <TrendingUp size={14} /> تحليلات حركة الوارد والمنصرف
+                        <TrendingUp size={14} /> تحليلات إدارة المخازن والعهدة
                       </button>
-                    )}
 
-                    {/* تبويب عهدة وأصول الكليات — يظهر لموظفي المخازن والإدارة */}
-                    {dashboardScope !== 'purchases_only' && (
+                      <button
+                        type="button"
+                        className={`secondary-btn ${dashboardAnalyticsTab === 'procurement' ? 'active' : ''}`}
+                        onClick={() => setDashboardAnalyticsTab('procurement')}
+                      >
+                        <Receipt size={14} /> تحليلات إدارة المشتريات والعقود
+                      </button>
+
                       <button
                         type="button"
                         className={`secondary-btn ${dashboardAnalyticsTab === 'custody' ? 'active' : ''}`}
                         onClick={() => setDashboardAnalyticsTab('custody')}
                       >
-                        <Building2 size={14} /> تحليلات عهدة وأصول الكليات (8 مخازن)
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Procurement Analytics Section */}
-                {dashboardScope !== 'warehouse_only' && (dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'procurement') && (
-                  <div className="mt-2">
-                    <ProcurementAnalyticsDashboard
-                      movements={movements}
-                      currency={settings.currency}
-                      isDashboardEmbed={true}
-                    />
-                  </div>
-                )}
-
-                {/* Movements Analytics: Gauges, KPIs, Chart */}
-                {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'movements') && (
-                  <>
-                    {/* Operational Micro-Gauges Strip */}
-                    <div className="operational-strip">
-                  <div className="op-gauge-card card-surface">
-                    <div className="op-head">
-                      <span className="op-icon tone-emerald"><Percent size={16} /></span>
-                      <span className="op-label">معدل دوران المخزون</span>
-                    </div>
-                    <div className="op-val">{turnoverRate}%</div>
-                    <div className="op-progress-track">
-                      <div className="op-progress-bar tone-emerald" style={{ width: `${Math.min(100, Math.max(5, turnoverRateNum))}%` }} />
-                    </div>
-                    <div className="op-foot">نسبة المنصرف من إجمالي الوارد</div>
-                  </div>
-
-                  <div className="op-gauge-card card-surface">
-                    <div className="op-head">
-                      <span className="op-icon tone-cyan"><CheckCircle2 size={16} /></span>
-                      <span className="op-label">اكتمال أذونات الصرف</span>
-                    </div>
-                    <div className="op-val">{fulfillmentRatio}%</div>
-                    <div className="op-progress-track">
-                      <div className="op-progress-bar tone-cyan" style={{ width: `${Math.min(100, Math.max(5, fulfillmentRatio))}%` }} />
-                    </div>
-                    <div className="op-foot">{completedMovements} إذن صرف مكتمل كلياً</div>
-                  </div>
-
-                  <div className="op-gauge-card card-surface">
-                    <div className="op-head">
-                      <span className="op-icon tone-amber"><CircleDollarSign size={16} /></span>
-                      <span className="op-label">متوسط تكلفة الوحدة</span>
-                    </div>
-                    <div className="op-val">{formatCurrency(avgUnitCost, settings.currency)}</div>
-                    <div className="op-foot">المعدل المالي لكل وحدة واردة</div>
-                  </div>
-
-                  <div className="op-gauge-card card-surface">
-                    <div className="op-head">
-                      <span className="op-icon tone-indigo"><ShieldAlert size={16} /></span>
-                      <span className="op-label">مؤشر سلامة البيانات</span>
-                    </div>
-                    <div className="op-val">{qualityHealthScore}%</div>
-                    <div className="op-progress-track">
-                      <div className="op-progress-bar tone-indigo" style={{ width: `${qualityHealthScore}%` }} />
-                    </div>
-                    <div className="op-foot">{totalQualityIssues === 0 ? 'سجلات نموذجية 100%' : `${totalQualityIssues} ملاحظة تحت التدقيق`}</div>
-                  </div>
-                </div>
-
-                {/* 3. The 6 Main KPI Cards */}
-                <div className="kpi-grid">
-                  {kpis.map(({ id, label, value, badge, sub, tone, icon: Icon }) => (
-                    <div key={id} className={`kpi-card card-surface tone-${tone}`}>
-                      <div className="kpi-header-row">
-                        <span className="kpi-icon-box">
-                          <Icon size={20} strokeWidth={2.1} />
-                        </span>
-                        <span className="kpi-badge">{badge}</span>
-                      </div>
-                      <div className="kpi-label-text">{label}</div>
-                      <strong className="kpi-main-val">{value}</strong>
-                      <div className="kpi-footer-note">{sub}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 4. Dynamic Analytics & Top Items Grid */}
-                <div className="content-grid">
-                  <div className="card-surface analytics-card">
-                    <div className="section-head chart-section-head">
-                      <div>
-                        <h2><ChartNoAxesCombined size={19} /> التوزيع الزمني وحركة التوريد والصرف</h2>
-                        <span>تحليل حركة الوارد والمنصرف المالي والكمي عبر الفترات المسجلة</span>
-                      </div>
-                      <div className="chart-metric-switch">
-                        <button
-                          type="button"
-                          className={`switch-btn ${chartMetric === 'value' ? 'active' : ''}`}
-                          onClick={() => setChartMetric('value')}
-                        >
-                          القيمة المالية ({settings.currency})
-                        </button>
-                        <button
-                          type="button"
-                          className={`switch-btn ${chartMetric === 'qty' ? 'active' : ''}`}
-                          onClick={() => setChartMetric('qty')}
-                        >
-                          كميات الوحدات
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="chart-canvas-wrap">
-                      <div className="chart-bars-area" aria-label="مخطط حركة المخزن">
-                        {monthlyStats.map((item) => {
-                          const valIn = chartMetric === 'value' ? item.inValue : item.inQty
-                          const valOut = chartMetric === 'value' ? item.outValue : item.outQty
-                          const heightIn = Math.max(12, Math.round((valIn / maxChartVal) * 100))
-                          const heightOut = Math.max(10, Math.round((valOut / maxChartVal) * 100))
-                          const isHovered = hoveredMonthKey === item.key
-
-                          return (
-                            <div
-                              key={item.key}
-                              className={`chart-bar-group ${isHovered ? 'hovered' : ''}`}
-                              onMouseEnter={() => setHoveredMonthKey(item.key)}
-                              onMouseLeave={() => setHoveredMonthKey(null)}
-                            >
-                              {isHovered && (
-                                <div className="chart-tooltip">
-                                  <div className="tooltip-title">{item.label}</div>
-                                  <div className="tooltip-row in">
-                                    <span>الوارد:</span>
-                                    <strong>{chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : `${item.inQty.toLocaleString('ar-EG')} وحدة`}</strong>
-                                  </div>
-                                  <div className="tooltip-row out">
-                                    <span>المنصرف:</span>
-                                    <strong>{chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : `${item.outQty.toLocaleString('ar-EG')} وحدة`}</strong>
-                                  </div>
-                                  <div className="tooltip-row info">
-                                    <span>الحركات:</span>
-                                    <span>{item.count} حركة مسجلة</span>
-                                  </div>
-                                </div>
-                              )}
-                              <div className="bars-pair">
-                                <div
-                                  className="bar bar-received"
-                                  style={{ height: `${heightIn}%` }}
-                                  title={`وارد: ${chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : item.inQty}`}
-                                />
-                                <div
-                                  className="bar bar-issued"
-                                  style={{ height: `${heightOut}%` }}
-                                  title={`منصرف: ${chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : item.outQty}`}
-                                />
-                              </div>
-                              <span className="month-axis-label">{item.label}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="chart-legend-footer">
-                      <div className="legend-chip in">
-                        <span className="legend-dot in-dot" />
-                        <span>الوارد: {chartMetric === 'value' ? formatCurrency(summary.total_value, settings.currency) : `${summary.qty_in.toLocaleString('ar-EG')} وحدة`}</span>
-                      </div>
-                      <div className="legend-chip out">
-                        <span className="legend-dot out-dot" />
-                        <span>المنصرف: {chartMetric === 'value' ? formatCurrency(summary.issued_value, settings.currency) : `${summary.qty_out.toLocaleString('ar-EG')} وحدة`}</span>
-                      </div>
-                      <div className="legend-chip bal">
-                        <span className="legend-dot bal-dot" />
-                        <span>المتبقي: {chartMetric === 'value' ? formatCurrency(summary.remaining_value, settings.currency) : `${netStockUnits.toLocaleString('ar-EG')} وحدة`}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Custody & Assets Analytics across the 8 Colleges */}
-            {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'custody') && (
-              <div className="mt-2">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <Building2 size={19} className="text-accent" />
-                    <h3 className="m-0 text-lg font-bold text-ink">
-                      إحصائيات وتحليلات عهد وأصول كليات المؤسسة (8 كليات)
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary-btn btn-sm"
-                    onClick={() => navigate('/reports')}
-                  >
-                    <FileSpreadsheet size={14} /> الانتقال لمركز التقارير
-                  </button>
-                </div>
-
-                <CustodyAnalyticsDashboard
-                  items={custodyItems}
-                  currency={settings.currency}
-                  onSelectWarehouse={(whId) => navigate(`/custody?warehouse=${whId}`)}
-                  onExportAllExcel={() => navigate('/reports')}
-                />
-              </div>
-            )}
-
-                {/* 5. Recent Movements & Quality / Activity Stack */}
-                {dashboardScope !== 'purchases_only' && (
-                  <div className="lower-grid">
-                  <div className="card-surface table-card">
-                    <div className="section-head table-section-head">
-                      <div>
-                        <h2><ClipboardList size={18} /> أحدث حركات المستودع</h2>
-                        <span>متابعة فورية لحركات الإضافة والصرف</span>
-                      </div>
-                      <div className="table-filter-pills">
-                        <button
-                          type="button"
-                          className={`filter-tab ${tableFilter === 'all' ? 'active' : ''}`}
-                          onClick={() => setTableFilter('all')}
-                        >
-                          الكل ({movements.length})
-                        </button>
-                        <button
-                          type="button"
-                          className={`filter-tab ${tableFilter === 'full' ? 'active' : ''}`}
-                          onClick={() => setTableFilter('full')}
-                        >
-                          مكتمل ({completedMovements})
-                        </button>
-                        <button
-                          type="button"
-                          className={`filter-tab ${tableFilter === 'part' ? 'active' : ''}`}
-                          onClick={() => setTableFilter('part')}
-                        >
-                          جزئي ({partialMovements})
-                        </button>
-                        <button
-                          type="button"
-                          className={`filter-tab ${tableFilter === 'pending' ? 'active' : ''}`}
-                          onClick={() => setTableFilter('pending')}
-                        >
-                          معلق ({pendingMovements})
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="table-scroll-container">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>الصنف والمصدر</th>
-                            <th>المستلم</th>
-                            <th>الكميات (وارد / منصرف)</th>
-                            <th>الحالة</th>
-                            <th>القيمة</th>
-                            <th className="actions-header">الإجراءات</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredRecentMovements.length === 0 ? (
-                            <tr>
-                              <td className="table-empty" colSpan={6}>لا توجد حركات مسجلة ضمن هذا التصنيف.</td>
-                            </tr>
-                          ) : (
-                            filteredRecentMovements.map((movement, idx) => {
-                              const derived = deriveMovement(movement, idx)
-                              const value = derived.total ?? 0
-                              const status = derived.status === 'full' ? 'مكتمل'
-                                : derived.status === 'part' ? 'جزئي'
-                                  : derived.status === 'over' ? 'تجاوز'
-                                    : 'معلق'
-
-                              return (
-                                <tr key={movement.id || idx}>
-                                  <td>
-                                    <div className="cell-item-name">{movement.item}</div>
-                                    <small className="cell-sub">{movement.from ? `المورد: ${movement.from}` : 'بدون مورد'}</small>
-                                  </td>
-                                  <td>
-                                    <span className="recipient-badge">{movement.to || 'غير محدد'}</span>
-                                  </td>
-                                  <td className="quantity-cell">
-                                    <span className="qty-in-tag">+{movement.qin}</span>
-                                    <span className="qty-sep">/</span>
-                                    <span className="qty-out-tag">-{movement.qout}</span>
-                                  </td>
-                                  <td>
-                                    <span className={`status-pill ${status === 'مكتمل' ? 'ok' : status === 'جزئي' ? 'warn' : 'info'}`}>
-                                      {status}
-                                    </span>
-                                  </td>
-                                  <td className="table-value-cell">
-                                    <strong>{formatCurrency(value, settings.currency)}</strong>
-                                  </td>
-                                  <td className="actions-cell">
-                                    {canEdit ? (
-                                      <div className="action-buttons-wrap">
-                                        <button
-                                          type="button"
-                                          className="table-action-btn edit-action-btn"
-                                          onClick={() => setEditingMovement(movement)}
-                                          title="تعديل الحركة"
-                                          aria-label={`تعديل حركة ${movement.item}`}
-                                        >
-                                          <Pencil size={14} />
-                                          <span>تعديل</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="table-action-btn delete-action-btn"
-                                          onClick={() => setDeletingMovement(movement)}
-                                          title="حذف الحركة"
-                                          aria-label={`حذف حركة ${movement.item}`}
-                                        >
-                                          <Trash2 size={14} />
-                                          <span>حذف</span>
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span className="read-only-badge" title="صلاحية قراءة وعرض فقط">
-                                        <Eye size={13} /> عرض فقط
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="table-card-footer">
-                      <button type="button" className="text-link-btn" onClick={() => navigate('/movements')}>
-                        عرض كافة الحركات في السجل الكامل ({movements.length.toLocaleString('ar-EG')} حركة) <ArrowLeft size={15} />
+                        <Building2 size={14} /> عهد كليات الجامعة (8 مخازن)
                       </button>
                     </div>
                   </div>
 
-                  <div className="stack-column">
-                    <div className="card-surface info-card">
-                      <div className="section-head">
-                        <div>
-                          <h2><ShieldAlert size={18} /> جودة وصحة البيانات</h2>
-                          <span>فحص دوري لسلامة السجلات والأذونات</span>
+                  {/* Procurement Analytics View */}
+                  {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'procurement') && (
+                    <div className="mt-2">
+                      <ProcurementAnalyticsDashboard
+                        movements={movements}
+                        currency={settings.currency}
+                        isDashboardEmbed={true}
+                      />
+                    </div>
+                  )}
+
+                  {/* Movements Analytics: Gauges, KPIs, Chart */}
+                  {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'movements') && (
+                    <>
+                      <div className="operational-strip">
+                        <div className="op-gauge-card card-surface">
+                          <div className="op-head">
+                            <span className="op-icon tone-emerald"><Percent size={16} /></span>
+                            <span className="op-label">معدل دوران المخزون</span>
+                          </div>
+                          <div className="op-val">{turnoverRate}%</div>
+                          <div className="op-progress-track">
+                            <div className="op-progress-bar tone-emerald" style={{ width: `${Math.min(100, Math.max(5, turnoverRateNum))}%` }} />
+                          </div>
+                          <div className="op-foot">نسبة المنصرف من إجمالي الوارد</div>
                         </div>
-                        <span className="score-pill">{qualityHealthScore}% سليم</span>
+
+                        <div className="op-gauge-card card-surface">
+                          <div className="op-head">
+                            <span className="op-icon tone-cyan"><CheckCircle2 size={16} /></span>
+                            <span className="op-label">اكتمال أذونات الصرف</span>
+                          </div>
+                          <div className="op-val">{fulfillmentRatio}%</div>
+                          <div className="op-progress-track">
+                            <div className="op-progress-bar tone-cyan" style={{ width: `${Math.min(100, Math.max(5, fulfillmentRatio))}%` }} />
+                          </div>
+                          <div className="op-foot">{completedMovements} إذن صرف مكتمل كلياً</div>
+                        </div>
+
+                        <div className="op-gauge-card card-surface">
+                          <div className="op-head">
+                            <span className="op-icon tone-amber"><CircleDollarSign size={16} /></span>
+                            <span className="op-label">متوسط تكلفة الوحدة</span>
+                          </div>
+                          <div className="op-val">{formatCurrency(avgUnitCost, settings.currency)}</div>
+                          <div className="op-foot">المعدل المالي لكل وحدة واردة</div>
+                        </div>
+
+                        <div className="op-gauge-card card-surface">
+                          <div className="op-head">
+                            <span className="op-icon tone-indigo"><ShieldAlert size={16} /></span>
+                            <span className="op-label">مؤشر سلامة البيانات</span>
+                          </div>
+                          <div className="op-val">{qualityHealthScore}%</div>
+                          <div className="op-progress-track">
+                            <div className="op-progress-bar tone-indigo" style={{ width: `${qualityHealthScore}%` }} />
+                          </div>
+                          <div className="op-foot">{totalQualityIssues === 0 ? 'سجلات نموذجية 100%' : `${totalQualityIssues} ملاحظة تحت التدقيق`}</div>
+                        </div>
                       </div>
 
-                      <div className="quality-list">
-                        {qualityCards.length === 0 ? (
-                          <div className="quality-empty">
-                            <CheckCircle2 size={24} className="ok-icon" />
-                            <span>كافة البيانات مكتملة وخالية من الملاحظات!</span>
-                          </div>
-                        ) : (
-                          qualityCards.map(({ rule, count, level, text }) => (
-                            <div key={rule} className={`quality-item ${level}`}>
-                              <span className="quality-text">{text}</span>
-                              <strong className="quality-badge">{count}</strong>
+                      <div className="kpi-grid">
+                        {kpis.map(({ id, label, value, badge, sub, tone, icon: Icon }) => (
+                          <div key={id} className={`kpi-card card-surface tone-${tone}`}>
+                            <div className="kpi-header-row">
+                              <span className="kpi-icon-box">
+                                <Icon size={20} strokeWidth={2.1} />
+                              </span>
+                              <span className="kpi-badge">{badge}</span>
                             </div>
-                          ))
-                        )}
-                      </div>
-                      <button type="button" className="outline-btn w-full mt-2" onClick={() => navigate('/quality')}>
-                        فتح تقرير الجودة الكامل <ArrowLeft size={14} />
-                      </button>
-                    </div>
-
-                    {isSystemAdmin && (
-                      <div className="card-surface activity-card">
-                        <div className="section-head">
-                          <div>
-                            <h2><Activity size={18} /> سجل العمليات الأخير</h2>
-                            <span>أحدث الإجراءات والتدقيق (خاص بمدير النظام)</span>
+                            <div className="kpi-label-text">{label}</div>
+                            <strong className="kpi-main-val">{value}</strong>
+                            <div className="kpi-footer-note">{sub}</div>
                           </div>
-                          <button type="button" className="text-link-btn" onClick={() => navigate('/audit')}>
-                            عرض السجل <ArrowLeft size={13} />
+                        ))}
+                      </div>
+
+                      <div className="content-grid">
+                        <div className="card-surface analytics-card">
+                          <div className="section-head chart-section-head">
+                            <div>
+                              <h2><ChartNoAxesCombined size={19} /> التوزيع الزمني وحركة التوريد والصرف</h2>
+                              <span>تحليل حركة الوارد والمنصرف المالي والكمي عبر الفترات المسجلة</span>
+                            </div>
+                            <div className="chart-metric-switch">
+                              <button
+                                type="button"
+                                className={`switch-btn ${chartMetric === 'value' ? 'active' : ''}`}
+                                onClick={() => setChartMetric('value')}
+                              >
+                                القيمة المالية ({settings.currency})
+                              </button>
+                              <button
+                                type="button"
+                                className={`switch-btn ${chartMetric === 'qty' ? 'active' : ''}`}
+                                onClick={() => setChartMetric('qty')}
+                              >
+                                كميات الوحدات
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="chart-canvas-wrap">
+                            <div className="chart-bars-area" aria-label="مخطط حركة المخزن">
+                              {monthlyStats.map((item) => {
+                                const valIn = chartMetric === 'value' ? item.inValue : item.inQty
+                                const valOut = chartMetric === 'value' ? item.outValue : item.outQty
+                                const heightIn = Math.max(12, Math.round((valIn / maxChartVal) * 100))
+                                const heightOut = Math.max(10, Math.round((valOut / maxChartVal) * 100))
+                                const isHovered = hoveredMonthKey === item.key
+
+                                return (
+                                  <div
+                                    key={item.key}
+                                    className={`chart-bar-group ${isHovered ? 'hovered' : ''}`}
+                                    onMouseEnter={() => setHoveredMonthKey(item.key)}
+                                    onMouseLeave={() => setHoveredMonthKey(null)}
+                                  >
+                                    {isHovered && (
+                                      <div className="chart-tooltip">
+                                        <div className="tooltip-title">{item.label}</div>
+                                        <div className="tooltip-row in">
+                                          <span>الوارد:</span>
+                                          <strong>{chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : `${item.inQty.toLocaleString('ar-EG')} وحدة`}</strong>
+                                        </div>
+                                        <div className="tooltip-row out">
+                                          <span>المنصرف:</span>
+                                          <strong>{chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : `${item.outQty.toLocaleString('ar-EG')} وحدة`}</strong>
+                                        </div>
+                                        <div className="tooltip-row info">
+                                          <span>الحركات:</span>
+                                          <span>{item.count} حركة مسجلة</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="bars-pair">
+                                      <div
+                                        className="bar bar-received"
+                                        style={{ height: `${heightIn}%` }}
+                                        title={`وارد: ${chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : item.inQty}`}
+                                      />
+                                      <div
+                                        className="bar bar-issued"
+                                        style={{ height: `${heightOut}%` }}
+                                        title={`منصرف: ${chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : item.outQty}`}
+                                      />
+                                    </div>
+                                    <span className="month-axis-label">{item.label}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="chart-legend-footer">
+                            <div className="legend-chip in">
+                              <span className="legend-dot in-dot" />
+                              <span>الوارد: {chartMetric === 'value' ? formatCurrency(summary.total_value, settings.currency) : `${summary.qty_in.toLocaleString('ar-EG')} وحدة`}</span>
+                            </div>
+                            <div className="legend-chip out">
+                              <span className="legend-dot out-dot" />
+                              <span>المنصرف: {chartMetric === 'value' ? formatCurrency(summary.issued_value, settings.currency) : `${summary.qty_out.toLocaleString('ar-EG')} وحدة`}</span>
+                            </div>
+                            <div className="legend-chip bal">
+                              <span className="legend-dot bal-dot" />
+                              <span>المتبقي: {chartMetric === 'value' ? formatCurrency(summary.remaining_value, settings.currency) : `${netStockUnits.toLocaleString('ar-EG')} وحدة`}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Custody View */}
+                  {(dashboardAnalyticsTab === 'all' || dashboardAnalyticsTab === 'custody') && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <Building2 size={19} className="text-accent" />
+                          <h3 className="m-0 text-lg font-bold text-ink">
+                            إحصائيات وتحليلات عهد وأصول كليات المؤسسة (8 كليات)
+                          </h3>
+                        </div>
+                        <button
+                          type="button"
+                          className="secondary-btn btn-sm"
+                          onClick={() => navigate('/reports')}
+                        >
+                          <FileSpreadsheet size={14} /> الانتقال لمركز التقارير
+                        </button>
+                      </div>
+
+                      <CustodyAnalyticsDashboard
+                        items={custodyItems}
+                        currency={settings.currency}
+                        onSelectWarehouse={(whId) => navigate(`/custody?warehouse=${whId}`)}
+                        onExportAllExcel={() => navigate('/reports')}
+                      />
+                    </div>
+                  )}
+
+                  {/* Recent Table in Unified View */}
+                  {dashboardAnalyticsTab !== 'procurement' && (
+                    <div className="lower-grid">
+                      <div className="card-surface table-card">
+                        <div className="section-head table-section-head">
+                          <div>
+                            <h2><ClipboardList size={18} /> أحدث حركات المستودع</h2>
+                            <span>متابعة فورية لحركات الإضافة والصرف</span>
+                          </div>
+                          <div className="table-filter-pills">
+                            <button
+                              type="button"
+                              className={`filter-tab ${tableFilter === 'all' ? 'active' : ''}`}
+                              onClick={() => setTableFilter('all')}
+                            >
+                              الكل ({movements.length})
+                            </button>
+                            <button
+                              type="button"
+                              className={`filter-tab ${tableFilter === 'full' ? 'active' : ''}`}
+                              onClick={() => setTableFilter('full')}
+                            >
+                              مكتمل ({completedMovements})
+                            </button>
+                            <button
+                              type="button"
+                              className={`filter-tab ${tableFilter === 'part' ? 'active' : ''}`}
+                              onClick={() => setTableFilter('part')}
+                            >
+                              جزئي ({partialMovements})
+                            </button>
+                            <button
+                              type="button"
+                              className={`filter-tab ${tableFilter === 'pending' ? 'active' : ''}`}
+                              onClick={() => setTableFilter('pending')}
+                            >
+                              معلق ({pendingMovements})
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="table-scroll-container">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>الصنف والمصدر</th>
+                                <th>المستلم</th>
+                                <th>الكميات (وارد / منصرف)</th>
+                                <th>الحالة</th>
+                                <th>القيمة</th>
+                                <th className="actions-header">الإجراءات</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredRecentMovements.length === 0 ? (
+                                <tr>
+                                  <td className="table-empty" colSpan={6}>لا توجد حركات مسجلة ضمن هذا التصنيف.</td>
+                                </tr>
+                              ) : (
+                                filteredRecentMovements.map((movement, idx) => {
+                                  const derived = deriveMovement(movement, idx)
+                                  const value = derived.total ?? 0
+                                  const status = derived.status === 'full' ? 'مكتمل'
+                                    : derived.status === 'part' ? 'جزئي'
+                                      : derived.status === 'over' ? 'تجاوز'
+                                        : 'معلق'
+
+                                  return (
+                                    <tr key={movement.id || idx}>
+                                      <td>
+                                        <div className="cell-item-name">{movement.item}</div>
+                                        <small className="cell-sub">{movement.from ? `المورد: ${movement.from}` : 'بدون مورد'}</small>
+                                      </td>
+                                      <td>
+                                        <span className="recipient-badge">{movement.to || 'غير محدد'}</span>
+                                      </td>
+                                      <td className="quantity-cell">
+                                        <span className="qty-in-tag">+{movement.qin}</span>
+                                        <span className="qty-sep">/</span>
+                                        <span className="qty-out-tag">-{movement.qout}</span>
+                                      </td>
+                                      <td>
+                                        <span className={`status-pill ${status === 'مكتمل' ? 'ok' : status === 'جزئي' ? 'warn' : 'info'}`}>
+                                          {status}
+                                        </span>
+                                      </td>
+                                      <td className="table-value-cell">
+                                        <strong>{formatCurrency(value, settings.currency)}</strong>
+                                      </td>
+                                      <td className="actions-cell">
+                                        {canEdit ? (
+                                          <div className="action-buttons-wrap">
+                                            <button
+                                              type="button"
+                                              className="table-action-btn edit-action-btn"
+                                              onClick={() => setEditingMovement(movement)}
+                                              title="تعديل الحركة"
+                                              aria-label={`تعديل حركة ${movement.item}`}
+                                            >
+                                              <Pencil size={14} />
+                                              <span>تعديل</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="table-action-btn delete-action-btn"
+                                              onClick={() => setDeletingMovement(movement)}
+                                              title="حذف الحركة"
+                                              aria-label={`حذف حركة ${movement.item}`}
+                                            >
+                                              <Trash2 size={14} />
+                                              <span>حذف</span>
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <span className="read-only-badge" title="صلاحية قراءة وعرض فقط">
+                                            <Eye size={13} /> عرض فقط
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  )
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="table-card-footer">
+                          <button type="button" className="text-link-btn" onClick={() => navigate('/movements')}>
+                            عرض كافة الحركات في السجل الكامل ({movements.length.toLocaleString('ar-EG')} حركة) <ArrowLeft size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="stack-column">
+                        <div className="card-surface info-card">
+                          <div className="section-head">
+                            <div>
+                              <h2><ShieldAlert size={18} /> جودة وصحة البيانات</h2>
+                              <span>فحص دوري لسلامة السجلات والأذونات</span>
+                            </div>
+                            <span className="score-pill">{qualityHealthScore}% سليم</span>
+                          </div>
+
+                          <div className="quality-list">
+                            {qualityCards.length === 0 ? (
+                              <div className="quality-empty">
+                                <CheckCircle2 size={24} className="ok-icon" />
+                                <span>كافة البيانات مكتملة وخالية من الملاحظات!</span>
+                              </div>
+                            ) : (
+                              qualityCards.map(({ rule, count, level, text }) => (
+                                <div key={rule} className={`quality-item ${level}`}>
+                                  <span className="quality-text">{text}</span>
+                                  <strong className="quality-badge">{count}</strong>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <button type="button" className="outline-btn w-full mt-2" onClick={() => navigate('/quality')}>
+                            فتح تقرير الجودة الكامل <ArrowLeft size={14} />
                           </button>
                         </div>
 
-                        <ul className="activity-list">
-                          {auditEvents.length > 0 ? (
-                            auditEvents.slice(0, 4).map((event) => (
-                              <li key={event.id} className="activity-item info">
-                                <div className="dot" />
-                                <div className="activity-details">
-                                  <strong>{event.action}</strong>
-                                  <div className="activity-meta">
-                                    <span>{event.user_email || 'مستخدم النظام'}</span>
-                                    <span>•</span>
-                                    <small>{new Date(event.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</small>
-                                  </div>
-                                </div>
-                              </li>
-                            ))
-                          ) : (
-                            <li className="activity-empty-state">
-                              <History size={24} className="opacity-50 mb-1" />
-                              <div>لا توجد عمليات مسجلة حديثاً في سجل التدقيق.</div>
-                            </li>
-                          )}
-                        </ul>
+                        {isSystemAdmin && (
+                          <div className="card-surface activity-card">
+                            <div className="section-head">
+                              <div>
+                                <h2><Activity size={18} /> سجل العمليات الأخير</h2>
+                                <span>أحدث الإجراءات والتدقيق (خاص بمدير النظام)</span>
+                              </div>
+                              <button type="button" className="text-link-btn" onClick={() => navigate('/audit')}>
+                                عرض السجل <ArrowLeft size={13} />
+                              </button>
+                            </div>
+
+                            <ul className="activity-list">
+                              {auditEvents.length > 0 ? (
+                                auditEvents.slice(0, 4).map((event) => (
+                                  <li key={event.id} className="activity-item info">
+                                    <div className="dot" />
+                                    <div className="activity-details">
+                                      <strong>{event.action}</strong>
+                                      <div className="activity-meta">
+                                        <span>{event.user_email || 'مستخدم النظام'}</span>
+                                        <span>•</span>
+                                        <small>{new Date(event.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</small>
+                                      </div>
+                                    </div>
+                                  </li>
+                                ))
+                              ) : (
+                                <li className="activity-empty-state">
+                                  <History size={24} className="opacity-50 mb-1" />
+                                  <div>لا توجد عمليات مسجلة حديثاً في سجل التدقيق.</div>
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </section>
+                    </div>
+                  )}
+                </section>
+              )
             }
           />
 

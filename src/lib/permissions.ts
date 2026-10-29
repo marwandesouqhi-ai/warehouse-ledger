@@ -84,7 +84,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/':                     ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
-  '/purchases':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
+  '/purchases':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/requests':     ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/requests/new': ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/suppliers':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
@@ -92,9 +92,9 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/purchases/contracts':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/contracts':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/analytics':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
-  '/requests':               ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/requests':               ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/notifications':          ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
-  '/analytics':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/analytics':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/asset-history':          ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/financial-reports':      ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin', 'editor'],
   '/budget':                 ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin'],
@@ -107,7 +107,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/settings':             ['system_admin'],
   '/telegram-bot':         ['system_admin'],
   '/chatbot-admin':        ['system_admin'],
-  '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
+  '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
 }
 
 // ─── الدوال الأساسية ──────────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ export function canViewPage(
     case 'purchases':
     case 'suppliers':
     case 'quotes':
-      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'].includes(role)
+      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
     case 'custody':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'reports':
@@ -316,8 +316,10 @@ export function canViewPage(
     case 'contracts':
       return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
     case 'requests':
-    case 'notifications':
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
     case 'analytics':
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
+    case 'notifications':
       return true
     case 'asset_history':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)

@@ -6,6 +6,7 @@ import type { FixtureMovement } from '../lib/fixture'
 import { parseMovementRows } from '../lib/importRows'
 import { normalizeHeader } from '../lib/parse'
 import { canEditInventory } from '../lib/supabase'
+import { getDashboardScope } from '../lib/permissions'
 
 type ImportResult = { added: number; skipped: number }
 
@@ -34,6 +35,7 @@ function normalizeExcelDates(rows: Array<Record<string, unknown>>, XLSX: typeof 
 
 export default function ImportPage({ onImport, session }: ImportPageProps) {
     const canEdit = canEditInventory(session)
+    const scope = getDashboardScope(session)
     const [preview, setPreview] = useState<FixtureMovement[]>([])
     const [fileName, setFileName] = useState('')
     const [error, setError] = useState('')
@@ -117,7 +119,29 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
     async function handleDownloadTemplate() {
         try {
             const XLSX = await import('xlsx')
-            const sampleRows = [
+            const isPurchases = scope === 'purchases_only'
+            const sampleRows = isPurchases ? [
+                {
+                    'الصنف': 'أجهزة حاسب آلي مكتبي Lenovo Core i7',
+                    'التاريخ': '2026-10-11',
+                    'المورد': 'شركة تكنولوجيا المعلومات المتقدمة',
+                    'المستلم': 'المخزن الرئيسي',
+                    'الوارد': 25,
+                    'السعر': 14500,
+                    'رقم الفاتورة': 'INV-2026-901',
+                    'ملاحظات': 'توريد أجهزة لمعامل الحاسب',
+                },
+                {
+                    'الصنف': 'طابعات ليزر شبكية HP LaserJet',
+                    'التاريخ': '2026-10-10',
+                    'المورد': 'شركة النيل للحلول المكتبية',
+                    'المستلم': 'المخزن الرئيسي',
+                    'الوارد': 10,
+                    'السعر': 8900,
+                    'رقم الفاتورة': 'INV-2026-902',
+                    'ملاحظات': 'فاتورة شراء معتمدة ومسددة',
+                },
+            ] : [
                 {
                     'الصنف': 'أجهزة حاسب آلي مكتبي Lenovo Core i7',
                     'التاريخ': '2026-10-11',
@@ -144,25 +168,14 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
                     'تاريخ الصرف': '2026-10-10',
                     'ملاحظات': 'صرف عهدة لمعامل الكلية',
                 },
-                {
-                    'الصنف': 'طابعات ليزر شبكية HP LaserJet',
-                    'التاريخ': '2026-10-09',
-                    'المورد': 'شركة النيل للحلول المكتبية',
-                    'المستلم': 'إدارة الشؤون المالية',
-                    'الوارد': 5,
-                    'المنصرف': 2,
-                    'السعر': 8900,
-                    'رقم الفاتورة': 'INV-5542',
-                    'رقم الاذن': 'PRM-112',
-                    'تاريخ الصرف': '2026-10-09',
-                    'ملاحظات': 'توريد وصرف فوري للقطاع المالي',
-                },
             ]
 
             const worksheet = XLSX.utils.json_to_sheet(sampleRows)
             const workbook = XLSX.utils.book_new()
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'حركات المخزن')
-            XLSX.writeFile(workbook, 'نموذج_استيراد_حركات_المخزن.xlsx')
+            const sheetName = isPurchases ? 'فواتير الشراء' : 'حركات المخزن'
+            const fileName = isPurchases ? 'نموذج_استيراد_فواتير_المشتريات.xlsx' : 'نموذج_استيراد_حركات_المخزن.xlsx'
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
+            XLSX.writeFile(workbook, fileName)
         } catch (err) {
             console.error('Failed to download template:', err)
         }
@@ -173,9 +186,9 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
             <header className="page-intro">
                 <div className="page-intro-icon"><FileSpreadsheet size={22} /></div>
                 <div>
-                    <p className="eyebrow">إدارة البيانات</p>
-                    <h2>استيراد الحركات</h2>
-                    <p>ارفع ملف Excel، راجع معاينة الصفوف، ثم أضفها إلى السجل الحالي.</p>
+                    <p className="eyebrow">{scope === 'purchases_only' ? 'إدارة المشتريات والتوريدات' : scope === 'warehouse_only' ? 'إدارة المخازن والتشغيل' : 'إدارة البيانات'}</p>
+                    <h2>{scope === 'purchases_only' ? 'استيراد فواتير وتوريدات الشراء من Excel' : scope === 'warehouse_only' ? 'استيراد حركات وأرصدة المخزن من Excel' : 'استيراد الحركات وفواتير الشراء من Excel'}</h2>
+                    <p>{scope === 'purchases_only' ? 'ارفع ملف Excel بفواتير المشتريات وبيانات الموردين، راجع المعاينة، ثم أضفها إلى السجل.' : 'ارفع ملف Excel، راجع معاينة الصفوف، ثم أضفها إلى السجل الحالي.'}</p>
                 </div>
             </header>
 

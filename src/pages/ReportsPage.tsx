@@ -17,6 +17,10 @@ import {
   CheckCircle2,
   Calculator,
   ClipboardCheck,
+  ShoppingCart,
+  Receipt,
+  Sparkles,
+  FileText,
 } from 'lucide-react'
 
 import {
@@ -29,6 +33,8 @@ import {
   type WarehouseDefinition,
 } from '../lib/custody'
 import type { FixtureMovement } from '../lib/fixture'
+import { getDashboardScope } from '../lib/permissions'
+import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
 import { AnimatePresence } from 'motion/react'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
@@ -57,12 +63,90 @@ export default function ReportsPage({
   movements = [],
   currency: propCurrency,
   settings: propSettings,
-  session: _session,
+  session,
   onExportMovements,
 }: ReportsPageProps) {
   const navigate = useNavigate()
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
+  const scope = getDashboardScope(session)
+  const [reportsDepartment, setReportsDepartment] = useState<'warehouse' | 'procurement'>(
+    scope === 'purchases_only' ? 'procurement' : 'warehouse'
+  )
+  const [searchTerm, setSearchTerm] = useState('')
+
+  // Procurement specific calculations
+  const purchaseMovements = useMemo(() => {
+    return movements.filter((m) => (Number(m.qin) || 0) > 0)
+  }, [movements])
+
+  const procurementSuppliers = useMemo(() => {
+    return extractSuppliersFromMovements()
+  }, [])
+
+  const procurementStats = useMemo(() => {
+    let totalSpend = 0
+    for (const m of purchaseMovements) {
+      totalSpend += (Number(m.qin) || 0) * (Number(m.price) || 0)
+    }
+    const avgInvoice = purchaseMovements.length > 0 ? totalSpend / purchaseMovements.length : 0
+    return {
+      totalSpend,
+      count: purchaseMovements.length,
+      suppliersCount: procurementSuppliers.length,
+      avgInvoice,
+    }
+  }, [purchaseMovements, procurementSuppliers])
+
+  const filteredPurchases = useMemo(() => {
+    if (!searchTerm.trim()) return purchaseMovements
+    const q = searchTerm.toLowerCase().trim()
+    return purchaseMovements.filter((m) =>
+      (m.inv && String(m.inv).toLowerCase().includes(q)) ||
+      (m.from && String(m.from).toLowerCase().includes(q)) ||
+      (m.item && String(m.item).toLowerCase().includes(q)) ||
+      (m.date && String(m.date).toLowerCase().includes(q))
+    )
+  }, [purchaseMovements, searchTerm])
+
+  async function exportProcurementInvoicesExcel() {
+    const XLSX = await import('xlsx')
+    const rows = purchaseMovements.map((m, idx) => ({
+      'م': idx + 1,
+      'تاريخ التوريد': m.date || '—',
+      'رقم الفاتورة': m.inv || '—',
+      'المورد / الشركة': m.from || '—',
+      'الصنف': m.item || '—',
+      'الكمية الواردة': Number(m.qin) || 0,
+      'سعر الوحدة': Number(m.price) || 0,
+      'القيمة الإجمالية': (Number(m.qin) || 0) * (Number(m.price) || 0),
+      'ملاحظات': m.notes || '',
+    }))
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(rows)
+    XLSX.utils.book_append_sheet(wb, ws, 'فواتير وتوريدات المشتريات')
+    XLSX.writeFile(wb, `سجل_فواتير_المشتريات_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  async function exportSuppliersStatementExcel() {
+    const XLSX = await import('xlsx')
+    const rows = procurementSuppliers.map((s, idx) => ({
+      'م': idx + 1,
+      'اسم المورد / الشركة': s.name,
+      'تصنيف التوريد': s.category || 'عام',
+      'فواتير الشراء': s.invoices_count,
+      'أوامر الشراء': s.po_count,
+      'إجمالي الإنفاق المالي': s.total_spend,
+      'حالة الاعتماد': s.status === 'active' ? 'معتمد نشط' : s.status === 'under_review' ? 'تحت المراجعة' : 'معلق',
+      'مسؤول الاتصال': s.contact_name || '—',
+      'رقم الهاتف': s.phone || '—',
+      'السجل التجاري': s.commercial_register || '—',
+    }))
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(rows)
+    XLSX.utils.book_append_sheet(wb, ws, 'كشف الموردين المعتمدين')
+    XLSX.writeFile(wb, `كشف_الموردين_المعتمدين_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   const [items] = useState<CustodyItem[]>(loadCustodyItems)
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
@@ -72,7 +156,6 @@ export default function ReportsPage({
   const [inventoryModalWarehouse, setInventoryModalWarehouse] = useState<WarehouseDefinition | null>(null)
   const [permitInitialItems, setPermitInitialItems] = useState<CustodyItem[]>([])
   const [permitTargetWarehouseId, setPermitTargetWarehouseId] = useState<string>('fci')
-  const [searchTerm, setSearchTerm] = useState('')
 
   // Statistics per warehouse
   const warehouseReports = useMemo(() => {
@@ -126,6 +209,285 @@ export default function ReportsPage({
 
   return (
     <section className="reports-module content-area">
+      {/* Scope Switcher for Full Admins */}
+      {scope === 'full' && (
+        <div className="card-surface p-3 mb-4 no-print flex gap-3 flex-wrap items-center rounded-xl border border-divider">
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-accent" />
+            <strong className="font-sm text-ink">القسم المستهدف للتقارير الرسمية:</strong>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              className={`secondary-btn ${reportsDepartment === 'warehouse' ? 'active' : ''}`}
+              onClick={() => setReportsDepartment('warehouse')}
+            >
+              <Building2 size={16} /> تقارير وسجلات المخازن والعهدة (8 كليات)
+            </button>
+            <button
+              type="button"
+              className={`secondary-btn ${reportsDepartment === 'procurement' ? 'active' : ''}`}
+              onClick={() => setReportsDepartment('procurement')}
+            >
+              <ShoppingCart size={16} /> تقارير ومستندات إدارة المشتريات والتوريدات
+            </button>
+          </div>
+        </div>
+      )}
+
+      {reportsDepartment === 'procurement' ? (
+        /* ══════════════════════════════════════════════════════════════════ */
+        /*                  مركز تقارير إدارة المشتريات الرسمية             */
+        /* ══════════════════════════════════════════════════════════════════ */
+        <div className="procurement-reports-view">
+          {/* 1. Header Card */}
+          <div className="card-surface reports-header-card no-print">
+            <div className="reports-header-layout">
+              <div>
+                <div className="reports-badge-pill">
+                  <ShoppingCart size={15} />
+                  <span>إدارة المشتريات والتوريدات • المركز الرسمي للتقارير</span>
+                </div>
+                <h2 className="reports-main-title">
+                  تقارير ومستندات وفواتير المشتريات الرسمية
+                </h2>
+                <p className="reports-header-desc">
+                  منصة مركزية لإصدار وتصدير تقارير فواتير الشراء، كشوف حسابات الموردين المعتمدين، تقارير عروض الأسعار التنافسية، وسجل عقود التوريد لجامعة الزقازيق الأهلية.
+                </p>
+              </div>
+
+              <div className="reports-header-actions">
+                <button
+                  type="button"
+                  className="primary-btn reports-primary-btn"
+                  onClick={() => void exportProcurementInvoicesExcel()}
+                  title="تصدير كشف شامل لجميع فواتير الشراء المسجلة Excel"
+                >
+                  <Download size={17} />
+                  <span>تصدير فواتير الشراء (Excel)</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-btn reports-secondary-btn"
+                  onClick={() => void exportSuppliersStatementExcel()}
+                  title="تصدير كشف حسابات ومستحقات الموردين Excel"
+                >
+                  <Building2 size={17} className="text-accent" />
+                  <span>كشف الموردين والشركات</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-btn reports-secondary-btn"
+                  onClick={() => window.print()}
+                  title="طباعة تقرير المشتريات الحالي"
+                >
+                  <Printer size={17} />
+                  <span>طباعة تقرير المشتريات</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. 4 Procurement Report Category Cards */}
+          <div className="reports-category-grid no-print">
+            {/* Card 1: Purchases Invoices */}
+            <div className="card-surface reports-cat-card">
+              <div>
+                <div className="reports-cat-icon accent">
+                  <Receipt size={22} />
+                </div>
+                <h3 className="reports-cat-title">
+                  سجل فواتير وتوريدات الشراء
+                </h3>
+                <p className="reports-cat-desc">
+                  بيان رسمي بكافة فواتير الشراء والتوريد المسجلة ({purchaseMovements.length} فاتورة) بإجمالي إنفاق {formatCurrency(procurementStats.totalSpend, currency)}.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-btn reports-cat-btn"
+                onClick={() => void exportProcurementInvoicesExcel()}
+              >
+                <Download size={15} /> تصدير فواتير الشراء (Excel)
+              </button>
+            </div>
+
+            {/* Card 2: Suppliers Statement */}
+            <div className="card-surface reports-cat-card">
+              <div>
+                <div className="reports-cat-icon teal">
+                  <Building2 size={22} />
+                </div>
+                <h3 className="reports-cat-title">
+                  كشف حسابات الموردين والشركات
+                </h3>
+                <p className="reports-cat-desc">
+                  حصر شامل بجميع الموردين والشركات المعتمدة ({procurementStats.suppliersCount} مورد)، حجم التعامل المالي، وأرقام التواصل.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-btn reports-cat-btn"
+                onClick={() => void exportSuppliersStatementExcel()}
+              >
+                <Download size={15} /> تصدير كشف الموردين (Excel)
+              </button>
+            </div>
+
+            {/* Card 3: Quotes & Purchase Orders */}
+            <div className="card-surface reports-cat-card">
+              <div>
+                <div className="reports-cat-icon indigo">
+                  <FileSpreadsheet size={22} />
+                </div>
+                <h3 className="reports-cat-title">
+                  تقرير عروض الأسعار والمنافسين
+                </h3>
+                <p className="reports-cat-desc">
+                  مقارنة العروض المالية والفنية المقدمة من الموردين لاختيار العرض الأنسب وإصدار أوامر الشراء المعتمدة.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-btn reports-cat-btn"
+                onClick={() => navigate('/purchases/quotes')}
+              >
+                <ExternalLink size={15} /> استعراض عروض الأسعار
+              </button>
+            </div>
+
+            {/* Card 4: Contracts Report */}
+            <div className="card-surface reports-cat-card">
+              <div>
+                <div className="reports-cat-icon amber">
+                  <FileText size={22} />
+                </div>
+                <h3 className="reports-cat-title">
+                  سجل عقود التوريد السارية
+                </h3>
+                <p className="reports-cat-desc">
+                  متابعة العقود المبرمة مع الموردين، مواعيد التجديد، نسب التنفيذ، وشروط الضمان والدفعات المستحقة.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-btn reports-cat-btn"
+                onClick={() => navigate('/purchases/contracts')}
+              >
+                <ExternalLink size={15} /> استعراض عقود الموردين
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Detailed Procurement Invoices Table */}
+          <div className="card-surface reports-wh-section no-print">
+            <div className="reports-wh-head">
+              <div>
+                <h3 className="reports-wh-title">
+                  بيان حركات وتوريدات فواتير الشراء الرسمية ({filteredPurchases.length} فاتورة)
+                </h3>
+                <span className="reports-wh-subtitle">
+                  كشف تدقيق تفصيلي لجميع فواتير المشتريات الصادرة من الموردين المعتمدين لجامعة الزقازيق الأهلية
+                </span>
+              </div>
+
+              <div className="reports-wh-search-wrap">
+                <div className="toolbar-search m-0">
+                  <Search size={15} />
+                  <input
+                    type="search"
+                    placeholder="ابحث برقم الفاتورة، المورد، أو الصنف..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="table-scroll-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>م</th>
+                    <th>تاريخ التوريد</th>
+                    <th>رقم الفاتورة</th>
+                    <th>المورد / الشركة</th>
+                    <th>الصنف المورد</th>
+                    <th>الكمية الواردة</th>
+                    <th>سعر الوحدة</th>
+                    <th>القيمة الإجمالية</th>
+                    <th>ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPurchases.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="table-empty">
+                        لا توجد فواتير شراء مطابقة لبيانات البحث.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPurchases.map((m, idx) => {
+                      const qty = Number(m.qin) || 0
+                      const price = Number(m.price) || 0
+                      const total = qty * price
+                      return (
+                        <tr key={m.id || idx}>
+                          <td>{idx + 1}</td>
+                          <td><code>{m.date || '—'}</code></td>
+                          <td><strong className="text-accent">{m.inv || '—'}</strong></td>
+                          <td>{m.from || 'مورد عام'}</td>
+                          <td className="font-semibold">{m.item}</td>
+                          <td><span className="qty-in-tag">+{qty}</span></td>
+                          <td>{formatCurrency(price, currency)}</td>
+                          <td className="table-value-cell font-bold">{formatCurrency(total, currency)}</td>
+                          <td className="text-muted font-sm">{m.notes || '—'}</td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Procurement Summary Strip */}
+            <div className="p-4 mt-3 bg-surface-subtle border border-divider rounded-lg flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <span className="text-xs text-muted block">إجمالي الإنفاق على المشتريات:</span>
+                  <strong className="text-lg text-ink font-bold">{formatCurrency(procurementStats.totalSpend, currency)}</strong>
+                </div>
+                <div className="border-r border-divider pr-4">
+                  <span className="text-xs text-muted block">عدد فواتير الشراء:</span>
+                  <strong className="text-lg text-ink font-bold">{procurementStats.count} فاتورة</strong>
+                </div>
+                <div className="border-r border-divider pr-4">
+                  <span className="text-xs text-muted block">الموردون المعتمدون:</span>
+                  <strong className="text-lg text-ink font-bold">{procurementStats.suppliersCount} مورد</strong>
+                </div>
+                <div className="border-r border-divider pr-4">
+                  <span className="text-xs text-muted block">متوسط قيمة الفاتورة:</span>
+                  <strong className="text-lg text-accent font-bold">{formatCurrency(procurementStats.avgInvoice, currency)}</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-btn btn-sm"
+                onClick={() => void exportProcurementInvoicesExcel()}
+              >
+                <Download size={14} /> تصدير Excel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ══════════════════════════════════════════════════════════════════ */
+        /*                  مركز تقارير وسجلات المخازن والعهدة الحكومية       */
+        /* ══════════════════════════════════════════════════════════════════ */
+        <div className="warehouse-reports-view">
       {/* 1. Header Card */}
       <div className="card-surface reports-header-card no-print">
         <div className="reports-header-layout">
@@ -756,6 +1118,8 @@ export default function ReportsPage({
           <span>مستند رسمي معتمد</span>
         </footer>
       </div>
+        </div>
+      )}
     </section>
   )
 }
