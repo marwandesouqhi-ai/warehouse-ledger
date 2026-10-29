@@ -89,13 +89,6 @@ function isValidEmail(email: string): boolean {
   return EMAIL_REGEX.test(email.trim())
 }
 
-// ─── External Email Sending Integration (Resend API) ──────────────────────────
-interface EmailSendResult {
-  success: boolean
-  accepted: boolean
-  error?: string
-}
-
 // ─── External Email Sending Integration (Gmail SMTP & Resend API) ─────────────
 interface EmailSendResult {
   success: boolean
