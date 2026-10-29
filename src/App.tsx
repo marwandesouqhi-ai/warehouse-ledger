@@ -441,22 +441,22 @@ function App() {
       { to: '/', label: 'الرئيسية (التحليلات)', mark: '', icon: LayoutDashboard },
     ]
     if (canViewPage(session, 'requests')) {
-      warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: 'معتمد ومعلق', icon: ClipboardList })
+      warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: '', icon: ClipboardList })
     }
     if (canViewPage(session, 'custody')) {
-      warehouseItems.push({ to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 })
+      warehouseItems.push({ to: '/custody', label: 'عهدة المخازن', mark: '', icon: Building2 })
     }
     if (canViewPage(session, 'asset_history')) {
-      warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: 'دورة الأصل', icon: History })
+      warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: '', icon: History })
     }
     if (canViewPage(session, 'reports')) {
-      warehouseItems.push({ to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet })
+      warehouseItems.push({ to: '/reports', label: 'التقارير الرسمية', mark: '', icon: FileSpreadsheet })
     }
     if (canViewPage(session, 'imports')) {
       warehouseItems.push({ to: '/imports', label: 'استيراد Excel', mark: '', icon: Upload })
     }
     if (canViewPage(session, 'quality')) {
-      warehouseItems.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues} تنبيه` : '', icon: ShieldAlert })
+      warehouseItems.push({ to: '/quality', label: 'فحص الجودة', mark: totalQualityIssues > 0 ? `${totalQualityIssues}` : '', icon: ShieldAlert })
     }
     sections.push({ id: 'warehouse', title: 'إدارة المخزن والتشغيل', items: warehouseItems })
 
@@ -473,13 +473,13 @@ function App() {
 
     const analyticsItems = []
     if (canViewPage(session, 'analytics')) {
-      analyticsItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: 'مؤشرات', icon: BarChart3 })
+      analyticsItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: '', icon: BarChart3 })
     }
     if (canViewPage(session, 'financial_reports')) {
-      analyticsItems.push({ to: '/financial-reports', label: 'التقارير المالية الدورية', mark: 'شهرية وفصلية', icon: FileSpreadsheet })
+      analyticsItems.push({ to: '/financial-reports', label: 'التقارير المالية الدورية', mark: '', icon: FileSpreadsheet })
     }
     if (canViewPage(session, 'budget')) {
-      analyticsItems.push({ to: '/budget', label: 'الميزانية والتخطيط', mark: 'المخصصات', icon: CircleDollarSign })
+      analyticsItems.push({ to: '/budget', label: 'الميزانية والتخطيط', mark: '', icon: CircleDollarSign })
     }
     if (analyticsItems.length > 0) {
       sections.push({ id: 'analytics_and_finance', title: 'التحليلات والموازنة', items: analyticsItems })
@@ -493,7 +493,7 @@ function App() {
       adminItems.push({ to: '/users', label: 'المستخدمون والصلاحيات', mark: '', icon: UsersRound })
     }
     if (canViewPage(session, 'telegram_bot')) {
-      adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: 'تفاعلي', icon: Send })
+      adminItems.push({ to: '/telegram-bot', label: 'إدارة بوت تيليجرام', mark: '', icon: Send })
     }
     if (canViewPage(session, 'settings')) {
       adminItems.push({ to: '/settings', label: 'إعدادات المؤسسة', mark: '', icon: Settings2 })

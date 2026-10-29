@@ -1,6 +1,6 @@
 .app-shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 295px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--bg);
 }
@@ -1009,7 +1009,7 @@
 }
 
 .app-shell {
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 295px minmax(0, 1fr);
   background: var(--bg);
 }
 
@@ -2146,7 +2146,7 @@
 
 @media (max-width: 1200px) {
   .app-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 280px minmax(0, 1fr);
   }
 
   .main-panel {
@@ -3342,7 +3342,19 @@
 
 /* Sidebar & Page Navigation - Enhanced Size & Typography */
 .app-shell {
-  grid-template-columns: 275px minmax(0, 1fr) !important;
+  grid-template-columns: 295px minmax(0, 1fr) !important;
+}
+
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 .sidebar {
@@ -3353,12 +3365,13 @@
   overflow-y: auto !important;
   overflow-x: hidden !important;
   z-index: 100 !important;
-  padding: 24px 16px !important;
+  padding: 18px 12px !important;
   background: var(--surface);
   border-inline-end: 1px solid var(--line);
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
+  box-sizing: border-box !important;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -3375,8 +3388,8 @@
 }
 
 .brand-wrap {
-  padding: 10px 10px 22px !important;
-  margin-bottom: 20px !important;
+  padding: 10px 8px 18px !important;
+  margin-bottom: 14px !important;
 }
 
 .brand-title {
@@ -3387,57 +3400,75 @@
 .nav {
   display: flex !important;
   flex-direction: column !important;
-  gap: 8px !important;
+  gap: 4px !important;
   padding: 0 !important;
   overflow: visible !important;
+}
+
+.nav-section {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  margin-bottom: 8px !important;
+}
+
+.nav-section-title {
+  padding: 8px 10px 4px !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  color: var(--muted) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
 }
 
 .nav-item {
   display: flex !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 13px !important;
-  min-height: 52px !important;
-  padding: 12px 16px !important;
+  gap: 11px !important;
+  min-height: 44px !important;
+  padding: 9px 12px !important;
   border-radius: var(--r-md) !important;
   color: var(--muted) !important;
   text-decoration: none !important;
-  font-size: var(--text-md) !important;
+  font-size: 0.925rem !important;
   font-weight: 600 !important;
-  line-height: 1.4 !important;
+  line-height: 1.35 !important;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   position: relative !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
 }
 
 .nav-item svg {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  color: inherit;
+  flex-shrink: 0 !important;
+  width: 19px !important;
+  height: 19px !important;
+  color: inherit !important;
   transition: transform 0.2s ease;
 }
 
 .nav-item .nav-label {
   position: static !important;
-  width: auto !important;
-  height: auto !important;
-  overflow: visible !important;
-  clip: auto !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
   white-space: nowrap !important;
-  font-size: var(--text-md) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 0.925rem !important;
   font-weight: 600 !important;
   color: inherit !important;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.1px;
 }
 
 .nav-item:hover {
   background: var(--accent-wash) !important;
   color: var(--accent) !important;
-  transform: translateX(-3px);
+  transform: translateX(-2px);
 }
 
 .nav-item:hover svg {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .nav-item.active {
@@ -3455,9 +3486,9 @@
 .nav-item.active::before {
   content: '';
   position: absolute;
-  inset-block: 8px;
+  inset-block: 7px;
   inset-inline-start: 0;
-  width: 4px;
+  width: 3.5px;
   border-radius: var(--r-sm);
   background: var(--accent);
 }
@@ -3465,14 +3496,20 @@
 .nav-item small,
 .nav-item .nav-badge {
   margin-inline-start: auto !important;
-  font-size: var(--text-xs) !important;
-  font-weight: 600 !important;
-  padding: 3px 9px !important;
-  border-radius: var(--r-sm) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 2px 7px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: var(--r-pill) !important;
   background: var(--warn-bg) !important;
   color: var(--warn) !important;
-  border: 1px solid rgba(184, 110, 0, 0.2);
+  border: 1px solid rgba(184, 110, 0, 0.25) !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
 }
 
 /* ========================================================
@@ -8483,7 +8520,7 @@
    Presentation only: all existing components inherit one consistent system. */
 @media screen {
   .app-shell {
-    grid-template-columns: 272px minmax(0, 1fr);
+    grid-template-columns: 295px minmax(0, 1fr);
     background: transparent;
   }
 
@@ -9019,7 +9056,7 @@
 
   @media (max-width: 1200px) {
     .app-shell {
-      grid-template-columns: 240px minmax(0, 1fr);
+      grid-template-columns: 280px minmax(0, 1fr);
     }
   }
 
