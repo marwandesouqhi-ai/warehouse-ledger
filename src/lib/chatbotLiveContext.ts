@@ -172,6 +172,12 @@ export function queryLiveItemAvailability(itemName: string): string | null {
   try {
     const custodyList = loadCustodyItems()
     const cleanSearch = itemName.trim().toLowerCase()
+    
+    // تجنب المطابقة إذا كان البحث عاماً جداً أو يخص المخازن عموماً
+    if (cleanSearch.includes('مخازن') || cleanSearch.includes('كليات') || cleanSearch.length < 2) {
+      return null
+    }
+
     const matches = custodyList.filter((i) =>
       i.name.toLowerCase().includes(cleanSearch)
     )
@@ -192,6 +198,42 @@ export function queryLiveItemAvailability(itemName: string): string | null {
     return reply
   } catch {
     return null
+  }
+}
+
+/**
+ * استعلام فوري فائق السرعة عن أرصدة المخازن والكليات الـ 8 من البيانات المحدثة
+ */
+export function queryLiveWarehouseBalances(): string {
+  try {
+    const custodyList = loadCustodyItems()
+    const totalUnits = custodyList.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)
+    const totalValue = custodyList.reduce((sum, i) => sum + (Number(i.value) || 0), 0)
+
+    let reply = `🏢 **أرصدة مخازن وكليات جامعة الزقازيق الأهلية (8 مخازن متزامنة لحظياً):**\n\n`
+
+    WAREHOUSES.forEach((w) => {
+      const items = custodyList.filter((i) => i.warehouseId === w.id)
+      const units = items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)
+      reply += `📍 **${w.name}** (${w.shortName}):\n`
+      reply += `   - عدد الأصناف: **${items.length} صنف** | إجمالي الرصيد: **${units.toLocaleString('ar-EG')} وحدة**\n`
+      if (items.length > 0) {
+        const sample = items.slice(0, 3).map((it) => `${it.name} (${it.quantity})`).join('، ')
+        reply += `   - أبرز العهد: ${sample}\n`
+      } else {
+        reply += `   - الرصيد الحالي: لا توجد أصناف مقيدة حالياً أو بانتظار التوريد.\n`
+      }
+      reply += `\n`
+    })
+
+    reply += `📊 **الإجمالي العام للجامعة:**\n`
+    reply += `- إجمالي الأصناف المسجلة: **${custodyList.length} صنف**\n`
+    reply += `- إجمالي وحدات العهدة: **${totalUnits.toLocaleString('ar-EG')} وحدة**\n`
+    reply += `- القيمة التقديرية الإجمالية: **${totalValue.toLocaleString('ar-EG')} جنيه مصري**`
+
+    return reply
+  } catch {
+    return 'تعذر قراءة أرصدة المخازن لحظياً، يُرجى المحاولة بعد قليل.'
   }
 }
 

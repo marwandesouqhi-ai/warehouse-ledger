@@ -12,7 +12,11 @@
 import { getLiveWarehouseContext, queryLiveItemAvailability } from './chatbotLiveContext'
 
 const GEMINI_LOCAL_STORAGE_KEY = 'znu_gemini_api_key_secure'
-const DEFAULT_MODEL = 'gemini-1.5-flash'
+const DEFAULT_MODEL = 'gemini-3-flash-preview'
+
+let cachedSystemPrompt: string | null = null
+let lastPromptCacheTime = 0
+const CACHE_TTL_MS = 60 * 1000 // كاش دقيقة واحدة لتسريع الاستجابة الفائقة
 
 /**
  * الحصول على مفتاح Gemini الحالي (من البيئة أولاً ثم من التخزين المحلي)
@@ -87,9 +91,14 @@ export function hasGeminiApiKey(): boolean {
 }
 
 /**
- * صياغة سياق التعليمات والبيانات الحية المباشرة لتمريرها للنموذج
+ * صياغة سياق التعليمات والبيانات الحية المباشرة لتمريرها للنموذج (مع كاش سريع)
  */
 async function buildSystemContextPrompt(): Promise<string> {
+  const now = Date.now()
+  if (cachedSystemPrompt && now - lastPromptCacheTime < CACHE_TTL_MS) {
+    return cachedSystemPrompt
+  }
+
   const ctx = await getLiveWarehouseContext()
 
   const warehousesSummary = ctx.warehouses
@@ -112,7 +121,7 @@ async function buildSystemContextPrompt(): Promise<string> {
     ? ctx.recentMovements.map((m) => `  * [${m.type === 'in' ? 'وارد' : 'منصرف'}] ${m.item} (${m.qty} وحدة) - الطرف: ${m.party} - التاريخ: ${m.date}`).join('\n')
     : '  * لا توجد حركات حديثة.'
 
-  return `أنت «المساعد الذكي الرسمي لمنظومة إدارة مخازن وتوريدات جامعة الزقازيق الأهلية (ZNU)».
+  cachedSystemPrompt = `أنت «المساعد الذكي الرسمي لمنظومة إدارة مخازن وتوريدات جامعة الزقازيق الأهلية (ZNU)».
 مهمتك مساعدة أمناء المخازن، مديري التوريدات، عمداء الكليات، ومسؤولي العهد في الجامعة.
 
 معلومات وبيانات المنظومة الحية المتزامنة لحظياً من قاعدة البيانات (Supabase & Ledger):
@@ -140,7 +149,7 @@ ${recentMovesSummary}
 ========================================================================
 
 قواعد وإرشادات الإجابة:
-1. أجب دائماً باللغة العربية الفصحى الواضحة والمهنية والودودة.
+1. أجب دائماً باللغة العربية الفصحى الواضحة والمهنية والودودة باختصار وتركيز.
 2. نسق الإجابات باستخدام Markdown (عناوين، نقاط، خط عريض للبيانات الهامة والأرقام).
 3. عند السؤال عن رصيد صنف أو مكانه، استشهد بالأرقام والمخازن المذكورة أعلاه بدقة.
 4. إذا سأل المستخدم عن إجراءات أو لوائح (صرف داخلي، تسوية جردية، فحص واستلام، مناقصات)، اشرح له الخطوات المعتمدة بالجامعة بالترتيب.
@@ -153,6 +162,9 @@ ${recentMovesSummary}
    - رابط صفحة فواتير الشراء: /purchases
    - رابط صفحة الدعم الفني: /support
 6. بيانات الدعم الفني الرسمية: هاتف/واتساب 01011488621، بريد: marwandesowky2@gmail.com.`
+
+  lastPromptCacheTime = now
+  return cachedSystemPrompt
 }
 
 /**
@@ -238,23 +250,35 @@ export async function askGeminiWithContext(
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: systemPrompt }],
+  // إعداد مهلة زمنية صارمة (3.5 ثانية) لضمان عدم تعليق الشات بوت أبداً
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 3500)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      contents: formattedContents,
-      generationConfig: {
-        temperature: 0.35,
-        maxOutputTokens: 1200,
-        topP: 0.95,
-      },
-    }),
-  })
+      signal: controller.signal,
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: formattedContents,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 800,
+          topP: 0.95,
+        },
+      }),
+    })
+  } catch (fetchErr) {
+    clearTimeout(timeoutId)
+    throw fetchErr
+  }
+  clearTimeout(timeoutId)
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}))

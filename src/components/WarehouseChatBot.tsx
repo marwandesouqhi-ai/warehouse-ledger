@@ -23,6 +23,7 @@ import { findBestKnowledgeAnswer } from '../lib/chatbotKnowledge'
 import {
   getLiveWarehouseContext,
   queryLiveItemAvailability,
+  queryLiveWarehouseBalances,
   type LiveWarehouseContext,
 } from '../lib/chatbotLiveContext'
 import {
@@ -138,13 +139,63 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
     setInputText('')
     setIsTyping(true)
 
-    // Build history for Gemini
+    // 1. فحص فوري وسريع للأسئلة المباشرة عن أرصدة المخازن الـ 8 من قاعدة البيانات (استجابة فورية بدون تأخير)
+    const normalizedQuery = text.toLowerCase()
+    const isWarehouseQuery =
+      (normalizedQuery.includes('مخازن') || normalizedQuery.includes('مخزن')) &&
+      (normalizedQuery.includes('كليات') || normalizedQuery.includes('رصيد') || normalizedQuery.includes('ارصد') || normalizedQuery.includes('أرصد') || normalizedQuery.includes('جامع'))
+
+    if (isWarehouseQuery) {
+      setTimeout(() => {
+        const liveReply = queryLiveWarehouseBalances()
+        const botMsg: Message = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: liveReply,
+          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          actionUrl: '/inventory-analytics',
+          actionLabel: 'الانتقال للتحليلات التفصيلية والجرد',
+          suggestedPrompts: [
+            'هل يوجد لابتوب أو أجهزة حاسب بالمخازن؟',
+            'ما هي طلبات الصرف المعلقة الآن؟',
+            'كيف أقدم طلب صرف داخلي؟',
+          ],
+        }
+        setMessages((prev) => [...prev, botMsg])
+        setIsTyping(false)
+      }, 200)
+      return
+    }
+
+    // 2. فحص فوري لتوافر صنف محدد في قاعدة البيانات الحية
+    const liveItemMatch = queryLiveItemAvailability(text)
+    if (liveItemMatch) {
+      setTimeout(() => {
+        const botMsg: Message = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: liveItemMatch,
+          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          actionUrl: '/movements',
+          actionLabel: 'معاينة حركة الوارد والمنصرف',
+          suggestedPrompts: [
+            'كيف أقدم طلب صرف داخلي؟',
+            'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
+            'ما هي طلبات الصرف المعلقة الآن؟',
+          ],
+        }
+        setMessages((prev) => [...prev, botMsg])
+        setIsTyping(false)
+      }, 200)
+      return
+    }
+
+    // 3. للاستفسارات العامة والذكية: استدعاء Gemini AI المتصل بقاعدة البيانات مع مهلة سريعة
     const historyForAi = messages.slice(-4).map((m) => ({
       role: m.sender === 'user' ? ('user' as const) : ('model' as const),
       text: m.text,
     }))
 
-    // Try Gemini if key is configured in secrets
     if (hasGeminiApiKey()) {
       try {
         const aiResponse = await askGeminiWithContext(text, historyForAi)
@@ -161,47 +212,32 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
         setIsTyping(false)
         return
       } catch (err) {
-        console.warn('Gemini request failed, falling back to local database engine:', err)
+        console.warn('Gemini timeout/error, fallback to local engine:', err)
       }
     }
 
-    // Local smart engine with live DB querying
+    // 4. المحرك المحلي الاحتياطي في حال عدم الرد أو انتهاء المهلة
     setTimeout(() => {
-      // 1. Direct item availability check in live database
-      const liveItemMatch = queryLiveItemAvailability(text)
-
+      const match = findBestKnowledgeAnswer(text)
       let reply = ''
       let actionUrl: string | undefined
       let actionLabel: string | undefined
       let suggestedPrompts: string[] | undefined
 
-      if (liveItemMatch) {
-        reply = liveItemMatch
-        actionUrl = '/movements'
-        actionLabel = 'معاينة حركة الوارد والمنصرف'
-        suggestedPrompts = [
-          'كيف أقدم طلب صرف داخلي؟',
-          'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
-          'ما هي طلبات الصرف المعلقة الآن؟',
-        ]
+      if (match.entry && match.confidence >= 4) {
+        reply = match.entry.answer
+        actionUrl = match.entry.actionUrl
+        actionLabel = match.entry.actionLabel
+        suggestedPrompts = match.entry.suggestedPrompts
       } else {
-        // 2. Knowledge base matching
-        const match = findBestKnowledgeAnswer(text)
-        if (match.entry && match.confidence >= 4) {
-          reply = match.entry.answer
-          actionUrl = match.entry.actionUrl
-          actionLabel = match.entry.actionLabel
-          suggestedPrompts = match.entry.suggestedPrompts
-        } else {
-          reply = `شكراً لاستفسارك يا ${userName}.\n\nلم أجد تطابقاً مباشراً لهذا السؤال في بنك المعرفة السريع.\n\n💡 **المقترحات المفيدة:**\n- يمكنك السؤال عن صنف محدد لمعرفة رصيده المتاح في المخازن الـ 8 فوراً (مثال: «هل يوجد لابتوب؟»).\n- أو الاستعلام عن لوائح الصرف، الجرد، الفحص، وفواتير التوريد.\n- للتواصل المباشر مع الدعم الفني: هاتف/واتساب \`01011488621\` أو إيميل \`marwandesowky2@gmail.com\`.`
-          actionUrl = '/support'
-          actionLabel = 'فتح تذكرة دعم فني مباشر'
-          suggestedPrompts = [
-            'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
-            'كيف أقدم طلب صرف داخلي؟',
-            'كيف أسجل فاتورة شراء جديدة؟',
-          ]
-        }
+        reply = `شكراً لاستفسارك يا ${userName}.\n\nلم أجد تطابقاً مباشراً لهذا السؤال في بنك المعرفة السريع.\n\n💡 **المقترحات المفيدة:**\n- يمكنك السؤال عن صنف محدد لمعرفة رصيده المتاح في المخازن الـ 8 فوراً (مثال: «هل يوجد لابتوب؟»).\n- أو الاستعلام عن لوائح الصرف، الجرد، الفحص، وفواتير التوريد.\n- للتواصل المباشر مع الدعم الفني: هاتف/واتساب \`01011488621\` أو إيميل \`marwandesowky2@gmail.com\`.`
+        actionUrl = '/support'
+        actionLabel = 'فتح تذكرة دعم فني مباشر'
+        suggestedPrompts = [
+          'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
+          'كيف أقدم طلب صرف داخلي؟',
+          'كيف أسجل فاتورة شراء جديدة؟',
+        ]
       }
 
       const botMsg: Message = {
@@ -216,7 +252,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
 
       setMessages((prev) => [...prev, botMsg])
       setIsTyping(false)
-    }, 400)
+    }, 200)
   }
 
   const handleResetConversation = () => {
