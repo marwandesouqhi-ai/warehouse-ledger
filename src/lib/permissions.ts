@@ -89,15 +89,22 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/purchases/requests/new': ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/suppliers':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/quotes':       ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/purchases/contracts':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/contracts':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/purchases/analytics':    ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
+  '/requests':               ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/notifications':          ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/analytics':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor', 'viewer'],
+  '/asset-history':          ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
+  '/financial-reports':      ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin', 'editor'],
+  '/budget':                 ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin'],
   '/custody':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
   '/reports':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'procurement_admin', 'procurement_employee', 'warehouse_staff', 'purchasing_staff', 'editor'],
   '/imports':              ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'],
   '/quality':              ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'],
-  '/audit':                ['system_admin'],   // يُفتح أيضاً بصلاحية view_audit
+  '/audit':                ['system_admin'],
   '/users':                ['system_admin'],
-  '/settings':             ['system_admin'],   // يُفتح أيضاً بصلاحية view_settings
-  // إعادة توجيه من الراوتس القديمة — يُعامل نفس /purchases
+  '/settings':             ['system_admin'],
   '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
 }
 
@@ -271,7 +278,7 @@ export function canViewPage(
   let session = sessionOrPage
   let page = pageOrSession as string
 
-  const knownPages = ['purchases', 'suppliers', 'quotes', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support']
+  const knownPages = ['purchases', 'suppliers', 'quotes', 'contracts', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support', 'requests', 'notifications', 'analytics', 'asset_history', 'financial_reports', 'budget']
   if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
     page = sessionOrPage
     session = pageOrSession
@@ -300,6 +307,17 @@ export function canViewPage(
       return role === 'system_admin'
     case 'settings':
       return role === 'system_admin'
+    case 'contracts':
+      return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
+    case 'requests':
+    case 'notifications':
+    case 'analytics':
+      return true
+    case 'asset_history':
+      return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
+    case 'financial_reports':
+    case 'budget':
+      return ['system_admin', 'admin', 'procurement_admin', 'warehouse_admin'].includes(role)
     case 'support':
       return true
     default:

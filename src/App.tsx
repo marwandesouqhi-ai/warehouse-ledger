@@ -4,6 +4,8 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import type { Session } from '@supabase/supabase-js'
 import {
   Activity,
+  Bell,
+  FileText,
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
@@ -95,6 +97,14 @@ import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 import SupportPage from './pages/SupportPage'
+import DisbursementRequestsPage from './pages/DisbursementRequestsPage'
+import NotificationsPage from './pages/NotificationsPage'
+import InventoryAnalyticsPage from './pages/InventoryAnalyticsPage'
+import ContractsPage from './pages/ContractsPage'
+import AssetHistoryPage from './pages/AssetHistoryPage'
+import FinancialReportsPage from './pages/FinancialReportsPage'
+import BudgetPage from './pages/BudgetPage'
+import WarehouseChatBot from './components/WarehouseChatBot'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
 import type { CustodyItem } from './lib/custody'
@@ -429,8 +439,14 @@ function App() {
     const warehouseItems = [
       { to: '/', label: 'الرئيسية (التحليلات)', mark: '', icon: LayoutDashboard },
     ]
+    if (canViewPage(session, 'requests')) {
+      warehouseItems.push({ to: '/requests', label: 'طلبات الصرف الداخلي', mark: 'معتمد ومعلق', icon: ClipboardList })
+    }
     if (canViewPage(session, 'custody')) {
       warehouseItems.push({ to: '/custody', label: 'عهدة المخازن', mark: '8 مخازن', icon: Building2 })
+    }
+    if (canViewPage(session, 'asset_history')) {
+      warehouseItems.push({ to: '/asset-history', label: 'سجل حركة الأصول', mark: 'دورة الأصل', icon: History })
     }
     if (canViewPage(session, 'reports')) {
       warehouseItems.push({ to: '/reports', label: 'التقارير الرسمية', mark: 'أذون وجرد', icon: FileSpreadsheet })
@@ -448,9 +464,24 @@ function App() {
       procurementItems.push({ to: '/purchases', label: 'فواتير وتوريدات الشراء', mark: '', icon: ShoppingCart })
       procurementItems.push({ to: '/purchases/suppliers', label: 'إدارة الموردين والشركات', mark: '', icon: Building2 })
       procurementItems.push({ to: '/purchases/quotes', label: 'عروض الأسعار وأوامر الشراء', mark: '', icon: FileSpreadsheet })
+      procurementItems.push({ to: '/purchases/contracts', label: 'عقود الموردين', mark: '', icon: FileText })
     }
     if (procurementItems.length > 0) {
       sections.push({ id: 'procurement', title: 'المشتريات والتوريدات', items: procurementItems })
+    }
+
+    const analyticsItems = []
+    if (canViewPage(session, 'analytics')) {
+      analyticsItems.push({ to: '/analytics', label: 'تحليلات المخزون والدوران', mark: 'مؤشرات', icon: BarChart3 })
+    }
+    if (canViewPage(session, 'financial_reports')) {
+      analyticsItems.push({ to: '/financial-reports', label: 'التقارير المالية الدورية', mark: 'شهرية وفصلية', icon: FileSpreadsheet })
+    }
+    if (canViewPage(session, 'budget')) {
+      analyticsItems.push({ to: '/budget', label: 'الميزانية والتخطيط', mark: 'المخصصات', icon: CircleDollarSign })
+    }
+    if (analyticsItems.length > 0) {
+      sections.push({ id: 'analytics_and_finance', title: 'التحليلات والموازنة', items: analyticsItems })
     }
 
     const adminItems = []
@@ -468,6 +499,7 @@ function App() {
     }
 
     const supportItems = [
+      { to: '/notifications', label: 'نظام الإشعارات', mark: '', icon: Bell },
       { to: '/support', label: 'الدعم الفني', mark: '', icon: Headphones },
     ]
     sections.push({ id: 'support', title: 'المساعدة والدعم', items: supportItems })
@@ -1273,7 +1305,8 @@ function App() {
   }
 
   if (authLoading) {
-    return <main className="auth-shell" dir="rtl"><p>جارٍ التحقق من جلسة الدخول...</p></main>
+    return <main className="auth-shell" dir="rtl"><p>جارٍ التحقق من جلسة الدخول...</p>  <WarehouseChatBot session={session} />
+      </main>
   }
 
   const isPendingActivation = (session?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
@@ -2260,6 +2293,100 @@ function App() {
             }
           />
           <Route
+            path="/requests"
+            element={
+              canAccessRoute(session, '/requests') ? (
+                <DisbursementRequestsPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="طلبات الصرف الداخلي"
+                  subtitle="صلاحية مقيدة"
+                  message="طلبات الصرف الداخلي مقتصرة على موظفي ومسؤولي المخازن والأقسام المعتمدة."
+                />
+              )
+            }
+          />
+          <Route
+            path="/notifications"
+            element={<NotificationsPage session={session} />}
+          />
+          <Route
+            path="/analytics"
+            element={
+              canAccessRoute(session, '/analytics') ? (
+                <InventoryAnalyticsPage
+                  session={session}
+                  movements={movements}
+                  custodyItems={custodyItems}
+                  currency={settings.currency}
+                />
+              ) : (
+                <RestrictedScreen
+                  title="تحليلات المخزون"
+                  subtitle="صلاحية مقيدة"
+                  message="تحليلات المخزون مقتصرة على الحسابات المخولة."
+                />
+              )
+            }
+          />
+          <Route
+            path="/purchases/contracts"
+            element={
+              canAccessRoute(session, '/purchases/contracts') ? (
+                <ContractsPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="إدارة العقود"
+                  subtitle="صلاحية مقيدة"
+                  message="عقود الموردين مقتصرة حصرياً على موظفي المشتريات وإدارة النظام."
+                />
+              )
+            }
+          />
+          <Route path="/contracts" element={<Navigate to="/purchases/contracts" replace />} />
+          <Route
+            path="/asset-history"
+            element={
+              canAccessRoute(session, '/asset-history') ? (
+                <AssetHistoryPage session={session} />
+              ) : (
+                <RestrictedScreen
+                  title="سجل حركة الأصول"
+                  subtitle="صلاحية مقيدة"
+                  message="سجل حركة وتتبع الأصول مقتصر على مسؤولي العهدة والمخازن."
+                />
+              )
+            }
+          />
+          <Route
+            path="/financial-reports"
+            element={
+              canAccessRoute(session, '/financial-reports') ? (
+                <FinancialReportsPage session={session} currency={settings.currency} />
+              ) : (
+                <RestrictedScreen
+                  title="التقارير المالية الدورية"
+                  subtitle="صلاحية مقيدة"
+                  message="التقارير المالية مقتصرة على الإدارة المالية والمشرفين ومدير النظام."
+                />
+              )
+            }
+          />
+          <Route
+            path="/budget"
+            element={
+              canAccessRoute(session, '/budget') ? (
+                <BudgetPage session={session} currency={settings.currency} />
+              ) : (
+                <RestrictedScreen
+                  title="الميزانية والتخطيط"
+                  subtitle="صلاحية مقيدة"
+                  message="إدارة الميزانية والتخطيط مقتصرة على الإدارة العليا والمشرفين الماليين."
+                />
+              )
+            }
+          />
+          <Route
             path="/support"
             element={<SupportPage session={session} />}
           />
@@ -2418,6 +2545,7 @@ function App() {
         </AnimatePresence>
 
 
+        <WarehouseChatBot session={session} />
       </main>
     </div>
   )
