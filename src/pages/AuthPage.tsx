@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
 import { logAuditEvent } from '../lib/auditLogger'
 import { isSupabaseConfigured } from '../lib/authMode'
-import { validateChosenUsername, validateChosenPassword } from '../lib/employeeIdentity'
+import { validateChosenUsername, validateChosenPassword, validateChosenPasswordAsync } from '../lib/employeeIdentity'
 import { getInviteProfile, completeAccountActivation, sendPasswordRecovery, type InviteProfile } from '../lib/registrationService'
 import { ROLE_LABELS } from '../lib/permissions'
 
@@ -208,7 +208,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     throw new Error(uValidation.error || 'اسم المستخدم غير مستوفٍ للشروط.')
                 }
 
-                const pValidation = validateChosenPassword(password)
+                const pValidation = await validateChosenPasswordAsync(password)
                 if (!pValidation.valid) {
                     throw new Error(pValidation.error || 'كلمة المرور غير مستوفية للشروط.')
                 }
@@ -256,8 +256,9 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'setNewPassword') {
-                if (password.length < 6) {
-                    throw new Error('كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف وأرقام.')
+                const pValidation = await validateChosenPasswordAsync(password)
+                if (!pValidation.valid) {
+                    throw new Error(pValidation.error || 'كلمة المرور غير مستوفية للشروط.')
                 }
                 if (password !== confirmPassword) {
                     throw new Error('كلمتا المرور غير متطابقتين.')

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { logAuditEvent } from './auditLogger'
+import { validateChosenPasswordAsync } from './employeeIdentity'
 
 export type UserInvitation = {
     id: string
@@ -123,8 +124,9 @@ export async function changeCurrentUserPassword(newPassword: string): Promise<vo
     if (!supabase) {
         throw new Error('اتصال Supabase غير متاح.')
     }
-    if (!newPassword || newPassword.length < 6) {
-        throw new Error('كلمة المرور الجديدة يجب أن لا تقل عن 6 أحرف.')
+    const validation = await validateChosenPasswordAsync(newPassword)
+    if (!validation.valid) {
+        throw new Error(validation.error || 'كلمة المرور غير صالحة.')
     }
 
     const { data, error } = await supabase.auth.updateUser({ password: newPassword })

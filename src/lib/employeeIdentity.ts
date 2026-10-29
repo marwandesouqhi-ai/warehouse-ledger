@@ -275,6 +275,8 @@ export function validateChosenUsername(username: string | null | undefined): { v
   return { valid: true }
 }
 
+import { checkLeakedPassword } from './passwordSecurity'
+
 /**
  * Validates candidate password for account activation:
  * Minimum 10 characters length, sensible complexity.
@@ -286,6 +288,27 @@ export function validateChosenPassword(password: string | null | undefined): { v
 
   if (password.length < 10) {
     return { valid: false, error: 'كلمة المرور يجب ألا تقل عن 10 أحرف ورموز لضمان أمان الحساب.' }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Asynchronously validates password including HaveIBeenPwned leaked password protection (Zero-cost k-anonymity).
+ */
+export async function validateChosenPasswordAsync(password: string | null | undefined): Promise<{ valid: boolean; error?: string }> {
+  const syncCheck = validateChosenPassword(password)
+  if (!syncCheck.valid) return syncCheck
+
+  if (password) {
+    const leakCheck = await checkLeakedPassword(password)
+    if (leakCheck.pwned) {
+      const timesText = leakCheck.count && leakCheck.count > 1 ? ` (ظهرت ${leakCheck.count.toLocaleString('ar-EG')} مرة في تسريبات سابقة)` : ''
+      return {
+        valid: false,
+        error: `كلمة المرور هذه غير آمنة؛ تم رصدها ضمن قواعد بيانات الحسابات المسربة عالمياً${timesText}. يرجى اختيار كلمة مرور قوية وفريدة.`,
+      }
+    }
   }
 
   return { valid: true }
