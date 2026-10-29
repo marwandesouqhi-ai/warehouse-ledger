@@ -25,7 +25,7 @@ import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
 import { can, canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
-import ProcurementSubNav from '../components/ProcurementSubNav'
+
 import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
 
 type PurchasesPageProps = {
@@ -311,7 +311,29 @@ export default function PurchasesPage({
   return (
     <section className="movement-page card-surface purchases-page">
       {/* Sub navigation connecting the 5 procurement sub-pages */}
-      <ProcurementSubNav activeTab="invoices" />
+      {/* Page Header */}
+      <div className="section-head movement-heading mt-2 mb-4">
+        <div>
+          <h2>
+            <ShoppingCart size={22} className="text-accent" />
+            {' '}
+            فواتير وتوريدات الشراء
+          </h2>
+          <span>سجل فواتير وأذون التوريد المعتمدة لمخازن الجامعة، ومتابعة الكميات والمبالغ الإجمالية</span>
+        </div>
+        <div className="headline-actions">
+          {userCanAdd && (
+            <button
+              type="button"
+              className="primary-btn inline-flex items-center gap-1"
+              onClick={() => setActiveTab(activeTab === 'add' ? 'list' : 'add')}
+            >
+              {activeTab === 'add' ? <ArrowRight size={17} /> : <Plus size={17} />}
+              <span>{activeTab === 'add' ? 'الرجوع لسجل الفواتير' : 'تسجيل فاتورة شراء جديدة'}</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="purchases-kpis">

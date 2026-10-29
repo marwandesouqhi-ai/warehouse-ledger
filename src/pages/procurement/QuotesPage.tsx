@@ -14,7 +14,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import ProcurementSubNav from '../../components/ProcurementSubNav'
+
 import {
   fetchPurchaseRequests,
   fetchSupplierQuotes,
@@ -320,7 +320,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   return (
     <section className="movement-page card-surface purchases-page quotes-page">
       {/* Sub navigation connecting the 5 procurement sub-pages */}
-      <ProcurementSubNav activeTab="quotes" />
+
 
       <div className="section-head movement-heading quotes-header-row">
         <div>

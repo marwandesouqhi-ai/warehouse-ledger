@@ -13,7 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import ProcurementSubNav from '../../components/ProcurementSubNav'
+
 import {
   fetchSupplierStatsList,
   createSupplier,
@@ -278,7 +278,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   return (
     <section className="movement-page card-surface purchases-page suppliers-page">
       {/* Sub navigation connecting the 5 procurement sub-pages */}
-      <ProcurementSubNav activeTab="suppliers" />
+
 
       {/* Page Header */}
       <div className="section-head movement-heading mt-3 mb-4">

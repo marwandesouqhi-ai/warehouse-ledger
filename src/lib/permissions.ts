@@ -271,7 +271,7 @@ export function canViewPage(
   let session = sessionOrPage
   let page = pageOrSession as string
 
-  const knownPages = ['purchases', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support']
+  const knownPages = ['purchases', 'suppliers', 'quotes', 'custody', 'reports', 'imports', 'quality', 'audit', 'users', 'settings', 'procurement', 'support']
   if (typeof sessionOrPage === 'string' && knownPages.includes(sessionOrPage)) {
     page = sessionOrPage
     session = pageOrSession
@@ -283,6 +283,8 @@ export function canViewPage(
 
   switch (page) {
     case 'purchases':
+    case 'suppliers':
+    case 'quotes':
       return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'].includes(role)
     case 'custody':
       return ['system_admin', 'admin', 'warehouse_admin', 'warehouse_employee', 'warehouse_staff', 'editor'].includes(role)

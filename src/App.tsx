@@ -445,7 +445,9 @@ function App() {
 
     const procurementItems = []
     if (canViewPage(session, 'purchases')) {
-      procurementItems.push({ to: '/purchases', label: 'المشتريات والتوريدات', mark: '', icon: ShoppingCart })
+      procurementItems.push({ to: '/purchases', label: 'فواتير وتوريدات الشراء', mark: '', icon: ShoppingCart })
+      procurementItems.push({ to: '/purchases/suppliers', label: 'إدارة الموردين والشركات', mark: '', icon: Building2 })
+      procurementItems.push({ to: '/purchases/quotes', label: 'عروض الأسعار وأوامر الشراء', mark: '', icon: FileSpreadsheet })
     }
     if (procurementItems.length > 0) {
       sections.push({ id: 'procurement', title: 'المشتريات والتوريدات', items: procurementItems })
@@ -2145,6 +2147,8 @@ function App() {
             }
           />
           <Route path="/purchases/analytics" element={<Navigate to="/" replace />} />
+          <Route path="/suppliers" element={<Navigate to="/purchases/suppliers" replace />} />
+          <Route path="/quotes" element={<Navigate to="/purchases/quotes" replace />} />
           <Route
             path="/custody"
             element={
