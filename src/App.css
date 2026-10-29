@@ -8616,10 +8616,11 @@
     min-height: 68px;
     margin-bottom: var(--space-5);
     padding: var(--space-3) var(--space-4);
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid var(--line);
     border-radius: var(--r-lg);
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     box-shadow: var(--shadow-sm);
+    -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
   }
 
@@ -8882,6 +8883,7 @@
   .users-modal-overlay,
   .disbursement-modal-backdrop {
     background: color-mix(in srgb, #07191b 70%, transparent);
+    -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
   }
 
@@ -9013,14 +9015,16 @@
       linear-gradient(var(--line) 1px, transparent 1px),
       linear-gradient(90deg, var(--line) 1px, transparent 1px);
     background-size: 36px 36px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 78%);
     mask-image: linear-gradient(to bottom, black, transparent 78%);
   }
 
   .auth-panel {
-    border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+    border: 1px solid var(--line);
     border-radius: var(--r-xl);
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     box-shadow: var(--shadow-lg);
+    -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
   }
 
@@ -9092,7 +9096,12 @@
       gap: var(--space-2);
       overflow-x: auto;
       overscroll-behavior-inline: contain;
-      scrollbar-width: thin;
+    }
+
+    @supports (scrollbar-width: thin) {
+      .nav {
+        scrollbar-width: thin;
+      }
     }
 
     .nav-section {
@@ -9138,7 +9147,7 @@
     }
 
     .topbar {
-      min-height: auto;
+      min-height: 0;
       padding: var(--space-3);
       border-radius: var(--r-md);
     }
@@ -10323,8 +10332,7 @@
 .responsive-table {
   width: 100%;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
+  }
 
 .custody-analytics-dashboard {
   display: flex;
@@ -10794,6 +10802,7 @@ a {
   justify-content: center;
   cursor: pointer;
   transition: all 0.18s ease;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 
