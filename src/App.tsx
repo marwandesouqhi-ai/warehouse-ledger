@@ -2285,13 +2285,13 @@ function App() {
           <Route
             path="/telegram-bot"
             element={
-              canAccessRoute(session, '/telegram-bot') ? (
+              isSystemAdmin ? (
                 <TelegramBotPage session={session} />
               ) : (
                 <RestrictedScreen
                   title="إدارة بوت تيليجرام"
                   subtitle="صلاحية مقيدة"
-                  message="إدارة وتخصيص بوت تيليجرام مقتصرة حصرياً على مديري النظام والمشرفين المعتمدين."
+                  message="إدارة وتخصيص بوت تيليجرام مقتصرة حصرياً على مدير النظام (System Admin) فقط."
                 />
               )
             }

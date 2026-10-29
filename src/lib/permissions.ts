@@ -105,7 +105,7 @@ const ROUTE_ACCESS: Record<string, EffectiveRole[]> = {
   '/audit':                ['system_admin'],
   '/users':                ['system_admin'],
   '/settings':             ['system_admin'],
-  '/telegram-bot':         ['system_admin', 'admin'],
+  '/telegram-bot':         ['system_admin'],
   '/movements':            ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff', 'editor'],
 }
 
@@ -309,7 +309,7 @@ export function canViewPage(
     case 'settings':
       return role === 'system_admin'
     case 'telegram_bot':
-      return ['system_admin', 'admin'].includes(role)
+      return role === 'system_admin'
     case 'contracts':
       return ['system_admin', 'admin', 'procurement_admin', 'procurement_employee', 'purchasing_staff'].includes(role)
     case 'requests':
