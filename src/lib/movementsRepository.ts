@@ -23,6 +23,19 @@ type MovementRow = {
     custodian_name?: string
 }
 
+function parseNumericPrice(val: unknown): number | string {
+    if (typeof val === 'number') return val
+    if (typeof val === 'string') {
+        const trimmed = val.trim()
+        if (trimmed === '') return ''
+        const normalized = trimmed.replace(/,/g, '.')
+        const n = Number(normalized)
+        if (!isNaN(n)) return n
+        return trimmed
+    }
+    return ''
+}
+
 function fromRow(row: MovementRow): FixtureMovement {
     return {
         id: row.id,
@@ -33,7 +46,7 @@ function fromRow(row: MovementRow): FixtureMovement {
         permit: row.permit,
         issue: row.issued_on,
         item: row.item,
-        price: row.unit_price,
+        price: parseNumericPrice(row.unit_price),
         qin: row.qty_in,
         qout: row.qty_out,
         notes: row.notes,
@@ -62,7 +75,7 @@ function toRow(movement: FixtureMovement, ownerId?: string) {
         permit: String(movement.permit ?? ''),
         issued_on: String(movement.issue ?? ''),
         item: movement.item,
-        unit_price: String(movement.price ?? ''),
+        unit_price: (typeof movement.price === 'number') ? movement.price.toString() : String(movement.price ?? '').trim().replace(/,/g, '.'),
         qty_in: String(movement.qin ?? ''),
         qty_out: String(movement.qout ?? ''),
         notes: movement.notes ?? '',

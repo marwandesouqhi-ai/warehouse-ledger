@@ -217,10 +217,23 @@ export async function runDataQualityAutoRepair(sessionUserId?: string): Promise<
         cloudSynced = true
       }
 
-      // حفظ ومزامنة الحركات المعدلة بالكامل سحابياً
-      if (sessionUserId) {
-        await saveMovements(repairedMoves, sessionUserId)
+      // 2. التحقق من معرف المستخدم الحالي سحابياً
+      let effectiveUserId = sessionUserId
+      if (!effectiveUserId) {
+        try {
+          const { data } = await supabase.auth.getSession()
+          effectiveUserId = data.session?.user?.id
+        } catch {
+          // ignore
+        }
+      }
+
+      // 3. حفظ ومزامنة الحركات المعدلة بالكامل سحابياً دائماً
+      try {
+        await saveMovements(repairedMoves, effectiveUserId)
         cloudSynced = true
+      } catch (saveErr) {
+        console.warn('Error saving repaired movements to cloud:', saveErr)
       }
 
       // تسجيل العملية في سجل التدقيق

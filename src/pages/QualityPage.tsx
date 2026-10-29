@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 
+import type { Session } from '@supabase/supabase-js'
 import type { FixtureMovement } from '../lib/fixture'
 import { evaluateQuality } from '../lib/quality'
 import { matchesSearch } from '../lib/searchUtils'
@@ -18,6 +19,7 @@ import { runDataQualityAutoRepair } from '../lib/dataQualityAutoRepair'
 type QualityPageProps = {
   movements: FixtureMovement[]
   onInspect: (item: string) => void
+  session?: Session | null
 }
 
 const ruleLabels: Record<string, string> = {
@@ -44,7 +46,7 @@ const ruleMessages: Record<string, string> = {
   noinv: 'رقم الفاتورة غير موجود في الحركة.',
 }
 
-export default function QualityPage({ movements, onInspect }: QualityPageProps) {
+export default function QualityPage({ movements, onInspect, session }: QualityPageProps) {
   const [filter, setFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isRepairing, setIsRepairing] = useState(false)
@@ -85,7 +87,7 @@ export default function QualityPage({ movements, onInspect }: QualityPageProps) 
   const handleAutoRepair = async () => {
     setIsRepairing(true)
     try {
-      const res = await runDataQualityAutoRepair()
+      const res = await runDataQualityAutoRepair(session?.user?.id)
       setRepairNotice(res.message)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)

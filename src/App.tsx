@@ -131,6 +131,16 @@ function loadDarkMode(): boolean {
   }
 }
 
+function normalizeMovementPrice(m: FixtureMovement): FixtureMovement {
+  let price = m.price
+  if (typeof price === 'string' && price.trim() !== '') {
+    const normalized = price.trim().replace(/,/g, '.')
+    const n = Number(normalized)
+    if (!isNaN(n)) price = n
+  }
+  return { ...m, price }
+}
+
 function loadMovements(): FixtureMovement[] {
   try {
     const savedMovements = localStorage.getItem(storageKey)
@@ -151,6 +161,7 @@ function loadMovements(): FixtureMovement[] {
               issue: '',
               qout: '',
             }))
+            .map(normalizeMovementPrice)
           try {
             localStorage.setItem(storageKey, JSON.stringify(cleaned))
           } catch {
@@ -158,14 +169,14 @@ function loadMovements(): FixtureMovement[] {
           }
           return cleaned
         }
-        return parsed as FixtureMovement[]
+        return (parsed as FixtureMovement[]).map(normalizeMovementPrice)
       }
     }
   } catch {
     // Fall back to the original data if the saved browser data is unreadable.
   }
 
-  return fixtureMovements
+  return fixtureMovements.map(normalizeMovementPrice)
 }
 
 function sanitizeExcelCell<T>(value: T): T {
@@ -2255,7 +2266,7 @@ function App() {
             path="/quality"
             element={
               canAccessRoute(session, '/quality') ? (
-                <QualityPage movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />
+                <QualityPage session={session} movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />
               ) : (
                 <RestrictedScreen
                   title="فحص الجودة"
