@@ -10,14 +10,8 @@ import {
   HelpCircle,
   Maximize2,
   Minimize2,
-  Key,
   Database,
   RefreshCw,
-  CheckCircle2,
-  AlertCircle,
-  Eye,
-  EyeOff,
-  ShieldCheck,
   ChevronLeft,
   Building2,
   Clock,
@@ -33,11 +27,6 @@ import {
 } from '../lib/chatbotLiveContext'
 import {
   hasGeminiApiKey,
-  getGeminiApiKey,
-  getGeminiKeySource,
-  saveGeminiApiKeyLocal,
-  clearGeminiApiKeyLocal,
-  testGeminiConnection,
   askGeminiWithContext,
 } from '../lib/geminiService'
 
@@ -70,15 +59,6 @@ const CATEGORY_CHIPS = [
 export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-
-  // API Key settings state
-  const [keyInput, setKeyInput] = useState('')
-  const [showKeyText, setShowKeyText] = useState(false)
-  const [testState, setTestState] = useState<{
-    status: 'idle' | 'testing' | 'success' | 'error'
-    message: string
-  }>({ status: 'idle', message: '' })
 
   // Live database context state
   const [liveContext, setLiveContext] = useState<LiveWarehouseContext | null>(null)
@@ -119,12 +99,11 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
   // Initial welcome message
   useEffect(() => {
     if (messages.length === 0) {
-      const isGeminiActive = hasGeminiApiKey()
       setMessages([
         {
           id: 'welcome-1',
           sender: 'bot',
-          text: `مرحباً بك يا ${userName} في المساعد الذكي لإدارة مخازن وتوريدات جامعة الزقازيق الأهلية 🎓\n\nأنا متزامن لحظياً مع قاعدة البيانات ولدي اطلاع كامل على أرصدة المخازن الـ 8، طلبات الصرف، عقود الموردين، والميزانيات.${isGeminiActive ? '\n\n✨ **نموذج Gemini AI مفعل ومتصل بالسياق الحي للمنظومة.**' : ''}\n\nيمكنك السؤال عن أي صنف، طلب صرف، أو إجراء مخزني، أو تكبير التابة لرؤية لوحة المزامنة الحية!`,
+          text: `مرحباً بك يا ${userName} في المساعد الذكي لإدارة مخازن وتوريدات جامعة الزقازيق الأهلية 🎓\n\nأنا متزامن لحظياً مع قاعدة البيانات ولدي اطلاع كامل على أرصدة المخازن الـ 8، طلبات الصرف، عقود الموردين، والميزانيات.\n\nيمكنك السؤال عن أي صنف، طلب صرف، أو إجراء مخزني، أو تكبير التابة لرؤية لوحة المزامنة الحية!`,
           timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           suggestedPrompts: [
             'ما هي مخازن وكليات الجامعة وأرصدتها الحالية؟',
@@ -143,10 +122,6 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages, isOpen, isTyping])
-
-  // Key source info
-  const keySource = getGeminiKeySource()
-  const isKeyActive = hasGeminiApiKey()
 
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim()
@@ -169,7 +144,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
       text: m.text,
     }))
 
-    // Try Gemini if key is available
+    // Try Gemini if key is configured in secrets
     if (hasGeminiApiKey()) {
       try {
         const aiResponse = await askGeminiWithContext(text, historyForAi)
@@ -261,36 +236,6 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
     loadFreshContext()
   }
 
-  const handleSaveLocalKey = () => {
-    if (!keyInput.trim()) return
-    saveGeminiApiKeyLocal(keyInput.trim())
-    setKeyInput('')
-    setTestState({
-      status: 'success',
-      message: 'تم حفظ مفتاح Gemini API في التخزين المحلي لمتصفحك بنجاح! 🟢',
-    })
-  }
-
-  const handleClearLocalKey = () => {
-    clearGeminiApiKeyLocal()
-    setKeyInput('')
-    setTestState({
-      status: 'idle',
-      message: 'تم مسح المفتاح المحلي.',
-    })
-  }
-
-  const handleTestKey = async () => {
-    const keyToTest = keyInput.trim() || getGeminiApiKey() || undefined
-    setTestState({ status: 'testing', message: 'جاري التحقق من صحة المفتاح مع سيرفرات Google...' })
-    const res = await testGeminiConnection(keyToTest)
-    if (res.success) {
-      setTestState({ status: 'success', message: res.message })
-    } else {
-      setTestState({ status: 'error', message: res.message })
-    }
-  }
-
   return (
     <>
       {/* Floating Trigger Button */}
@@ -326,25 +271,12 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 <h3>المساعد الذكي لمنظومة المخازن</h3>
                 <span className="chatbot-status">
                   <span className="chatbot-status-dot" />
-                  {isKeyActive ? 'متصل بـ Gemini AI وقاعدة البيانات' : 'متصل بقاعدة البيانات (محلي)'}
+                  خبير المخازن والتوريدات جاهز
                 </span>
               </div>
             </div>
 
             <div className="chatbot-header-actions">
-              {/* Gemini API Key Settings Button */}
-              <button
-                type="button"
-                onClick={() => setShowSettings((prev) => !prev)}
-                className={`chatbot-icon-btn ${showSettings ? 'active' : ''}`}
-                title="إعدادات مفتاح Gemini API والسيكريتس"
-              >
-                <Key size={15} />
-                {isKeyActive && (
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400" />
-                )}
-              </button>
-
               {/* Maximize / Restore Toggle Button */}
               <button
                 type="button"
@@ -368,10 +300,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
               {/* Close Button */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsOpen(false)
-                  setShowSettings(false)
-                }}
+                onClick={() => setIsOpen(false)}
                 className="chatbot-icon-btn"
                 title="إغلاق النافذة"
               >
@@ -379,125 +308,6 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
               </button>
             </div>
           </div>
-
-          {/* Settings Overlay for Gemini API Key */}
-          {showSettings && (
-            <div className="chatbot-settings-overlay">
-              <div className="chatbot-settings-card">
-                <div className="flex items-center justify-between pb-3 border-b border-line">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck size={20} className="text-primary" />
-                    <h4 className="m-0 text-sm font-bold">إعدادات الربط مع Google Gemini AI</h4>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowSettings(false)}
-                    className="p-1 text-muted hover:text-ink rounded-lg"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <div className="flex flex-col gap-2.5 text-xs">
-                  {/* Status Box */}
-                  <div className="p-2.5 rounded-xl border border-line bg-surface-soft flex items-center justify-between">
-                    <span className="font-semibold text-muted">حالة المفتاح الحالية:</span>
-                    {keySource === 'env' && (
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <CheckCircle2 size={14} /> مفعل من ملف السيكريتس (.env.local)
-                      </span>
-                    )}
-                    {keySource === 'local' && (
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <CheckCircle2 size={14} /> محفوظ محلياً في متصفحك
-                      </span>
-                    )}
-                    {keySource === 'none' && (
-                      <span className="text-amber-600 font-semibold flex items-center gap-1">
-                        <AlertCircle size={14} /> غير مضبوط (يعمل المحرك المحلي)
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-muted leading-relaxed m-0">
-                    يمكنك إدخال مفتاح <strong>Google Gemini API</strong> هنا لحفظه بأمان في التخزين المحلي لمتصفحك، أو وضعه في ملف <code className="bg-surface px-1.5 py-0.5 rounded border border-line">.env.local</code> باسم <code className="bg-surface px-1.5 py-0.5 rounded border border-line">VITE_GEMINI_API_KEY</code> ولن يتم كشفه في Git أبداً.
-                  </p>
-
-                  <div className="flex flex-col gap-1.5 mt-1">
-                    <label className="font-bold text-ink flex items-center gap-1">
-                      <Key size={13} /> إدخال مفتاح API:
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showKeyText ? 'text' : 'password'}
-                        value={keyInput}
-                        onChange={(e) => setKeyInput(e.target.value)}
-                        placeholder={
-                          isKeyActive ? '••••••••••••••••••••••••••••••••' : 'AIzaSy...'
-                        }
-                        className="w-full pl-10 pr-3 py-2 text-xs bg-surface-soft border border-line rounded-xl outline-none focus:border-accent text-ink"
-                        dir="ltr"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowKeyText((p) => !p)}
-                        className="absolute left-2.5 top-2.5 text-muted hover:text-ink"
-                        title={showKeyText ? 'إخفاء' : 'إظهار'}
-                      >
-                        {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {testState.message && (
-                    <div
-                      className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
-                        testState.status === 'success'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : testState.status === 'error'
-                          ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                          : 'bg-blue-50 text-blue-800 border border-blue-200'
-                      }`}
-                    >
-                      {testState.status === 'success' && <CheckCircle2 size={14} />}
-                      {testState.status === 'error' && <AlertCircle size={14} />}
-                      {testState.status === 'testing' && <RefreshCw size={14} className="animate-spin" />}
-                      <span>{testState.message}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-line">
-                    <button
-                      type="button"
-                      onClick={handleSaveLocalKey}
-                      disabled={!keyInput.trim()}
-                      className="primary-btn small flex-1 flex items-center justify-center gap-1.5"
-                    >
-                      حفظ المفتاح محلياً
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleTestKey}
-                      disabled={testState.status === 'testing' || (!keyInput.trim() && !isKeyActive)}
-                      className="secondary-btn small flex items-center gap-1"
-                    >
-                      <RefreshCw size={13} className={testState.status === 'testing' ? 'animate-spin' : ''} />
-                      اختبار الاتصال
-                    </button>
-                    {keySource === 'local' && (
-                      <button
-                        type="button"
-                        onClick={handleClearLocalKey}
-                        className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1"
-                      >
-                        مسح
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Main Content Area (Split when maximized) */}
           <div className="chatbot-main-content">
@@ -670,11 +480,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                 {isTyping && (
                   <div className="chatbot-typing">
                     <Sparkles size={14} className="animate-spin text-primary" />
-                    <span>
-                      {isKeyActive
-                        ? 'Gemini يحلل بيانات المنظومة الحية ويجهز الإجابة...'
-                        : 'المساعد يحلل استفسارك ويجهز الإجابة...'}
-                    </span>
+                    <span>المساعد يحلل بيانات المنظومة ويجهز الإجابة...</span>
                   </div>
                 )}
                 <div ref={messagesEndRef} />

@@ -10860,36 +10860,6 @@ a {
   color: var(--accent);
 }
 
-/* Settings Modal Overlay */
-.chatbot-settings-overlay {
-  position: absolute;
-  top: 60px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  animation: fadeIn 0.18s ease;
-}
-
-.chatbot-settings-card {
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
-  box-shadow: var(--shadow-strong);
-  width: 100%;
-  max-width: 480px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 
 .chatbot-body {
   flex: 1;
