@@ -90,7 +90,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
 
     setTimeout(() => {
       let reply =
-        'أفهم استفسارك جيداً. يمكنك مراجعة لوحة التحكم الرئيسية أو التقارير الرسمية لمزيد من التفاصيل، أو التواصل مع فريق الدعم الفني مباشرة.'
+        'أفهم استفسارك جيداً. يمكنك مراجعة لوحة التحكم الرئيسية أو التقارير الرسمية لمزيد من التفاصيل، أو فتح تذكرة من صفحة الدعم الفني.'
       let actionUrl: string | undefined
       let actionLabel: string | undefined
 
@@ -137,7 +137,7 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
 
       setMessages((prev) => [...prev, botMsg])
       setIsTyping(false)
-    }, 700)
+    }, 600)
   }
 
   const quickPrompts = [
@@ -154,39 +154,40 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="fixed bottom-6 left-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-full shadow-2xl bg-gradient-to-r from-teal-700 to-teal-900 text-white hover:scale-105 active:scale-95 transition-all border-2 border-white/20"
+        className="chatbot-trigger-btn"
         aria-label="المساعد الذكي للمخازن"
         title="المساعد الذكي والشات بوت"
       >
         <span className="relative flex h-3 w-3">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400" />
         </span>
-        <Bot size={22} className="animate-pulse" />
-        <span className="font-bold text-sm hidden sm:inline">المساعد الذكي</span>
+        <Bot size={22} />
+        <span className="hidden sm:inline">المساعد الذكي</span>
       </button>
 
-      {/* Floating Chat Window */}
+      {/* Floating Chat Window with Solid Opaque Background */}
       {isOpen && (
-        <div
-          className="fixed bottom-20 left-4 sm:left-6 z-50 w-[94vw] sm:w-[400px] h-[550px] max-h-[85vh] bg-card rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-6 duration-200"
+        <aside
+          className="chatbot-window"
           dir="rtl"
+          aria-label="نافذة المساعد الذكي"
         >
-          {/* Chat Header */}
-          <div className="bg-gradient-to-r from-teal-800 to-teal-950 text-white p-4 flex items-center justify-between shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-                <Bot size={22} className="text-emerald-400" />
+          {/* Header */}
+          <div className="chatbot-header">
+            <div className="chatbot-header-info">
+              <div className="chatbot-avatar">
+                <Bot size={22} />
               </div>
-              <div>
-                <h3 className="font-bold text-sm sm:text-base leading-tight">المساعد الذكي للمنظومة</h3>
-                <span className="text-xs text-emerald-300 flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> متصل وجاهز للمساعدة
+              <div className="chatbot-title-box">
+                <h3>المساعد الذكي للمنظومة</h3>
+                <span className="chatbot-status">
+                  <span className="chatbot-status-dot" /> متصل وجاهز للمساعدة
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="chatbot-header-actions">
               <button
                 type="button"
                 onClick={() =>
@@ -199,16 +200,16 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                     },
                   ])
                 }
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+                className="chatbot-icon-btn"
                 title="إعادة ضبط المحادثة"
               >
-                <RotateCcw size={16} />
+                <RotateCcw size={15} />
               </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
-                title="تصغير"
+                className="chatbot-icon-btn"
+                title="إغلاق النافذة"
               >
                 <X size={18} />
               </button>
@@ -216,27 +217,21 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
           </div>
 
           {/* Messages Body */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-muted/10 text-sm">
+          <div className="chatbot-body">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                className={`chatbot-msg-row ${msg.sender}`}
               >
-                <div
-                  className={`max-w-[85%] rounded-2xl p-3 shadow-sm leading-relaxed whitespace-pre-line ${
-                    msg.sender === 'user'
-                      ? 'bg-primary text-primary-foreground rounded-br-xs'
-                      : 'bg-card border border-border text-foreground rounded-bl-xs'
-                  }`}
-                >
+                <div className={`chatbot-bubble ${msg.sender}`}>
                   {msg.text}
 
                   {msg.actionUrl && (
-                    <div className="mt-2.5 pt-2 border-t border-border/50">
+                    <div>
                       <Link
                         to={msg.actionUrl}
                         onClick={() => setIsOpen(false)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline bg-primary/10 px-2.5 py-1 rounded"
+                        className="chatbot-action-link"
                       >
                         <span>{msg.actionLabel || 'الانتقال'}</span>
                         <ExternalLink size={12} />
@@ -244,12 +239,12 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
                     </div>
                   )}
                 </div>
-                <span className="text-[10px] text-muted mt-1 px-1">{msg.timestamp}</span>
+                <span className="chatbot-timestamp">{msg.timestamp}</span>
               </div>
             ))}
 
             {isTyping && (
-              <div className="flex items-center gap-1.5 text-muted text-xs p-2 bg-card rounded-xl border border-border w-fit">
+              <div className="chatbot-typing">
                 <Sparkles size={14} className="animate-spin text-primary" />
                 <span>المساعد يكتب الآن...</span>
               </div>
@@ -257,14 +252,14 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick suggestions */}
-          <div className="p-2 border-t border-border bg-card/80 overflow-x-auto whitespace-nowrap flex gap-1.5 text-xs scrollbar-none">
+          {/* Quick suggestions pills */}
+          <div className="chatbot-prompts-bar">
             {quickPrompts.map((prompt, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={() => handleSend(prompt)}
-                className="px-2.5 py-1 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border transition-all shrink-0 text-right"
+                className="chatbot-prompt-pill"
               >
                 {prompt}
               </button>
@@ -277,25 +272,25 @@ export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
               e.preventDefault()
               handleSend()
             }}
-            className="p-3 bg-card border-t border-border flex items-center gap-2"
+            className="chatbot-footer-form"
           >
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="اكتب سؤالك أو استفسارك هنا..."
-              className="flex-1 p-2.5 text-sm bg-muted/40 border border-border rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+              className="chatbot-input"
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:opacity-90 disabled:opacity-40 transition-opacity"
+              className="chatbot-send-btn"
               title="إرسال"
             >
               <Send size={16} />
             </button>
           </form>
-        </div>
+        </aside>
       )}
     </>
   )
