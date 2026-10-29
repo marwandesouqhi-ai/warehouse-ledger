@@ -3408,17 +3408,27 @@
 .nav-section {
   display: flex !important;
   flex-direction: column !important;
-  gap: 3px !important;
-  margin-bottom: 8px !important;
+  gap: 5px !important;
+  margin-bottom: 14px !important;
+  padding: 8px 8px 10px !important;
+  background: var(--surface-soft, #f8fafb) !important;
+  border: 1px solid var(--line, #dce5e5) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  position: relative !important;
 }
 
 .nav-section-title {
-  padding: 8px 10px 4px !important;
-  font-size: 0.72rem !important;
+  padding: 4px 8px 6px !important;
+  margin-bottom: 3px !important;
+  font-size: 0.74rem !important;
   font-weight: 700 !important;
-  color: var(--muted) !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.04em !important;
+  color: var(--accent-700, #09646c) !important;
+  letter-spacing: 0.03em !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border-bottom: 1px dashed rgba(220, 229, 229, 0.75) !important;
 }
 
 .nav-item {
@@ -3426,17 +3436,18 @@
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 11px !important;
-  min-height: 44px !important;
-  padding: 9px 12px !important;
-  border-radius: 10px !important;
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border-radius: 9px !important;
   color: var(--ink-soft, #2d4649) !important;
-  background: transparent !important;
-  border: 1px solid transparent !important;
+  background: var(--surface, #ffffff) !important;
+  border: 1px solid rgba(220, 229, 229, 0.75) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
   text-decoration: none !important;
-  font-size: 0.925rem !important;
+  font-size: 0.915rem !important;
   font-weight: 600 !important;
   line-height: 1.35 !important;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   position: relative !important;
   box-sizing: border-box !important;
   width: 100% !important;
@@ -3457,30 +3468,32 @@
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  font-size: 0.925rem !important;
+  font-size: 0.915rem !important;
   font-weight: 600 !important;
   color: inherit !important;
   letter-spacing: -0.1px;
 }
 
 .nav-item:hover {
-  background: rgba(14, 124, 134, 0.07) !important;
-  border-color: rgba(14, 124, 134, 0.15) !important;
+  background: var(--surface, #ffffff) !important;
+  border-color: rgba(14, 124, 134, 0.32) !important;
   color: var(--accent-700, #09646c) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02) !important;
+  box-shadow: 0 4px 10px rgba(14, 124, 134, 0.12), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  transform: translateY(-1px) !important;
 }
 
 .nav-item:hover svg {
-  transform: scale(1.05);
+  transform: scale(1.06);
   color: var(--accent) !important;
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(14, 124, 134, 0.12) 0%, rgba(14, 124, 134, 0.05) 100%) !important;
-  border: 1px solid var(--accent-border, #a8d5d8) !important;
+  background: linear-gradient(135deg, rgba(14, 124, 134, 0.14) 0%, rgba(14, 124, 134, 0.06) 100%) !important;
+  border: 1.5px solid var(--accent-border, #a8d5d8) !important;
   color: var(--accent-700, #09646c) !important;
   font-weight: 700 !important;
-  box-shadow: 0 3px 10px rgba(14, 124, 134, 0.09) !important;
+  box-shadow: 0 4px 14px rgba(14, 124, 134, 0.15), 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+  transform: none !important;
 }
 
 .nav-item.active .nav-label {
@@ -3499,7 +3512,7 @@
   transform: translateY(-50%) !important;
   inset-inline-start: 6px !important;
   width: 3.5px !important;
-  height: 22px !important;
+  height: 20px !important;
   border-radius: var(--r-pill) !important;
   background: var(--accent) !important;
 }
