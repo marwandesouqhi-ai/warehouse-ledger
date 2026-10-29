@@ -1401,7 +1401,7 @@ function App() {
               <div key={section.id} className="nav-section">
                 <div className="nav-section-title">{section.title}</div>
                 {section.items.map(({ to, label, mark, icon: Icon }) => (
-                  <NavLink key={to} to={to} title={label} aria-label={label} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <NavLink key={to} to={to} end={to === '/'} title={label} aria-label={label} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                     <Icon size={20} strokeWidth={2.1} aria-hidden="true" />
                     <span className="nav-label">{label}</span>
                     {mark ? <small className="nav-badge">{mark}</small> : null}
