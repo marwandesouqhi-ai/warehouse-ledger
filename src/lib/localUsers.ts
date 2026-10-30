@@ -60,7 +60,7 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
 
           const alreadyInList = usersList.some(
             (u) => (u.email && u.email.trim().toLowerCase() === regEmail) ||
-                   (u.employeeId && reg.employee_id && u.employeeId === reg.employee_id)
+                   (u.id === reg.id)
           )
 
           if (!alreadyInList) {
@@ -396,6 +396,43 @@ export function loadLocalUsers(): LocalUser[] {
             users[marwanIdx].permissions = ['view_audit', 'view_settings', 'manage_records']
             needsSave = true
           }
+        }
+
+        // Ensure employee ID sanity and guarantee Ahmad Hussein Salah's active record
+        for (const u of users) {
+          if (u.email?.toLowerCase().includes('507') || u.displayName?.includes('أحمد حسين')) {
+            if (u.employeeId !== 'WH-EMP-000002') {
+              u.employeeId = 'WH-EMP-000002'
+              needsSave = true
+            }
+            if (u.status !== 'active') {
+              u.status = 'active'
+              needsSave = true
+            }
+          }
+        }
+
+        // If Ahmad Hussein Salah is not yet in users, insert him
+        const ahmadIdx = users.findIndex(
+          (u) => u.email?.toLowerCase() === 'marwandesouky507@gmail.com' || u.employeeId === 'WH-EMP-000002'
+        )
+        if (ahmadIdx === -1) {
+          users.push({
+            id: 'usr-38d3e5f8-6eb2-433b-be39-c088558c3237',
+            username: 'ahmed-hussain',
+            displayName: 'أحمد حسين صلاح',
+            password: '',
+            role: 'warehouse_employee',
+            status: 'active',
+            activationCode: '',
+            createdAt: '2026-10-30T00:00:00.000Z',
+            employeeId: 'WH-EMP-000002',
+            email: 'marwandesouky507@gmail.com',
+            department: 'المخازن',
+            telegramUserId: 1200587150,
+            permissions: [],
+          })
+          needsSave = true
         }
 
         if (needsSave) {

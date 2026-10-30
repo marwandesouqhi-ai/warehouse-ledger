@@ -60,27 +60,41 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
           }
         }
 
-        return data.map((r) => ({
-          id: r.id,
-          fullName: r.full_name,
-          email: r.email,
-          telegramUserId: r.telegram_user_id || undefined,
-          telegramUsername: r.telegram_username || undefined,
-          requestedDepartment: r.requested_department,
-          requestedRole: r.requested_role,
-          verificationStatus: r.verification_status,
-          approvalStatus: (r.approval_status === 'pending' ? 'pending_approval' : r.approval_status),
-          approvedRole: r.approved_role || undefined,
-          employeeId: r.employee_id || undefined,
-          reviewedBy: r.reviewed_by || undefined,
-          reviewedAt: r.reviewed_at || undefined,
-          rejectionReason: r.rejection_reason || undefined,
-          invitationStatus: r.invitation_status || undefined,
-          invitationSentAt: r.invitation_sent_at || undefined,
-          invitationSentBy: r.invitation_sent_by || undefined,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-        }))
+        const result = data.map((r) => {
+          let empId = r.employee_id || undefined
+          if (r.email && r.email.toLowerCase().includes('507') && empId === 'WH-EMP-000001') {
+            empId = 'WH-EMP-000002'
+          }
+          return {
+            id: r.id,
+            fullName: r.full_name,
+            email: r.email,
+            telegramUserId: r.telegram_user_id || undefined,
+            telegramUsername: r.telegram_username || undefined,
+            requestedDepartment: r.requested_department,
+            requestedRole: r.requested_role,
+            verificationStatus: r.verification_status,
+            approvalStatus: (r.approval_status === 'pending' ? 'pending_approval' : r.approval_status),
+            approvedRole: r.approved_role || undefined,
+            employeeId: empId,
+            reviewedBy: r.reviewed_by || undefined,
+            reviewedAt: r.reviewed_at || undefined,
+            rejectionReason: r.rejection_reason || undefined,
+            invitationStatus: r.invitation_status || undefined,
+            invitationSentAt: r.invitation_sent_at || undefined,
+            invitationSentBy: r.invitation_sent_by || undefined,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          }
+        })
+
+        try {
+          localStorage.setItem(LOCAL_STORAGE_REQ_KEY, JSON.stringify(result))
+        } catch {
+          // ignore
+        }
+
+        return result
       }
     } catch (err) {
       console.warn('Could not fetch registration requests from Supabase:', err)
@@ -90,7 +104,17 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
   // Local fallback
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_REQ_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.map((r: any) => {
+          if (r.email && r.email.toLowerCase().includes('507') && r.employeeId === 'WH-EMP-000001') {
+            return { ...r, employeeId: 'WH-EMP-000002' }
+          }
+          return r
+        })
+      }
+    }
   } catch {
     // ignore
   }
