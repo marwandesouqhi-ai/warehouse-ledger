@@ -1629,13 +1629,14 @@ ${recoveryLink}
           : roleToAssign === "procurement_employee" ? "PUR-EMP"
           : "WH-EMP"
 
-        const { data: existingCodes } = await supabaseAdmin
-          .from("app_users")
-          .select("employee_id")
-          .ilike("employee_id", `${prefix}-%`)
+        const [appRes, regRes] = await Promise.all([
+          supabaseAdmin.from("app_users").select("employee_id").ilike("employee_id", `${prefix}-%`),
+          supabaseAdmin.from("registration_requests").select("employee_id").ilike("employee_id", `${prefix}-%`),
+        ])
 
+        const allCodes = [...(appRes.data || []), ...(regRes.data || [])]
         let maxNum = 0
-        for (const row of (existingCodes || [])) {
+        for (const row of allCodes) {
           const match = (row.employee_id || "").match(/(\d+)$/)
           if (match) {
             const n = parseInt(match[1], 10)

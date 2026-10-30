@@ -110,14 +110,49 @@ serve(async (req: Request) => {
 
     // B. If not found, search by employee_id if identifier matches employee code format
     if (!appUser && EMPLOYEE_ID_REGEX.test(cleanIdentifier.toUpperCase())) {
-      const { data: userByEmpId } = await supabaseAdmin
+      const { data: usersByEmpId } = await supabaseAdmin
         .from("app_users")
         .select("id, username, role, status, auth_user_id, employee_id, email")
         .eq("employee_id", cleanIdentifier.toUpperCase())
-        .maybeSingle()
 
-      if (userByEmpId) {
-        appUser = userByEmpId
+      if (usersByEmpId && usersByEmpId.length > 0) {
+        if (usersByEmpId.length === 1) {
+          appUser = usersByEmpId[0]
+        } else {
+          // In case multiple users were assigned the same employee_id, verify password against candidates
+          const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey)
+          for (const candidate of usersByEmpId) {
+            if (candidate.status !== "active") continue
+            let candidateEmail = candidate.email
+            if (!candidateEmail && candidate.auth_user_id) {
+              const { data: authData } = await supabaseAdmin.auth.admin.getUserById(candidate.auth_user_id)
+              candidateEmail = authData?.user?.email
+            }
+            if (candidateEmail) {
+              const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({
+                email: candidateEmail,
+                password: password,
+              })
+              if (!signInError && signInData?.session) {
+                // Successfully authenticated with one of the candidates!
+                await supabaseAdmin.from("login_attempts").insert({
+                  username: candidate.username || normalizedIdentifier,
+                  ip_address: clientIp,
+                  success: true,
+                })
+                return new Response(JSON.stringify({
+                  session: signInData.session,
+                  user: candidate,
+                }), {
+                  status: 200,
+                  headers: { ...corsHeaders, "Content-Type": "application/json" },
+                })
+              }
+            }
+          }
+          // If none matched password, pick the first active candidate so standard auth flow handles the error
+          appUser = usersByEmpId.find((u: any) => u.status === "active") || usersByEmpId[0]
+        }
       }
     }
 
