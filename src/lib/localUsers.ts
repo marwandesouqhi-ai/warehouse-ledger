@@ -20,8 +20,10 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
       .from('app_users')
       .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions, employee_id, email, department, telegram_user_id')
       .order('created_at', { ascending: true })
-    if (error || !data) return []
-    return data.map((row) => ({
+    if (error) {
+      console.warn('Could not query app_users from cloud:', error)
+    }
+    const usersList: LocalUser[] = (data || []).map((row) => ({
       id: row.id,
       username: row.username,
       displayName: row.display_name || row.username,
@@ -43,6 +45,49 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
           ? (() => { try { return JSON.parse(row.permissions) } catch { return [] } })()
           : [],
     }))
+
+    // Seamlessly merge approved registration requests into directory
+    try {
+      const { data: regRequests } = await supabase
+        .from('registration_requests')
+        .select('*')
+        .eq('approval_status', 'approved')
+
+      if (regRequests && regRequests.length > 0) {
+        for (const reg of regRequests) {
+          const regEmail = (reg.email || '').trim().toLowerCase()
+          if (!regEmail) continue
+
+          const alreadyInList = usersList.some(
+            (u) => (u.email && u.email.trim().toLowerCase() === regEmail) ||
+                   (u.employeeId && reg.employee_id && u.employeeId === reg.employee_id)
+          )
+
+          if (!alreadyInList) {
+            usersList.push({
+              id: reg.id || `usr-${(reg.employee_id || 'reg').toLowerCase()}`,
+              username: regEmail.split('@')[0] || reg.employee_id || 'employee',
+              displayName: reg.full_name || reg.email,
+              password: '',
+              role: (reg.approved_role || reg.requested_role || 'warehouse_employee') as UserRole,
+              activationCode: '',
+              status: (reg.invitation_status === 'accepted' ? 'active' : 'pending_activation') as UserStatus,
+              createdAt: reg.created_at || new Date().toISOString(),
+              activatedAt: reg.invitation_status === 'accepted' ? reg.updated_at : undefined,
+              employeeId: reg.employee_id,
+              email: reg.email,
+              department: reg.requested_department === 'warehouse' ? 'المخازن' : reg.requested_department === 'procurement' ? 'المشتريات' : (reg.requested_department || 'المخازن'),
+              telegramUserId: reg.telegram_user_id || undefined,
+              permissions: [],
+            })
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not merge registration requests into users:', e)
+    }
+
+    return usersList
   } catch (err) {
     console.warn('Could not fetch users from cloud:', err)
     return []

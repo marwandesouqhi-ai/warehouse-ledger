@@ -48,6 +48,7 @@ import {
     getLocalSession,
     isLastActiveSystemAdmin,
     loadLocalUsers,
+    syncUsersWithCloud,
     updateLocalUser,
     type LocalUser,
     type UserRole,
@@ -240,13 +241,27 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    function reloadUsers() {
-        setLocalUsers(loadLocalUsers())
-        void loadRequests()
+    async function reloadUsers() {
+        setRequestsLoading(true)
+        try {
+            const [syncedUsers] = await Promise.all([
+                syncUsersWithCloud(),
+                loadRequests(),
+            ])
+            if (syncedUsers && syncedUsers.length > 0) {
+                setLocalUsers(syncedUsers)
+            } else {
+                setLocalUsers(loadLocalUsers())
+            }
+        } catch {
+            setLocalUsers(loadLocalUsers())
+        } finally {
+            setRequestsLoading(false)
+        }
     }
 
     useEffect(() => {
-        void loadRequests()
+        void reloadUsers()
         window.addEventListener('local-users-changed', reloadUsers)
         return () => window.removeEventListener('local-users-changed', reloadUsers)
     }, [])
@@ -1227,6 +1242,17 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 />
                                 <Search size={15} />
                             </div>
+
+                            <button
+                                type="button"
+                                className="secondary-btn users-action-btn"
+                                onClick={() => void reloadUsers()}
+                                disabled={requestsLoading}
+                                aria-label="تحديث قائمة الموظفين والحسابات"
+                            >
+                                <RefreshCw size={14} className={requestsLoading ? 'animate-spin' : ''} />
+                                تحديث
+                            </button>
                         </div>
                     </div>
 

@@ -21,6 +21,45 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
         .order('created_at', { ascending: false })
 
       if (!error && Array.isArray(data)) {
+        // Auto-heal duplicate employee codes if present
+        const seenCodes = new Set<string>()
+        const prefixCounts: Record<string, number> = {}
+
+        // Pre-scan to know highest assigned number per prefix
+        for (const r of data) {
+          if (r.employee_id) {
+            const m = String(r.employee_id).match(/^([A-Z]{3}-[A-Z]{3})-(\d+)$/)
+            if (m) {
+              const p = m[1]
+              const n = parseInt(m[2], 10)
+              if (n > (prefixCounts[p] || 0)) prefixCounts[p] = n
+            }
+          }
+        }
+
+        // Process in reverse (oldest first) so older requests keep original sequence
+        const sortedOldestFirst = [...data].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        for (const r of sortedOldestFirst) {
+          if (r.employee_id) {
+            const empUpper = String(r.employee_id).toUpperCase()
+            if (seenCodes.has(empUpper)) {
+              // DUPLICATE DETECTED!
+              const m = empUpper.match(/^([A-Z]{3}-[A-Z]{3})-(\d+)$/)
+              if (m) {
+                const p = m[1]
+                prefixCounts[p] = (prefixCounts[p] || 1) + 1
+                const newCode = `${p}-${String(prefixCounts[p]).padStart(6, '0')}`
+                r.employee_id = newCode
+                // Asynchronously heal in Supabase
+                void supabase.from('registration_requests').update({ employee_id: newCode }).eq('id', r.id)
+                void supabase.from('app_users').update({ employee_id: newCode }).eq('email', r.email)
+              }
+            } else {
+              seenCodes.add(empUpper)
+            }
+          }
+        }
+
         return data.map((r) => ({
           id: r.id,
           fullName: r.full_name,
