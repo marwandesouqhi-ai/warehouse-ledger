@@ -4,7 +4,6 @@ import {
     Check,
     CheckCircle2,
     Clock,
-    Copy,
     Edit2,
     Eye,
     EyeOff,
@@ -44,7 +43,6 @@ import {
     addLocalUser,
     changeUserPassword,
     deleteUserPermanently,
-    generateActivationPin,
     getLocalSession,
     isLastActiveSystemAdmin,
     loadLocalUsers,
@@ -154,12 +152,10 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [showNewPassword, setShowNewPassword] = useState(false)
     const [newRole, setNewRole] = useState<UserRole>('warehouse_employee')
     const [newPermissions, setNewPermissions] = useState<string[]>([])
-    const [newActivationCode, setNewActivationCode] = useState(() => generateActivationPin())
     const [newRequirePasswordChange, setNewRequirePasswordChange] = useState(true)
     const [newNotes, setNewNotes] = useState('')
     const [addSuccess, setAddSuccess] = useState('')
     const [addError, setAddError] = useState('')
-    const [copiedPin, setCopiedPin] = useState(false)
 
     // Edit User Modal State
     const [editingUser, setEditingUser] = useState<LocalUser | null>(null)
@@ -169,7 +165,6 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [editPermissions, setEditPermissions] = useState<string[]>([])
     const [editPassword, setEditPassword] = useState('')
     const [showEditPassword, setShowEditPassword] = useState(false)
-    const [editActivationCode, setEditActivationCode] = useState('')
     const [editStatus, setEditStatus] = useState<UserStatus>('active')
     const [editError, setEditError] = useState('')
 
@@ -279,7 +274,6 @@ export default function UsersPage({ session }: UsersPageProps) {
         e.preventDefault()
         setAddError('')
         setAddSuccess('')
-        setCopiedPin(false)
 
         if (isProtectedUsername(newUsername)) {
             setAddError('اسم المستخدم محجوز لحساب مدير النظام الرئيسي المحمي ولا يمكن استخدامه.')
@@ -324,14 +318,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                 role: newRole,
                 department: newDepartment,
                 email: newEmail || undefined,
-                activationCode: newActivationCode,
+                activationCode: '',
                 requireActivation: false,
                 notes: newNotes,
                 permissions: newPermissions,
             })
 
             reloadUsers()
-            setAddSuccess(`تمت إضافة وتفعيل المستخدم "${added.username}" بنجاح! يمكنه تسجيل الدخول فوراً باستخدام اسم المستخدم وكلمة المرور.`)
+            setAddSuccess(`تمت إضافة وتفعيل المستخدم "${added.username}" بنجاح! الرقم الوظيفي: (${added.employeeId || 'تم تخصيصه'}).`)
             void logAuditEvent({
                 action: `إضافة مستخدم جديد: ${added.username} (الدور: ${ROLE_LABELS[added.role as EffectiveRole] || added.role})`,
                 entity_type: 'user',
@@ -343,7 +337,6 @@ export default function UsersPage({ session }: UsersPageProps) {
             setNewPassword('')
             setNewNotes('')
             setNewPermissions([])
-            setNewActivationCode(generateActivationPin())
             setNewRequirePasswordChange(true)
         } catch (err) {
             setAddError(err instanceof Error ? err.message : 'تعذر إضافة المستخدم.')
@@ -361,7 +354,6 @@ export default function UsersPage({ session }: UsersPageProps) {
         setEditDepartment((user.department as any) || (user.role.startsWith('procurement') ? 'المشتريات' : 'المخازن'))
         setEditPermissions(user.permissions || [])
         setEditPassword('')
-        setEditActivationCode(user.activationCode)
         setEditStatus(user.status)
         setEditError('')
         setShowEditPassword(false)
@@ -428,7 +420,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                 role: editRole,
                 department: editDepartment,
                 permissions: editPermissions,
-                activationCode: editActivationCode.trim(),
                 status: editStatus,
                 ...(editPassword ? { password: editPassword } : {}),
             })
@@ -775,13 +766,6 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    function copyToClipboard(text: string) {
-        void navigator.clipboard.writeText(text).then(() => {
-            setCopiedPin(true)
-            setTimeout(() => setCopiedPin(false), 2000)
-        })
-    }
-
     // Merge visibleLocalUsers with approved registrationRequests so all approved employees are always displayed
     const allEmployeesDirectory = useMemo(() => {
         const list = [...visibleLocalUsers]
@@ -840,7 +824,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                 u.department || '',
                 u.role,
                 roleArabic,
-                u.activationCode,
                 statusArabic,
             ], userSearchTerm)
         })
@@ -1047,7 +1030,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 إضافة وتعيين موظف جديد مباشرة
                             </h3>
                             <span className="users-panel-desc">
-                                إنشاء حساب موظف جديد باسم مستخدم، قسم، دور وظيفي، كلمة مرور، وتوليد كود التفعيل
+                                إنشاء حساب موظف جديد باسم مستخدم، قسم، دور وظيفي، وتعيين الرقم الوظيفي وكلمة المرور
                             </span>
                         </div>
                         <button
@@ -1198,13 +1181,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                             <div className="users-alert-actions">
                                 <button
                                     type="button"
-                                    className="text-link-btn"
-                                    onClick={() => copyToClipboard(addSuccess.split('كود تأكيد التفعيل: ')[1] || '')}
-                                >
-                                    <Copy size={14} /> {copiedPin ? 'تم النسخ!' : 'نسخ الكود'}
-                                </button>
-                                <button
-                                    type="button"
                                     className="primary-btn"
                                     onClick={() => setMainTab('employees')}
                                 >
@@ -1307,7 +1283,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         <th>اسم المستخدم</th>
                                         <th>الاسم والبريد</th>
                                         <th>القسم والصلاحية</th>
-                                        <th>كود التفعيل (PIN)</th>
                                         <th>حالة الحساب</th>
                                         <th>تاريخ الإنشاء</th>
                                         {isSystemAdmin && <th className="actions-header">الإجراءات</th>}
@@ -1316,7 +1291,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 <tbody>
                                     {filteredUsers.length === 0 ? (
                                         <tr>
-                                            <td colSpan={isSystemAdmin ? 9 : 8} className="empty-message-cell">
+                                            <td colSpan={isSystemAdmin ? 8 : 7} className="empty-message-cell">
                                                 لا توجد حسابات موظفين مطابقة للبحث أو الفلتر
                                             </td>
                                         </tr>
@@ -1364,24 +1339,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div className="pin-display-wrap">
-                                                        <span className="tabular-nums font-mono">
-                                                            {user.activationCode || '—'}
-                                                        </span>
-                                                        {user.activationCode && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => copyToClipboard(user.activationCode)}
-                                                                className="users-icon-action-btn"
-                                                                title="نسخ كود التفعيل"
-                                                                aria-label="نسخ كود التفعيل"
-                                                            >
-                                                                <Copy size={13} />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td>
                                                     <span className={`badge ${user.status === 'active' ? 'badge--ok' : user.status === 'suspended' ? 'badge--bad' : 'badge--warn'}`}>
                                                         {user.status === 'active'
                                                             ? 'نشط مفعل'
@@ -1409,7 +1366,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                                 type="button"
                                                                 className="action-icon-btn edit-btn"
                                                                 onClick={() => handleOpenEdit(user)}
-                                                                title="تعديل المستخدم وكود التفعيل"
+                                                                title="تعديل بيانات وصلاحيات المستخدم"
                                                                 aria-label={`تعديل المستخدم ${user.username}`}
                                                             >
                                                                 <Edit2 size={15} />
@@ -1907,7 +1864,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </div>
                                 <div>
                                     <h3>تعديل بيانات المستخدم: {editingUser.username}</h3>
-                                    <span className="modal-subtitle">تعديل الصلاحيات، كلمة المرور، أو كود التفعيل</span>
+                                    <span className="modal-subtitle">تعديل الصلاحيات أو كلمة المرور</span>
                                 </div>
                             </div>
                             <button type="button" className="modal-close-btn" onClick={() => setEditingUser(null)} aria-label="إغلاق النافذة">
@@ -1998,17 +1955,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </label>
 
                                 <label className="form-label-block">
-                                    كود تأكيد التفعيل (PIN)
-                                    <input
-                                        type="text"
-                                        value={editActivationCode}
-                                        onChange={(e) => setEditActivationCode(e.target.value)}
-                                        required
-                                        className="form-input-themed font-mono font-bold"
-                                    />
-                                </label>
-
-                                <label className="form-label-block">
                                     حالة الحساب {editingUser && isLastActiveSystemAdmin(editingUser.id, localUsers) && <span className="protect-badge">(نشط دائماً ومحمي ضد التعطيل)</span>}
                                     <select
                                         value={editStatus}
@@ -2017,7 +1963,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         className="form-input-themed"
                                     >
                                         <option value="active">مفعل ونشط فوراً (Active)</option>
-                                        <option value="pending_activation">معلق بانتظار إدخال كود التفعيل (Pending Activation)</option>
+                                        <option value="pending_activation">معلق بانتظار التفعيل (Pending)</option>
                                     </select>
                                 </label>
 

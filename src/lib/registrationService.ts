@@ -28,7 +28,7 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
         // Pre-scan to know highest assigned number per prefix
         for (const r of data) {
           if (r.employee_id) {
-            const m = String(r.employee_id).match(/^([A-Z]{3}-[A-Z]{3})-(\d+)$/)
+            const m = String(r.employee_id).match(/^([A-Z]{2,3}-[A-Z]{3})-(\d+)$/)
             if (m) {
               const p = m[1]
               const n = parseInt(m[2], 10)
@@ -44,7 +44,7 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
             const empUpper = String(r.employee_id).toUpperCase()
             if (seenCodes.has(empUpper)) {
               // DUPLICATE DETECTED!
-              const m = empUpper.match(/^([A-Z]{3}-[A-Z]{3})-(\d+)$/)
+              const m = empUpper.match(/^([A-Z]{2,3}-[A-Z]{3})-(\d+)$/)
               if (m) {
                 const p = m[1]
                 prefixCounts[p] = (prefixCounts[p] || 1) + 1

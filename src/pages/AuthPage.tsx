@@ -249,9 +249,38 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 })
 
                 setNotice('تهانينا! تم تفعيل حسابك بنجاح. جاري تحويلك إلى لوحة التحكم...')
+
+                // 3. Auto-login: refresh the Supabase session after activation so the user
+                //    enters the dashboard immediately without needing to re-enter credentials
+                try {
+                    const { data: refreshed } = await supabase.auth.refreshSession()
+                    if (refreshed?.session) {
+                        // Small delay to show success message before transition
+                        setTimeout(() => {
+                            onPasswordSet?.()
+                        }, 800)
+                        return
+                    }
+                } catch {
+                    // If refresh fails, fall back to re-sign-in via email
+                }
+
+                // Fallback: try signing in with the email used in invite profile
+                const inviteEmail = inviteProfile?.email || ''
+                if (inviteEmail) {
+                    try {
+                        const emailTarget = inviteEmail.includes('@')
+                            ? inviteEmail
+                            : `${inviteEmail}@warehouse.local`
+                        await supabase.auth.signInWithPassword({ email: emailTarget, password })
+                    } catch {
+                        // Non-blocking: if auto-login fails, onPasswordSet still transitions
+                    }
+                }
+
                 setTimeout(() => {
                     onPasswordSet?.()
-                }, 1000)
+                }, 800)
                 return
             }
 

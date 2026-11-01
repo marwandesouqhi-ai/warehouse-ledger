@@ -52,7 +52,7 @@ export type RegistrationRequest = {
  * Regex pattern for Employee Unique IDs:
  * Examples: WH-EMP-000001, WH-ADM-000001, PUR-EMP-000001, PUR-ADM-000001, SYS-ADM-000001
  */
-export const EMPLOYEE_ID_REGEX = /^(WH|PUR|SYS)-(EMP|ADM)-\d{6}$/
+export const EMPLOYEE_ID_REGEX = /^(WH|PUR|SYS|GEN)-(EMP|ADM|VIE)-\d{6}$/
 
 /**
  * Validates whether a given string is a valid Employee Unique ID format.
@@ -96,6 +96,10 @@ export function formatEmployeeId(idOrRole: string, sequenceNumber?: number): str
     prefix = 'SYS-ADM-'
   } else if (cleanRole === 'admin') {
     prefix = 'WH-ADM-'
+  } else if (cleanRole === 'viewer' || cleanRole === 'warehouse_viewer') {
+    prefix = 'WH-VIE-'
+  } else if (cleanRole === 'procurement_viewer') {
+    prefix = 'PUR-VIE-'
   }
 
   const paddedNum = String(Math.max(1, Math.floor(sequenceNumber))).padStart(6, '0')

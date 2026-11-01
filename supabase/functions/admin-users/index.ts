@@ -780,6 +780,38 @@ ${recoveryLink}
 
       const syntheticEmail = `${cleanUsername}@warehouse.local`
 
+      // Generate or allocate employee_id if not explicitly provided
+      let assignedEmployeeId = body.employeeId || null
+      if (!assignedEmployeeId) {
+        try {
+          const { data: codeData } = await supabaseAdmin.rpc("generate_employee_code", { p_role: role })
+          if (codeData) assignedEmployeeId = codeData
+        } catch {
+          // ignore RPC error and fallback
+        }
+      }
+      if (!assignedEmployeeId) {
+        const prefix = (role === "warehouse_admin" || role === "admin") ? "WH-ADM"
+          : role === "procurement_admin" ? "PUR-ADM"
+          : role === "procurement_employee" ? "PUR-EMP"
+          : role === "viewer" ? "WH-VIE"
+          : "WH-EMP"
+        const [appRes, regRes] = await Promise.all([
+          supabaseAdmin.from("app_users").select("employee_id").ilike("employee_id", `${prefix}-%`),
+          supabaseAdmin.from("registration_requests").select("employee_id").ilike("employee_id", `${prefix}-%`),
+        ])
+        const allCodes = [...(appRes.data || []), ...(regRes.data || [])]
+        let maxNum = 0
+        for (const row of allCodes) {
+          const match = (row.employee_id || "").match(/(\d+)$/)
+          if (match) {
+            const n = parseInt(match[1], 10)
+            if (n > maxNum) maxNum = n
+          }
+        }
+        assignedEmployeeId = `${prefix}-${String(maxNum + 1).padStart(6, "0")}`
+      }
+
       const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: syntheticEmail,
         password: effectivePassword,
@@ -788,12 +820,14 @@ ${recoveryLink}
           username: cleanUsername,
           displayName: displayName?.trim() || cleanUsername,
           name: displayName?.trim() || cleanUsername,
+          employee_id: assignedEmployeeId,
         },
         app_metadata: {
           username: cleanUsername,
           role,
           department: body.department || (role.startsWith('procurement') ? 'المشتريات' : role.startsWith('warehouse') ? 'المخازن' : 'المخازن'),
           system_admin: false,
+          employee_id: assignedEmployeeId,
           permissions: permissions || [],
           must_change_password: Boolean(requirePasswordChange),
         },
@@ -813,6 +847,7 @@ ${recoveryLink}
         role,
         department: body.department || (role.startsWith('procurement') ? 'المشتريات' : role.startsWith('warehouse') ? 'المخازن' : 'المخازن'),
         email: body.email || null,
+        employee_id: assignedEmployeeId,
         status: "active",
         permissions: permissions || [],
         auth_user_id: createData.user?.id,
@@ -1577,7 +1612,17 @@ ${recoveryLink}
         })
       }
 
-      const allowedRoles = ["warehouse_employee", "warehouse_admin", "procurement_employee", "procurement_admin"]
+      const allowedRoles = [
+        "warehouse_employee",
+        "warehouse_admin",
+        "procurement_employee",
+        "procurement_admin",
+        "admin",
+        "viewer",
+        "warehouse_staff",
+        "purchasing_staff",
+        "editor",
+      ]
       if (!allowedRoles.includes(roleToAssign)) {
         return new Response(JSON.stringify({
           error: "الدور الوظيفي المحدد غير مسموح به في دورة الاعتماد.",
@@ -1624,9 +1669,10 @@ ${recoveryLink}
       }
 
       if (!allocatedEmployeeId) {
-        const prefix = roleToAssign === "warehouse_admin" ? "WH-ADM"
+        const prefix = (roleToAssign === "warehouse_admin" || roleToAssign === "admin") ? "WH-ADM"
           : roleToAssign === "procurement_admin" ? "PUR-ADM"
           : roleToAssign === "procurement_employee" ? "PUR-EMP"
+          : roleToAssign === "viewer" ? "WH-VIE"
           : "WH-EMP"
 
         const [appRes, regRes] = await Promise.all([

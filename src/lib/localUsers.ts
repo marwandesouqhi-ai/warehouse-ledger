@@ -270,7 +270,7 @@ const DEFAULT_ADMIN: LocalUser = {
   displayName: 'مروان دسوقي (مدير النظام)',
   password: '', // Redacted / passwordless in code
   role: 'system_admin',
-  activationCode: '1001',
+  activationCode: '',
   status: 'active',
   createdAt: new Date().toISOString(),
   permissions: ['view_audit', 'view_settings', 'manage_records'],
@@ -398,8 +398,12 @@ export function loadLocalUsers(): LocalUser[] {
           }
         }
 
-        // Ensure employee ID sanity and guarantee Ahmad Hussein Salah's active record
+        // Ensure employee ID sanity and clean up legacy activation codes
         for (const u of users) {
+          if (u.activationCode) {
+            u.activationCode = ''
+            needsSave = true
+          }
           if (u.email?.toLowerCase().includes('507') || u.displayName?.includes('أحمد حسين')) {
             if (u.employeeId !== 'WH-EMP-000002') {
               u.employeeId = 'WH-EMP-000002'
@@ -515,7 +519,27 @@ export function addLocalUser(data: {
     'المخازن'
   )
 
-  const activationCode = data.activationCode?.trim() || generateActivationPin()
+  // Auto-allocate unique employeeId if not provided
+  let allocatedEmpId = data.employeeId
+  if (!allocatedEmpId) {
+    const prefix = (data.role === 'warehouse_admin' || data.role === 'admin') ? 'WH-ADM'
+      : data.role === 'procurement_admin' ? 'PUR-ADM'
+      : data.role === 'procurement_employee' ? 'PUR-EMP'
+      : data.role === 'viewer' ? 'WH-VIE'
+      : 'WH-EMP'
+    let maxNum = 0
+    for (const u of users) {
+      if (u.employeeId && u.employeeId.toUpperCase().startsWith(`${prefix}-`)) {
+        const m = u.employeeId.match(/(\d+)$/)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n > maxNum) maxNum = n
+        }
+      }
+    }
+    allocatedEmpId = `${prefix}-${String(maxNum + 1).padStart(6, '0')}`
+  }
+
   const newUser: LocalUser = {
     id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     username: cleanUsername,
@@ -523,9 +547,9 @@ export function addLocalUser(data: {
     password: data.password,
     role: data.role,
     department: defaultDept,
-    employeeId: data.employeeId,
+    employeeId: allocatedEmpId,
     email: data.email,
-    activationCode,
+    activationCode: '',
     status: data.requireActivation ? 'pending_activation' : 'active',
     createdAt: new Date().toISOString(),
     notes: data.notes?.trim() || undefined,

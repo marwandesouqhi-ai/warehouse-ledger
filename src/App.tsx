@@ -29,6 +29,7 @@ import {
   Info,
   LayoutDashboard,
   LogOut,
+  Menu,
   Moon,
   Package,
   PackagePlus,
@@ -287,6 +288,11 @@ function App() {
   const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(supabase ? 'loading' : 'local')
   const [syncError, setSyncError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
 
   const [settings, setSettings] = useState<AppSettings>(loadAppSettings)
   const [failedLogoSource, setFailedLogoSource] = useState('')
@@ -1397,9 +1403,17 @@ function App() {
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', window.location.pathname)
           }
+          // Refresh session after activation — the session is already live from the invite flow
           void supabase?.auth.getSession().then(({ data }) => {
             if (data?.session) {
               setSession(data.session)
+            } else {
+              // Fallback: force a session check after a short delay (metadata propagation)
+              setTimeout(() => {
+                void supabase?.auth.getSession().then(({ data: d2 }) => {
+                  if (d2?.session) setSession(d2.session)
+                })
+              }, 1200)
             }
           })
         }}
@@ -1441,10 +1455,34 @@ function App() {
   }
 
   return (
-    <div className="app-shell" dir="rtl">
+    <div className={`app-shell ${mobileMenuOpen ? 'mobile-nav-active' : ''}`} dir="rtl">
       <a href="#main-content" className="skip-link">تخطي إلى المحتوى الرئيسي</a>
-      <aside className="sidebar" aria-label="شريط التنقل الجانبي">
-        <div>
+
+      {mobileMenuOpen && (
+        <div
+          className="mobile-sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label="شريط التنقل الجانبي">
+        <div className="sidebar-scrollable-content">
+          <div className="mobile-drawer-header">
+            <div className="flex items-center gap-2">
+              <Warehouse size={18} className="text-accent" />
+              <strong className="font-sm text-ink">{systemDisplayName}</strong>
+            </div>
+            <button
+              type="button"
+              className="mobile-drawer-close-btn"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="إغلاق القائمة"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
           <div className="brand-wrap">
             <div className="brand-mark">
               {logoSource && failedLogoSource !== logoSource ? (
@@ -1472,7 +1510,15 @@ function App() {
               <div key={section.id} className="nav-section">
                 <div className="nav-section-title">{section.title}</div>
                 {section.items.map(({ to, label, mark, icon: Icon }) => (
-                  <NavLink key={to} to={to} end={to === '/'} title={label} aria-label={label} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/'}
+                    title={label}
+                    aria-label={label}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                  >
                     <Icon size={20} strokeWidth={2.1} aria-hidden="true" />
                     <span className="nav-label">{label}</span>
                     {mark ? <small className="nav-badge">{mark}</small> : null}
@@ -1507,6 +1553,33 @@ function App() {
 
       <main id="main-content" className="main-panel">
         <header className="topbar">
+          <div className="mobile-topbar-row">
+            <button
+              type="button"
+              className="mobile-menu-trigger-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="فتح القائمة الرئيسية"
+              title="القائمة الرئيسية"
+            >
+              <Menu size={20} />
+              <span>القائمة</span>
+            </button>
+
+            <div className="mobile-brand-pill">
+              <Warehouse size={15} className="text-accent" />
+              <span>{systemDisplayName}</span>
+            </div>
+
+            <button
+              type="button"
+              className="theme-toggle mobile-theme-toggle"
+              onClick={() => setDarkMode((value) => !value)}
+              aria-label={darkMode ? 'تفعيل الوضع الفاتح' : 'تفعيل الوضع الداكن'}
+            >
+              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+          </div>
+
           <div className="topbar-meta">
             <div className="eyebrow">
               {logoSource && failedLogoSource !== logoSource ? (
