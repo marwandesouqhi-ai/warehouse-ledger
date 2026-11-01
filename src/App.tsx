@@ -1580,6 +1580,33 @@ function App() {
             </button>
           </div>
 
+          <div className="mobile-native-greeting">
+            <div className="mobile-greeting-date">
+              <CalendarDays size={13} className="text-accent" />
+              <span>{new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span>
+            </div>
+            <h2 className="mobile-greeting-title">
+              أهلاً {activeUserDisplayName} 👋
+            </h2>
+            <p className="mobile-greeting-subtitle">
+              {ROLE_LABELS[effectiveRole] || effectiveRole} • {settings.organization}
+            </p>
+            <div className="mobile-quick-chips">
+              <button type="button" className="quick-chip" onClick={() => navigate('/purchases?tab=add')}>
+                <Plus size={14} /> إضافة توريد
+              </button>
+              <button type="button" className="quick-chip" onClick={() => navigate('/requests')}>
+                <ClipboardList size={14} /> طلب صرف
+              </button>
+              <button type="button" className="quick-chip" onClick={() => navigate('/reports')}>
+                <FileSpreadsheet size={14} /> كشف الجرد
+              </button>
+              <button type="button" className="quick-chip" onClick={() => navigate('/support')}>
+                <Headphones size={14} /> الدعم الفني
+              </button>
+            </div>
+          </div>
+
           <div className="topbar-meta">
             <div className="eyebrow">
               {logoSource && failedLogoSource !== logoSource ? (
@@ -3131,6 +3158,35 @@ function App() {
 
         {isSystemAdmin && <WarehouseChatBot session={session} />}
       </main>
+
+      {/* ─── Mobile Bottom Navigation Dock (App-Like Touch Bar) ─── */}
+      <nav className="mobile-bottom-dock" aria-label="شريط التنقل السريع للهاتف">
+        <NavLink to="/" end className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+          <LayoutDashboard size={20} />
+          <span>الرئيسية</span>
+        </NavLink>
+        <NavLink to="/purchases" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+          <Receipt size={20} />
+          <span>المشتريات</span>
+        </NavLink>
+        <NavLink to="/movements" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+          <Boxes size={20} />
+          <span>المخازن</span>
+        </NavLink>
+        <NavLink to="/reports" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+          <FileSpreadsheet size={20} />
+          <span>التقارير</span>
+        </NavLink>
+        <button
+          type="button"
+          className={`bottom-dock-item ${mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="فتح القائمة الكاملة"
+        >
+          <Menu size={20} />
+          <span>القائمة</span>
+        </button>
+      </nav>
     </div>
   )
 }
