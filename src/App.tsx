@@ -1468,20 +1468,22 @@ function App() {
 
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label="شريط التنقل الجانبي">
         <div className="sidebar-scrollable-content">
-          <div className="mobile-drawer-header">
-            <div className="flex items-center gap-2">
-              <Warehouse size={18} className="text-accent" />
-              <strong className="font-sm text-ink">{systemDisplayName}</strong>
+          {mobileMenuOpen && (
+            <div className="mobile-drawer-header">
+              <div className="flex items-center gap-2">
+                <Warehouse size={18} className="text-accent" />
+                <strong className="font-sm text-ink">{systemDisplayName}</strong>
+              </div>
+              <button
+                type="button"
+                className="mobile-drawer-close-btn"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="إغلاق القائمة"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <button
-              type="button"
-              className="mobile-drawer-close-btn"
-              onClick={() => setMobileMenuOpen(false)}
-              aria-label="إغلاق القائمة"
-            >
-              <X size={18} />
-            </button>
-          </div>
+          )}
 
           <div className="brand-wrap">
             <div className="brand-mark">

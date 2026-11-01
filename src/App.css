@@ -3340,165 +3340,7 @@
   }
 }
 
-/* Sidebar & Page Navigation - Desktop Only (min-width: 1024px) */
-@media (min-width: 1024px) {
-  .app-shell {
-    grid-template-columns: 280px minmax(0, 1fr) !important;
-  }
-
-  .sidebar {
-    position: sticky !important;
-    top: 0 !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    z-index: 100 !important;
-    padding: 18px 12px !important;
-    background: var(--surface);
-    border-inline-end: 1px solid var(--line);
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    box-sizing: border-box !important;
-  }
-}
-
-/* Mobile Drawer & Single Column Layout (max-width: 1023px) */
-@media (max-width: 1023px) {
-  .app-shell {
-    display: flex !important;
-    flex-direction: column !important;
-    grid-template-columns: 1fr !important;
-    width: 100% !important;
-    max-width: 100vw !important;
-    min-width: 0 !important;
-    overflow-x: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .main-panel {
-    width: 100% !important;
-    max-width: 100vw !important;
-    min-width: 0 !important;
-    padding: 12px 12px 36px !important;
-    box-sizing: border-box !important;
-    overflow-x: hidden !important;
-  }
-
-  .sidebar {
-    position: fixed !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    right: 0 !important;
-    left: auto !important;
-    width: 310px !important;
-    max-width: 86vw !important;
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    background: var(--surface) !important;
-    z-index: 1200 !important;
-    box-shadow: -10px 0 35px rgba(0, 0, 0, 0.25) !important;
-    transform: translateX(110%) !important;
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    padding: 16px 14px 28px !important;
-    box-sizing: border-box !important;
-  }
-
-  .sidebar.mobile-open {
-    transform: translateX(0) !important;
-  }
-
-  .mobile-sidebar-backdrop {
-    position: fixed !important;
-    inset: 0 !important;
-    background: rgba(15, 23, 42, 0.6) !important;
-    -webkit-backdrop-filter: blur(4px) !important;
-    backdrop-filter: blur(4px) !important;
-    z-index: 1190 !important;
-  }
-
-  .mobile-drawer-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding-bottom: 12px !important;
-    margin-bottom: 12px !important;
-    border-bottom: 1px solid var(--line) !important;
-  }
-
-  .mobile-drawer-close-btn {
-    background: var(--surface-soft) !important;
-    border: 1px solid var(--line) !important;
-    border-radius: var(--r-pill) !important;
-    width: 34px !important;
-    height: 34px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    cursor: pointer !important;
-    color: var(--ink) !important;
-  }
-
-  .mobile-topbar-row {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    width: 100% !important;
-    padding-bottom: 12px !important;
-    margin-bottom: 12px !important;
-    border-bottom: 1px solid var(--line) !important;
-    gap: 8px !important;
-  }
-
-  .mobile-menu-trigger-btn {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 7px !important;
-    background: var(--surface-soft) !important;
-    color: var(--ink) !important;
-    border: 1px solid var(--line) !important;
-    padding: 7px 13px !important;
-    border-radius: var(--r-pill) !important;
-    font-size: 0.82rem !important;
-    font-weight: 700 !important;
-    cursor: pointer !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
-  }
-
-  .mobile-brand-pill {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    font-size: 0.8rem !important;
-    font-weight: 700 !important;
-    color: var(--ink) !important;
-    background: var(--accent-subtle) !important;
-    padding: 5px 10px !important;
-    border-radius: var(--r-pill) !important;
-    border: 1px solid var(--accent-border) !important;
-  }
-
-  .mobile-theme-toggle {
-    width: 36px !important;
-    height: 36px !important;
-    border-radius: var(--r-pill) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-}
-
-@media (min-width: 1024px) {
-  .mobile-topbar-row { display: none !important; }
-  .mobile-sidebar-backdrop { display: none !important; }
-  .mobile-drawer-header { display: none !important; }
-}
+/* Responsive navigation unified in FLUID RESPONSIVE SYSTEM below */
 
 .sidebar::-webkit-scrollbar {
   width: 4px;
@@ -11749,9 +11591,20 @@ a {
    FLUID RESPONSIVE SYSTEM (Mobile-First to 4K Ultra-Wide Native Standard)
    ========================================================================== */
 
-/* ─── 1. Desktop & Ultra-Wide Displays (min-width: 1024px) ──────────────── */
-@media (min-width: 1024px) {
-  /* Hide all mobile-only widgets completely */
+/* ==========================================================================
+   GLOBAL BASELINE: Mobile components are strictly hidden by default on all screens
+   ========================================================================== */
+.mobile-topbar-row,
+.mobile-native-greeting,
+.mobile-bottom-dock,
+.mobile-sidebar-backdrop,
+.mobile-drawer-header {
+  display: none !important;
+}
+
+/* ─── 1. Desktop, Laptops & Landscape Displays (min-width: 769px) ────────── */
+@media (min-width: 769px) {
+  /* Strict hiding of mobile widgets on all desktop/laptop resolutions */
   .mobile-topbar-row,
   .mobile-native-greeting,
   .mobile-bottom-dock,
@@ -11760,53 +11613,85 @@ a {
     display: none !important;
   }
 
-  /* Two-column App Shell with dedicated docked sidebar */
+  /* Desktop App Shell */
   .app-shell {
-    display: grid !important;
-    grid-template-columns: 280px minmax(0, 1fr) !important;
+    display: block !important;
     min-height: 100vh !important;
     width: 100% !important;
     max-width: 100% !important;
     position: relative !important;
   }
 
-  /* Desktop Sidebar stays fixed and sticky */
+  /* Desktop Sidebar: 100% FIXED to Viewport — Never moves with page scroll */
   .sidebar {
     display: flex !important;
     flex-direction: column !important;
-    position: sticky !important;
+    justify-content: space-between !important;
+    position: fixed !important;
     top: 0 !important;
-    height: 100vh !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    left: auto !important;
     width: 280px !important;
-    z-index: 100 !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    z-index: 500 !important;
     transform: none !important;
     background: var(--surface) !important;
     border-inline-start: none !important;
     border-inline-end: 1px solid var(--line) !important;
+    padding: 22px 16px !important;
+    box-sizing: border-box !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
-    box-shadow: none !important;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.02) !important;
   }
 
-  /* Main panel scales gracefully up to 1560px */
+  [dir="ltr"] .sidebar {
+    left: 0 !important;
+    right: auto !important;
+  }
+
+  .sidebar-scrollable-content {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Main panel scrolls smoothly alongside the fixed sidebar */
   .main-panel {
     display: flex !important;
     flex-direction: column !important;
-    width: 100% !important;
-    max-width: 1560px !important;
-    margin-inline: auto !important;
+    margin-inline-start: 280px !important;
+    width: calc(100% - 280px) !important;
+    max-width: calc(100% - 280px) !important;
+    min-height: 100vh !important;
     padding: clamp(24px, 2.5vw, 44px) clamp(24px, 3vw, 48px) 64px !important;
     box-sizing: border-box !important;
     gap: 20px !important;
   }
 
-  /* Topbar Desktop Layout */
+  [dir="rtl"] .main-panel {
+    margin-right: 280px !important;
+    margin-left: 0 !important;
+  }
+
+  [dir="ltr"] .main-panel {
+    margin-left: 280px !important;
+    margin-right: 0 !important;
+  }
+
+  /* Topbar Desktop Layout: Clean, uncrowded header */
   .topbar {
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding: 20px 24px !important;
+    padding: 18px 24px !important;
     border-radius: var(--r-xl) !important;
     background: var(--surface) !important;
     border: 1px solid var(--line) !important;
@@ -11815,262 +11700,36 @@ a {
   }
 
   .topbar-meta {
+    display: flex !important;
+    flex-direction: column !important;
     flex: 1 !important;
-    min-width: 0 !important;
-  }
-
-  .topbar-meta h1 {
-    font-size: 1.55rem !important;
-    font-weight: 800 !important;
-    margin: 4px 0 2px !important;
   }
 
   .toolbar-actions {
     display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    gap: 12px !important;
-    width: auto !important;
-  }
-
-  .toolbar-search {
-    min-width: 280px !important;
-    max-width: 360px !important;
-  }
-
-  /* Hero Overview Card: Executive Desktop 2-Column Split */
-  .hero-overview-card {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    align-items: center !important;
-    text-align: start !important;
-    padding: 30px 36px !important;
-    border-radius: 26px !important;
-    gap: 32px !important;
-    background: linear-gradient(135deg, rgba(8, 127, 104, 0.05) 0%, rgba(14, 124, 134, 0.03) 100%), var(--surface) !important;
-    border: 1px solid rgba(8, 127, 104, 0.22) !important;
-    box-shadow: 0 10px 30px -8px rgba(8, 127, 104, 0.08) !important;
-  }
-
-  .hero-main-content {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    text-align: start !important;
-    gap: 10px !important;
-  }
-
-  .hero-status-tag {
-    justify-content: flex-start !important;
-    margin: 0 0 4px 0 !important;
-  }
-
-  .hero-title {
-    font-size: 1.65rem !important;
-    font-weight: 800 !important;
-    text-align: start !important;
-    margin: 4px 0 !important;
-  }
-
-  .hero-desc {
-    font-size: 0.92rem !important;
-    line-height: 1.7 !important;
-    text-align: start !important;
-    max-width: 820px !important;
-    margin: 0 0 14px 0 !important;
-  }
-
-  .hero-actions {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    gap: 12px !important;
-    width: auto !important;
-  }
-
-  .hero-actions .primary-btn,
-  .hero-actions .secondary-btn,
-  .hero-actions .outline-btn {
-    width: auto !important;
-    min-height: 44px !important;
-    padding: 10px 20px !important;
-  }
-
-  .hero-meter-wrap {
-    order: unset !important;
-    width: auto !important;
-    margin: 0 !important;
-  }
-
-  .circular-meter {
-    width: 140px !important;
-    height: 140px !important;
-  }
-
-  /* Multi-column Grids on Desktop */
-  .kpi-block,
-  .purchases-kpis,
-  .operational-strip,
-  .kpi-grid,
-  .financial-kpis,
-  .analytics-kpi-grid,
-  .reports-kpi-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 16px !important;
-    width: 100% !important;
-  }
-
-  .proc-dash-pipeline-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 16px !important;
-    width: 100% !important;
-  }
-
-  .proc-dash-kpi-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 16px !important;
-    width: 100% !important;
-  }
-
-  .proc-dash-header {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 16px !important;
-  }
-
-  .proc-dash-actions {
-    display: flex !important;
-    flex-direction: row !important;
     align-items: center !important;
     gap: 10px !important;
-    width: auto !important;
-  }
-
-  .dashboard-analytics-bar {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 16px !important;
-    padding: 18px 24px !important;
-  }
-
-  .dashboard-analytics-bar .flex-wrap {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    gap: 10px !important;
-    width: auto !important;
-  }
-
-  .dashboard-analytics-bar .secondary-btn {
-    width: auto !important;
-  }
-
-  /* Chatbot window desktop */
-  .chatbot-window {
-    width: 440px !important;
-    height: 620px !important;
-    bottom: 24px !important;
-    left: 24px !important;
-    right: auto !important;
-    border-radius: 22px !important;
   }
 }
 
-/* ─── 2. Tablet & Medium Screens (min-width: 640px) and (max-width: 1023px) ─ */
-@media (min-width: 640px) and (max-width: 1023px) {
-  .app-shell {
-    display: flex !important;
-    flex-direction: column !important;
-    width: 100% !important;
-    max-width: 100vw !important;
-    overflow-x: hidden !important;
-  }
-
-  .sidebar {
-    display: none !important;
-  }
-
-  .sidebar.mobile-open {
-    display: flex !important;
-    position: fixed !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    right: 0 !important;
-    left: auto !important;
-    width: 340px !important;
-    height: 100dvh !important;
-    background: var(--surface) !important;
-    z-index: 9999 !important;
-    box-shadow: -10px 0 45px rgba(0, 0, 0, 0.35) !important;
-    animation: drawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
-    overflow-y: auto !important;
-    padding: 20px 18px 36px !important;
-    box-sizing: border-box !important;
-  }
-
-  .main-panel {
-    display: flex !important;
-    flex-direction: column !important;
-    width: 100% !important;
-    max-width: 100vw !important;
-    padding: 20px 24px 92px !important;
-    gap: 18px !important;
-    box-sizing: border-box !important;
-    overflow-x: hidden !important;
-  }
-
-  .hero-overview-card {
-    display: grid !important;
-    grid-template-columns: 1fr auto !important;
-    align-items: center !important;
-    text-align: start !important;
-    padding: 26px 28px !important;
-    border-radius: 24px !important;
-  }
-
-  .hero-main-content {
-    align-items: flex-start !important;
-    text-align: start !important;
-  }
-
-  .hero-actions {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-  }
-
+/* Medium Desktop / Small Laptop Refinement (769px to 1100px) */
+@media (min-width: 769px) and (max-width: 1100px) {
   .kpi-block,
   .purchases-kpis,
   .operational-strip,
   .kpi-grid,
   .financial-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 12px !important;
-  }
-
-  .proc-dash-pipeline-grid,
-  .proc-dash-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 12px !important;
   }
-
-  .mobile-bottom-dock {
-    max-width: 580px !important;
-    margin-inline: auto !important;
-  }
 }
 
-/* ─── 3. Mobile Phones (< 640px) ─────────────────────────────────────────── */
-@media (max-width: 639px) {
+/* ─── 2. Mobile Phones & Handheld Displays (max-width: 768px) ─────────────── */
+@media (max-width: 768px) {
+  .topbar-meta,
+  .toolbar-actions {
+    display: none !important;
+  }
   /* Strict 100% viewport width without any horizontal spill */
   html, body {
     width: 100% !important;
@@ -12743,7 +12402,7 @@ a {
   display: none;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 768px) {
   .mobile-bottom-dock {
     position: fixed !important;
     bottom: 12px !important;
@@ -12826,5 +12485,21 @@ a {
   .bottom-dock-item {
     padding: 6px 8px !important;
     font-size: 0.65rem !important;
+  }
+}
+
+
+@media print {
+  .sidebar,
+  .mobile-bottom-dock,
+  .mobile-topbar-row,
+  .mobile-native-greeting {
+    display: none !important;
+  }
+  .main-panel {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
   }
 }
