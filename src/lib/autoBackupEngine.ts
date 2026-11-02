@@ -44,7 +44,7 @@ import {
 import { checkIsSystemAdmin, supabase } from './supabase'
 
 export const AUTO_BACKUP_ENABLED_KEY = 'warehouse_ledger_auto_backup_enabled'
-export const AUTO_BACKUP_SCHEDULE_KEY = 'warehouse_ledger_auto_backup_schedule_v1'
+export const AUTO_BACKUP_SCHEDULE_KEY = 'warehouse_ledger_auto_backup_schedule_v2'
 
 export type BackupFrequency = 'daily' | 'weekly' | 'custom_days'
 export type BackupExecutionMode = 'realtime_and_scheduled' | 'scheduled_only' | 'realtime_only'
@@ -60,7 +60,7 @@ export interface AutoBackupScheduleConfig {
 
 export const DEFAULT_SCHEDULE_CONFIG: AutoBackupScheduleConfig = {
   enabled: true,
-  mode: 'realtime_and_scheduled',
+  mode: 'scheduled_only',
   frequency: 'daily',
   time: '23:00',
   daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // كل أيام الأسبوع افتراضياً
@@ -99,12 +99,30 @@ export function setAutoBackupEnabled(enabled: boolean): void {
 export function getAutoBackupScheduleConfig(): AutoBackupScheduleConfig {
   try {
     if (typeof window === 'undefined') return DEFAULT_SCHEDULE_CONFIG
-    const raw = localStorage.getItem(AUTO_BACKUP_SCHEDULE_KEY)
-    if (raw) {
+    let raw = localStorage.getItem(AUTO_BACKUP_SCHEDULE_KEY)
+    if (!raw) {
+      // Migrate from v1 if present, forcing mode to 'scheduled_only'
+      const legacyRaw = localStorage.getItem('warehouse_ledger_auto_backup_schedule_v1')
+      if (legacyRaw) {
+        try {
+          const parsedLegacy = JSON.parse(legacyRaw) as Partial<AutoBackupScheduleConfig>
+          const migrated: AutoBackupScheduleConfig = {
+            ...DEFAULT_SCHEDULE_CONFIG,
+            ...parsedLegacy,
+            mode: 'scheduled_only',
+          }
+          localStorage.setItem(AUTO_BACKUP_SCHEDULE_KEY, JSON.stringify(migrated))
+          return migrated
+        } catch {
+          // ignore
+        }
+      }
+    } else {
       const parsed = JSON.parse(raw) as Partial<AutoBackupScheduleConfig>
       return {
         ...DEFAULT_SCHEDULE_CONFIG,
         ...parsed,
+        mode: parsed.mode || 'scheduled_only',
         daysOfWeek: Array.isArray(parsed.daysOfWeek) && parsed.daysOfWeek.length > 0 ? parsed.daysOfWeek : DEFAULT_SCHEDULE_CONFIG.daysOfWeek,
       }
     }
@@ -316,8 +334,10 @@ export function generateHotRecoverySnapshot(session?: Session | null): SystemBac
 
 /**
  * تنفيذ عملية النسخ الاحتياطي التلقائي الحالية
+ * isScheduled = true: فقط عند حلول موعد الجدولة المحدد، يتم رفع النسخة إلى السحابة وتوثيقها في سجل المراجعة
+ * isScheduled = false: لقطة تعافي محلية فورية فقط بدون إجهاد السحابة أو إغراق سجل المراجعة
  */
-export async function executeAutoBackup(session?: Session | null): Promise<void> {
+export async function executeAutoBackup(session?: Session | null, isScheduled = false): Promise<void> {
   if (isPerformingAutoBackup) return
   isPerformingAutoBackup = true
 
@@ -325,7 +345,7 @@ export async function executeAutoBackup(session?: Session | null): Promise<void>
     const snapshot = generateHotRecoverySnapshot(session)
     const timestamp = snapshot.backupDate
 
-    // 1. حفظ اللقطة المحلية الفورية
+    // 1. حفظ اللقطة المحلية الفورية دائماً للحماية في حال إغلاق المتصفح
     try {
       localStorage.setItem(AUTO_RECOVERY_STORAGE_KEY, JSON.stringify(snapshot))
       localStorage.setItem(LAST_AUTO_BACKUP_KEY, timestamp)
@@ -333,28 +353,32 @@ export async function executeAutoBackup(session?: Session | null): Promise<void>
       console.warn('Auto-backup local storage quota exceeded, falling back:', e)
     }
 
-    // 2. إذا كان المستخدم مديراً للنظام والسحابة متاحة، مزامنة سحابية هادئة في الخلفية
-    if (supabase && checkIsSystemAdmin(session) && navigator.onLine) {
+    // 2. المزامنة السحابية الكاملة وتوثيق سجل المراجعة تحدث حصرياً عند حلول الموعد المجدول
+    if (isScheduled && supabase && checkIsSystemAdmin(session) && navigator.onLine) {
       try {
-        await backupToSupabaseCloud(session)
+        await backupToSupabaseCloud(session, 'scheduled')
       } catch (cloudErr) {
-        console.warn('Silent cloud auto-backup skipped or queued:', cloudErr)
+        console.warn('Scheduled cloud auto-backup skipped or queued:', cloudErr)
       }
     }
 
-    // 3. إشعار الواجهة بنجاح النسخ التلقائي
+    // 3. إشعار الواجهة بنجاح النسخ
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('auto-backup-completed', {
           detail: {
             timestamp,
+            isScheduled,
             counts: snapshot.metadata.counts,
           },
         })
       )
     }
   } finally {
-    isPerformingAutoBackup = false
+    // فترة أمان 1.5 ثانية لامتصاص أي أحداث متتالية ومنع الحلقات اللانهائية
+    setTimeout(() => {
+      isPerformingAutoBackup = false
+    }, 1500)
   }
 }
 
@@ -366,19 +390,20 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
   if (typeof window === 'undefined') return () => {}
 
   function handleSystemMutation() {
+    if (isPerformingAutoBackup) return
     if (!isAutoBackupEnabled()) return
     const config = getAutoBackupScheduleConfig()
-    // Skip real-time mutation trigger only if user explicitly set 'scheduled_only'
+    // إذا كان المستخدم محدد وضع الجدولة فقط، لا يتم عمل أي نسخ فوري
     if (config.mode === 'scheduled_only') return
 
     if (autoBackupTimer) {
       clearTimeout(autoBackupTimer)
     }
 
-    // فترة تأخير ذكية (Debounce) لمنع تكرار النسخ في العمليات المتتالية
+    // فترة تأخير ذكية وتحديث اللقطة المحلية فقط دون المساس بالسحابة وسجل المراجعة
     autoBackupTimer = setTimeout(() => {
-      void executeAutoBackup(session)
-    }, 2500)
+      void executeAutoBackup(session, false)
+    }, 4000)
   }
 
   // 1. تسجيل الاستماع لكافة أحداث النظام الـ 19
@@ -418,8 +443,8 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
           }
         }
 
-        // Execute scheduled backup
-        void executeAutoBackup(session).then(() => {
+        // Execute scheduled backup to Supabase Cloud
+        void executeAutoBackup(session, true).then(() => {
           const updated = {
             ...config,
             lastScheduledRun: now.toISOString(),
@@ -438,6 +463,9 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
         })
       }
     } catch {
+      // ignore
+    }
+  }
       // ignore
     }
   }

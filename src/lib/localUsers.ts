@@ -188,8 +188,11 @@ export async function syncUsersWithCloud(): Promise<LocalUser[]> {
       const merged = Array.from(mergedMap.values())
       try {
         if (typeof window !== 'undefined') {
+          const hasChanged = local.length !== merged.length || JSON.stringify(merged) !== JSON.stringify(local)
           localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(merged))
-          window.dispatchEvent(new CustomEvent('local-users-changed'))
+          if (hasChanged) {
+            window.dispatchEvent(new CustomEvent('local-users-changed'))
+          }
         }
       } catch {
         // ignore

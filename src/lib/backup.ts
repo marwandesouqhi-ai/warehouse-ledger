@@ -684,7 +684,10 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
  * asset movements, support tickets, inspections, settlements, and telegram settings.
  * Restricted strictly to System Admin.
  */
-export async function backupToSupabaseCloud(session?: Session | null): Promise<BackupResult> {
+export async function backupToSupabaseCloud(
+  session?: Session | null,
+  triggerType: 'scheduled' | 'manual' = 'scheduled'
+): Promise<BackupResult> {
   if (!checkIsSystemAdmin(session)) {
     throw new Error('عملية النسخ الاحتياطي مقتصرة حصرياً على مدير النظام (System Admin).')
   }
@@ -929,11 +932,16 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
     settings: true,
   }
 
+  const actionLabel = triggerType === 'manual'
+    ? `نسخ احتياطي سحابي يدوي: مزامنة وتأكيد قاعدة بيانات Supabase لكافة الجداول (${movements.length} حركة، ${custody.length} عهدة، ${contracts.length} عقد، ${disbursementRequests.length} طلب صرف، ${budgetPlans.length} ميزانية)`
+    : `نسخ احتياطي سحابي مجدول: مزامنة وتأكيد قاعدة بيانات Supabase لكافة الجداول (${movements.length} حركة، ${custody.length} عهدة، ${contracts.length} عقد، ${disbursementRequests.length} طلب صرف، ${budgetPlans.length} ميزانية)`
+
   void logAuditEvent({
-    action: `نسخ احتياطي سحابي شامل: مزامنة وتأكيد قاعدة بيانات Supabase لكافة الجداول (${movements.length} حركة، ${custody.length} عهدة، ${contracts.length} عقد، ${disbursementRequests.length} طلب صرف، ${budgetPlans.length} ميزانية)`,
+    action: actionLabel,
     entity_type: 'backup',
     details: {
       ...counts,
+      triggerType,
       syncedAt: timestamp,
     },
     user: session?.user,

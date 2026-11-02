@@ -361,7 +361,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         setCloudBackupNotice('')
         setIsBackingUpCloud(true)
         try {
-            const result = await backupToSupabaseCloud(session)
+            const result = await backupToSupabaseCloud(session, 'manual')
             setLastCloudTime(result.timestamp)
             setCloudBackupNotice(`تم النسخ السحابي الشامل بنجاح! تم حفظ ومزامنة: ${formatCountsSummary(result.counts)} في سحابة Supabase.`)
             setTimeout(() => setCloudBackupNotice(''), 7000)
