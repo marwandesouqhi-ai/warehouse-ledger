@@ -136,7 +136,7 @@ export type CustodyItem = {
 
 export const CUSTODY_STORAGE_KEY = 'warehouse-ledger-custody-items'
 
-import { MEDICINE_NURSING_88_ITEMS } from './medicineCustody88'
+import { MEDICINE_NURSING_67_ITEMS } from './medicineCustody67'
 import { ENGINEERING_WORKSHOPS_81_ITEMS } from './engineeringWorkshopsCustody81'
 
 export const fixtureCustodyItems: CustodyItem[] = [
@@ -716,11 +716,12 @@ export const fixtureCustodyItems: CustodyItem[] = [
     serialNumber: '',
     notes: 'توريد من: الهيئة العربية للتصنيع'
   },
-  ...MEDICINE_NURSING_88_ITEMS,
+  ...MEDICINE_NURSING_67_ITEMS,
   ...ENGINEERING_WORKSHOPS_81_ITEMS,
 ]
 
 export const MIGRATION_NURSING_TO_MEDICINE_KEY = 'warehouse-ledger-migration-nursing-to-medicine-v3'
+export const MIGRATION_MEDICINE_67_KEY = 'warehouse-ledger-migration-medicine-67-v2'
 
 /**
  * Safe deduplication helper: Only removes exact duplicate records sharing the identical item ID.
@@ -841,6 +842,32 @@ export function migrateClientCustodyData(): void {
   } catch (err) {
     console.error('[custody migration] failed:', err)
   }
+
+  // 2. Verified Medicine 67 Items Alignment (INV-MEDICINE-2026, 2026-11-02)
+  // Ensures exactly 67 items (3,467 units, 14,795,839.00 EGP) are synced and phantom deleted items are pruned
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    const med67Migrated = localStorage.getItem(MIGRATION_MEDICINE_67_KEY)
+    if (med67Migrated !== 'done_v2') {
+      const raw = localStorage.getItem(CUSTODY_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown
+        if (Array.isArray(parsed)) {
+          const nonMed = (parsed as CustodyItem[]).filter(
+            (i) => i.warehouseId !== 'medicine' && i.warehouseId !== 'nursing'
+          )
+          const syncedItems = [...nonMed, ...MEDICINE_NURSING_67_ITEMS]
+          localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(syncedItems))
+          void saveCustodyItemsToCloud(MEDICINE_NURSING_67_ITEMS).catch((err) => {
+            console.warn('[custody 67 sync] cloud sync warning:', err)
+          })
+        }
+      }
+      localStorage.setItem(MIGRATION_MEDICINE_67_KEY, 'done_v2')
+    }
+  } catch (err67) {
+    console.warn('[custody 67 sync] failed:', err67)
+  }
 }
 
 export function loadCustodyItems(): CustodyItem[] {
@@ -918,12 +945,11 @@ export function loadCustodyItems(): CustodyItem[] {
           items = uniqueItems
         }
 
-        // Auto-heal medicine items: if medicine records were truncated to < 88 items,
-        // immediately restore the full verified 88 items from the official inventory dataset
+        // Initial seed for medicine items if storage is completely empty and migration hasn't seeded yet
         const medCount = items.filter((i) => i.warehouseId === 'medicine').length
-        if (medCount < 88) {
+        if (medCount === 0 && localStorage.getItem(MIGRATION_MEDICINE_67_KEY) !== 'done_v2') {
           const nonMed = items.filter((i) => i.warehouseId !== 'medicine' && i.warehouseId !== 'nursing')
-          items = [...nonMed, ...MEDICINE_NURSING_88_ITEMS]
+          items = [...nonMed, ...MEDICINE_NURSING_67_ITEMS]
           needsResave = true
         }
 
@@ -992,7 +1018,31 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
       }
     }
 
-    const mappedItems: CustodyItem[] = allRows.map((row): CustodyItem => {
+    // Invalidate and purge legacy/deprecated medicine items
+    // (which were 104 due to pre-merge duplication and 88-item seed: cust-med-001..088, cust-nur-*, cst-med-*)
+    // Replace with the official 67 items verified against INV-MEDICINE-2026
+    const verifiedMedicineRows = allRows.filter(
+      (r) => r.warehouse_id === 'medicine' && r.id && String(r.id).startsWith('cust-med-verified-')
+    )
+    const hasVerifiedMedicine = verifiedMedicineRows.length > 0
+
+    let cleanRows = allRows
+    if (!hasVerifiedMedicine) {
+      // Discard all legacy deprecated medicine/nursing rows
+      cleanRows = allRows.filter((r) => r.warehouse_id !== 'medicine' && r.warehouse_id !== 'nursing')
+    } else {
+      // Keep verified medicine items and any user-added custom medicine items, but prune known legacy prefixes
+      cleanRows = allRows.filter((r) => {
+        if (r.warehouse_id === 'medicine' || r.warehouse_id === 'nursing') {
+          const id = String(r.id || '')
+          const isLegacy = id.startsWith('cust-med-0') || id.startsWith('cust-nur-') || id.startsWith('cst-med-')
+          return !isLegacy
+        }
+        return true
+      })
+    }
+
+    const mappedItems: CustodyItem[] = cleanRows.map((row): CustodyItem => {
       const parsedQty = Number(row.quantity)
       const qty = !isNaN(parsedQty) ? Math.max(0, parsedQty) : 0
       const parsedVal = Number(row.value)
@@ -1022,14 +1072,34 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
 
     let resultItems: CustodyItem[] = mappedItems
 
-    const medCount = resultItems.filter((i) => i.warehouseId === 'medicine').length
-    if (medCount < 88) {
-      const nonMed = resultItems.filter((i) => i.warehouseId !== 'medicine' && i.warehouseId !== 'nursing')
-      resultItems = [...nonMed, ...MEDICINE_NURSING_88_ITEMS]
+    if (!hasVerifiedMedicine) {
+      resultItems = [...resultItems, ...MEDICINE_NURSING_67_ITEMS]
       saveCustodyItems(resultItems)
-      void saveCustodyItemsToCloud(MEDICINE_NURSING_88_ITEMS).catch((err) => {
-        console.warn('Syncing restored medicine items to cloud:', err)
+      void saveCustodyItemsToCloud(MEDICINE_NURSING_67_ITEMS).catch((err) => {
+        console.warn('Syncing initial verified medicine items to cloud:', err)
       })
+    }
+
+    // Background purge of legacy medicine rows from Supabase if authenticated
+    if (supabase) {
+      const legacyIds = allRows
+        .filter((r) => {
+          if (r.warehouse_id === 'medicine' || r.warehouse_id === 'nursing') {
+            const id = String(r.id || '')
+            return id.startsWith('cust-med-0') || id.startsWith('cust-nur-') || id.startsWith('cst-med-')
+          }
+          return false
+        })
+        .map((r) => r.id)
+      if (legacyIds.length > 0) {
+        void (async () => {
+          try {
+            await supabase.from('custody_items').delete().in('id', legacyIds)
+          } catch {
+            // background cloud purge ignores permission errors
+          }
+        })()
+      }
     }
 
     const wsCount = resultItems.filter((i) => i.warehouseId === 'engineering_workshops').length

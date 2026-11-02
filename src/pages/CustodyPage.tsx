@@ -53,7 +53,6 @@ import {
   type CustodyType,
   type WarehouseDefinition,
 } from '../lib/custody'
-import { MEDICINE_NURSING_88_ITEMS } from '../lib/medicineCustody88'
 import { ENGINEERING_WORKSHOPS_81_ITEMS } from '../lib/engineeringWorkshopsCustody81'
 import { WORKSHOP_CATEGORIES } from '../lib/workshopCategoryClassifier'
 import {
@@ -176,11 +175,10 @@ export default function CustodyPage({
     window.addEventListener('custody-changed', handleSyncUpdate)
     window.addEventListener('storage', handleSyncUpdate)
 
-    // Ensure main warehouse items exist locally if missing and restore full medicine & workshop custody if truncated
+    // Ensure main warehouse items exist locally if missing and restore workshop custody if truncated
     setItems((currentItems) => {
-      const medCount = currentItems.filter((i) => i.warehouseId === 'medicine').length
       const wsCount = currentItems.filter((i) => i.warehouseId === 'engineering_workshops').length
-      if (medCount < 88 || wsCount < 81) {
+      if (wsCount < 81) {
         return loadCustodyItems()
       }
       const hasMain = currentItems.some((i) => i.warehouseId === 'main')
@@ -199,10 +197,6 @@ export default function CustodyPage({
       if (cloudItems && cloudItems.length > 0) {
         const hasMain = cloudItems.some((i) => i.warehouseId === 'main')
         let finalItems = hasMain ? cloudItems : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudItems]
-        const medCount = finalItems.filter((i) => i.warehouseId === 'medicine').length
-        if (medCount < 88) {
-          finalItems = [...finalItems.filter((i) => i.warehouseId !== 'medicine'), ...MEDICINE_NURSING_88_ITEMS]
-        }
         const wsCount = finalItems.filter((i) => i.warehouseId === 'engineering_workshops').length
         if (wsCount < 81) {
           finalItems = [...finalItems.filter((i) => i.warehouseId !== 'engineering_workshops'), ...ENGINEERING_WORKSHOPS_81_ITEMS]

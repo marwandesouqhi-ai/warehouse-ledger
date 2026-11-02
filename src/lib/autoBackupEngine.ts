@@ -44,6 +44,37 @@ import {
 import { checkIsSystemAdmin, supabase } from './supabase'
 
 export const AUTO_BACKUP_ENABLED_KEY = 'warehouse_ledger_auto_backup_enabled'
+export const AUTO_BACKUP_SCHEDULE_KEY = 'warehouse_ledger_auto_backup_schedule_v1'
+
+export type BackupFrequency = 'daily' | 'weekly' | 'custom_days'
+export type BackupExecutionMode = 'realtime_and_scheduled' | 'scheduled_only' | 'realtime_only'
+
+export interface AutoBackupScheduleConfig {
+  enabled: boolean
+  mode: BackupExecutionMode
+  frequency: BackupFrequency
+  time: string // "HH:mm" 24h format (e.g. "23:00")
+  daysOfWeek: number[] // 0: Sunday, 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday
+  lastScheduledRun?: string
+}
+
+export const DEFAULT_SCHEDULE_CONFIG: AutoBackupScheduleConfig = {
+  enabled: true,
+  mode: 'realtime_and_scheduled',
+  frequency: 'daily',
+  time: '23:00',
+  daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // كل أيام الأسبوع افتراضياً
+}
+
+export const ARABIC_DAYS_OF_WEEK = [
+  { value: 6, label: 'السبت' },
+  { value: 0, label: 'الأحد' },
+  { value: 1, label: 'الإثنين' },
+  { value: 2, label: 'الثلاثاء' },
+  { value: 3, label: 'الأربعاء' },
+  { value: 4, label: 'الخميس' },
+  { value: 5, label: 'الجمعة' },
+]
 
 export function isAutoBackupEnabled(): boolean {
   try {
@@ -63,6 +94,85 @@ export function setAutoBackupEnabled(enabled: boolean): void {
   } catch {
     // ignore
   }
+}
+
+export function getAutoBackupScheduleConfig(): AutoBackupScheduleConfig {
+  try {
+    if (typeof window === 'undefined') return DEFAULT_SCHEDULE_CONFIG
+    const raw = localStorage.getItem(AUTO_BACKUP_SCHEDULE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<AutoBackupScheduleConfig>
+      return {
+        ...DEFAULT_SCHEDULE_CONFIG,
+        ...parsed,
+        daysOfWeek: Array.isArray(parsed.daysOfWeek) && parsed.daysOfWeek.length > 0 ? parsed.daysOfWeek : DEFAULT_SCHEDULE_CONFIG.daysOfWeek,
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return DEFAULT_SCHEDULE_CONFIG
+}
+
+export function saveAutoBackupScheduleConfig(config: AutoBackupScheduleConfig): void {
+  try {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(AUTO_BACKUP_SCHEDULE_KEY, JSON.stringify(config))
+    window.dispatchEvent(new CustomEvent('auto-backup-schedule-changed', { detail: config }))
+  } catch (err) {
+    console.warn('Could not save auto-backup schedule:', err)
+  }
+}
+
+export function computeNextScheduledRun(config: AutoBackupScheduleConfig, fromDate = new Date()): Date | null {
+  if (!config.enabled || config.mode === 'realtime_only') return null
+  const [hhStr, mmStr] = (config.time || '23:00').split(':')
+  const targetHour = parseInt(hhStr, 10) || 0
+  const targetMinute = parseInt(mmStr, 10) || 0
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const candidate = new Date(fromDate.getTime())
+    candidate.setDate(candidate.getDate() + offset)
+    candidate.setHours(targetHour, targetMinute, 0, 0)
+
+    const dayOfWeek = candidate.getDay()
+    if (config.daysOfWeek.includes(dayOfWeek)) {
+      if (offset === 0) {
+        if (candidate.getTime() > fromDate.getTime()) {
+          return candidate
+        }
+      } else {
+        return candidate
+      }
+    }
+  }
+  return null
+}
+
+export function formatNextScheduledRunArabic(nextDate: Date | null): string {
+  if (!nextDate) return 'الجدولة متوقفة حالياً'
+  const now = new Date()
+  const isToday = nextDate.toDateString() === now.toDateString()
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  const isTomorrow = nextDate.toDateString() === tomorrow.toDateString()
+
+  const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+  const dayName = dayNames[nextDate.getDay()]
+
+  const hours = nextDate.getHours()
+  const minutes = String(nextDate.getMinutes()).padStart(2, '0')
+  const period = hours >= 12 ? 'مساءً' : 'صباحاً'
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12
+
+  const timeFormatted = `${displayHours}:${minutes} ${period}`
+
+  if (isToday) {
+    return `اليوم (${dayName}) في تمام الساعة ${timeFormatted}`
+  }
+  if (isTomorrow) {
+    return `غداً (${dayName}) في تمام الساعة ${timeFormatted}`
+  }
+  return `يوم ${dayName} (${nextDate.getDate()}/${nextDate.getMonth() + 1}) في تمام الساعة ${timeFormatted}`
 }
 
 export const SYSTEM_MUTATION_EVENTS = [
@@ -257,6 +367,9 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
 
   function handleSystemMutation() {
     if (!isAutoBackupEnabled()) return
+    const config = getAutoBackupScheduleConfig()
+    // Skip real-time mutation trigger only if user explicitly set 'scheduled_only'
+    if (config.mode === 'scheduled_only') return
 
     if (autoBackupTimer) {
       clearTimeout(autoBackupTimer)
@@ -268,13 +381,74 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
     }, 2500)
   }
 
-  // تسجيل الاستماع لكافة أحداث النظام الـ 19
+  // 1. تسجيل الاستماع لكافة أحداث النظام الـ 19
   for (const eventName of SYSTEM_MUTATION_EVENTS) {
     window.addEventListener(eventName, handleSystemMutation)
   }
 
+  // 2. مراقب الجدولة الزمنية المحددة (Scheduled Planner Runner)
+  let scheduleInterval: ReturnType<typeof setInterval> | null = null
+
+  function checkScheduledBackup() {
+    try {
+      if (!isAutoBackupEnabled()) return
+      const config = getAutoBackupScheduleConfig()
+      if (!config.enabled || config.mode === 'realtime_only') return
+
+      const now = new Date()
+      const currDay = now.getDay()
+      if (!config.daysOfWeek.includes(currDay)) return
+
+      const [hhStr, mmStr] = (config.time || '23:00').split(':')
+      const targetHour = parseInt(hhStr, 10) || 0
+      const targetMinute = parseInt(mmStr, 10) || 0
+
+      if (now.getHours() === targetHour && now.getMinutes() === targetMinute) {
+        // Prevent duplicate trigger in the same minute
+        if (config.lastScheduledRun) {
+          const last = new Date(config.lastScheduledRun)
+          if (
+            last.getFullYear() === now.getFullYear() &&
+            last.getMonth() === now.getMonth() &&
+            last.getDate() === now.getDate() &&
+            last.getHours() === targetHour &&
+            last.getMinutes() === targetMinute
+          ) {
+            return
+          }
+        }
+
+        // Execute scheduled backup
+        void executeAutoBackup(session).then(() => {
+          const updated = {
+            ...config,
+            lastScheduledRun: now.toISOString(),
+          }
+          saveAutoBackupScheduleConfig(updated)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('auto-backup-completed', {
+                detail: {
+                  type: 'scheduled',
+                  timestamp: now.toISOString(),
+                },
+              })
+            )
+          }
+        })
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Check every 30 seconds
+  scheduleInterval = setInterval(checkScheduledBackup, 30000)
+  checkScheduledBackup()
+
   // إرجاع دالة تنظيف لإلغاء المراقبة عند الحاجة
   return () => {
+    if (scheduleInterval) clearInterval(scheduleInterval)
     if (autoBackupTimer) clearTimeout(autoBackupTimer)
     for (const eventName of SYSTEM_MUTATION_EVENTS) {
       window.removeEventListener(eventName, handleSystemMutation)

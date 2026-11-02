@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
     ArrowLeft,
+    Calendar,
     CheckCircle2,
     Clock,
     CloudUpload,
@@ -46,6 +47,12 @@ import {
     isAutoBackupEnabled,
     setAutoBackupEnabled,
     restoreFromAutoRecovery,
+    getAutoBackupScheduleConfig,
+    saveAutoBackupScheduleConfig,
+    computeNextScheduledRun,
+    formatNextScheduledRunArabic,
+    ARABIC_DAYS_OF_WEEK,
+    type AutoBackupScheduleConfig,
 } from '../lib/autoBackupEngine'
 
 type SettingsPageProps = {
@@ -135,6 +142,46 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
     function handleToggleAutoBackup(enabled: boolean) {
         setAutoBackupEnabled(enabled)
         setAutoBackupEnabledState(enabled)
+    }
+
+    // Auto-backup schedule state
+    const [scheduleConfig, setScheduleConfig] = useState<AutoBackupScheduleConfig>(getAutoBackupScheduleConfig)
+    const [scheduleSavedNotice, setScheduleSavedNotice] = useState('')
+
+    useEffect(() => {
+        function handleScheduleChanged(e: Event) {
+            const detail = (e as CustomEvent).detail
+            if (detail) {
+                setScheduleConfig(detail)
+            }
+        }
+        window.addEventListener('auto-backup-schedule-changed', handleScheduleChanged)
+        return () => window.removeEventListener('auto-backup-schedule-changed', handleScheduleChanged)
+    }, [])
+
+    function handleSaveSchedule(updated: AutoBackupScheduleConfig) {
+        saveAutoBackupScheduleConfig(updated)
+        setScheduleConfig(updated)
+        setScheduleSavedNotice('تم حفظ وتحديث جدول النسخ الاحتياطي التلقائي بنجاح.')
+        setTimeout(() => setScheduleSavedNotice(''), 4000)
+    }
+
+    function toggleDayOfWeek(dayVal: number) {
+        const currentDays = scheduleConfig.daysOfWeek || []
+        let nextDays: number[]
+        if (currentDays.includes(dayVal)) {
+            if (currentDays.length === 1) {
+                alert('يجب تحديد يوم واحد على الأقل للنسخ الاحتياطي.')
+                return
+            }
+            nextDays = currentDays.filter((d) => d !== dayVal)
+        } else {
+            nextDays = [...currentDays, dayVal]
+        }
+        handleSaveSchedule({
+            ...scheduleConfig,
+            daysOfWeek: nextDays,
+        })
     }
 
     // Backup tab navigation
@@ -940,6 +987,152 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                             <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
                                         </label>
                                     </div>
+                                </div>
+
+                                {/* 4. Scheduled Backup Planner Card */}
+                                <div className="backup-card auto-backup-card border border-blue-500/30 bg-blue-500/5 mt-4">
+                                    <div className="backup-card-head">
+                                        <div className="backup-card-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+                                            <Calendar size={24} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h4>جدول ومواعيد النسخ الاحتياطي التلقائي (Scheduled Planner)</h4>
+                                                <span className={`badge text-[10px] px-2 py-0.5 rounded-full font-bold ${scheduleConfig.enabled ? 'badge-success bg-blue-600 text-white' : 'badge-neutral'}`}>
+                                                    {scheduleConfig.enabled ? 'مجدول ونشط' : 'الجدولة معطلة'}
+                                                </span>
+                                            </div>
+                                            <span className="backup-card-desc">
+                                                حدد اليوم والساعة المناسبة لمؤسستك ليقوم النظام بأخذ نسخة احتياطية شاملة تلقائياً في الموعد المحدد.
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {scheduleSavedNotice && (
+                                        <div className="inline-message success font-sm my-1">
+                                            <CheckCircle2 size={16} />
+                                            <span>{scheduleSavedNotice}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Next Run Banner */}
+                                    <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-surface-subtle border border-blue-500/20 text-xs">
+                                        <div className="flex items-center gap-2.5">
+                                            <Clock size={16} className="text-blue-500 shrink-0" />
+                                            <div>
+                                                <span className="text-muted-foreground block text-[11px]">موعد النسخ الاحتياطي التلقائي القادم:</span>
+                                                <strong className="text-sm text-foreground mt-0.5 block">
+                                                    {formatNextScheduledRunArabic(computeNextScheduledRun(scheduleConfig))}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0" title="تفعيل / تعطيل الجدولة الزمنية">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={scheduleConfig.enabled}
+                                                onChange={(e) => handleSaveSchedule({ ...scheduleConfig, enabled: e.target.checked })}
+                                            />
+                                            <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {scheduleConfig.enabled && (
+                                        <div className="mt-3 flex flex-col gap-3.5 border-t border-border/30 pt-3 text-xs">
+                                            {/* Mode selection */}
+                                            <div>
+                                                <label className="font-semibold block mb-1.5 text-foreground">طريقة عمل النسخ الاحتياطي:</label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSaveSchedule({ ...scheduleConfig, mode: 'realtime_and_scheduled' })}
+                                                        className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'realtime_and_scheduled' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
+                                                    >
+                                                        <span>نسخ فوري + مجدول (موصى به)</span>
+                                                        <span className="text-[10px] opacity-75 font-normal">لقطة فورية عند التعديل + نسخة شاملة في الموعد المجدول</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSaveSchedule({ ...scheduleConfig, mode: 'scheduled_only' })}
+                                                        className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'scheduled_only' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
+                                                    >
+                                                        <span>نسخ مجدول فقط (بالساعة)</span>
+                                                        <span className="text-[10px] opacity-75 font-normal">نسخ فقط في اليوم والساعة المحددة دون نسخ فوري مستمر</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSaveSchedule({ ...scheduleConfig, mode: 'realtime_only' })}
+                                                        className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'realtime_only' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
+                                                    >
+                                                        <span>نسخ فوري فقط</span>
+                                                        <span className="text-[10px] opacity-75 font-normal">نسخ فوري لحظي فقط عند حفظ الحركات وتعديل البيانات</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {scheduleConfig.mode !== 'realtime_only' && (
+                                                <>
+                                                    {/* Time picker */}
+                                                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border/40">
+                                                        <div>
+                                                            <span className="font-semibold block text-foreground">وقت تنفيذ النسخة الاحتياطية:</span>
+                                                            <span className="text-muted-foreground text-[11px]">حدد الساعة والدقيقة التي يبدأ فيها النسخ التلقائي</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="time"
+                                                                value={scheduleConfig.time || '23:00'}
+                                                                onChange={(e) => handleSaveSchedule({ ...scheduleConfig, time: e.target.value })}
+                                                                className="input-field text-center font-bold text-sm px-3 py-1.5 rounded-md border border-border bg-background focus:ring-1 focus:ring-blue-500"
+                                                                style={{ minWidth: '120px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Frequency selection */}
+                                                    <div>
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <label className="font-semibold text-foreground">أيام الأسبوع المحددة للنسخ:</label>
+                                                            <div className="flex gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSaveSchedule({ ...scheduleConfig, frequency: 'daily', daysOfWeek: [0, 1, 2, 3, 4, 5, 6] })}
+                                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium border ${scheduleConfig.daysOfWeek.length === 7 ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
+                                                                >
+                                                                    يومياً (كل الأيام)
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSaveSchedule({ ...scheduleConfig, frequency: 'custom_days', daysOfWeek: [6, 0, 1, 2, 3, 4] })}
+                                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium border ${scheduleConfig.daysOfWeek.length === 6 && !scheduleConfig.daysOfWeek.includes(5) ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
+                                                                >
+                                                                    أيام العمل (السبت - الخميس)
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Days buttons */}
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {ARABIC_DAYS_OF_WEEK.map((day) => {
+                                                                const isSelected = scheduleConfig.daysOfWeek?.includes(day.value)
+                                                                return (
+                                                                    <button
+                                                                        key={day.value}
+                                                                        type="button"
+                                                                        onClick={() => toggleDayOfWeek(day.value)}
+                                                                        className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-all flex items-center gap-1.5 ${isSelected ? 'bg-blue-500/15 border-blue-500 text-blue-400' : 'bg-surface border-border/50 text-muted-foreground hover:bg-surface-hover'}`}
+                                                                    >
+                                                                        <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-blue-500' : 'bg-border'}`}></span>
+                                                                        {day.label}
+                                                                    </button>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ) : (
