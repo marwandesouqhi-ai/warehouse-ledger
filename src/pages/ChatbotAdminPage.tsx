@@ -122,6 +122,13 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
 
   function handleSaveDirectives() {
     localStorage.setItem('znu_chatbot_custom_developer_directives', customDirectives)
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('chatbot-directives-changed'))
+      }
+    } catch {
+      // ignore
+    }
     setSaveDirectivesNotice('تم حفظ تعليمات المبرمج الذكي بنجاح!')
     setTimeout(() => setSaveDirectivesNotice(''), 4000)
   }

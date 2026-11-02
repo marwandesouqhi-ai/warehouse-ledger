@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
@@ -182,8 +182,19 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
     setItems((prev) => prev.filter((r) => r.id !== id))
   }
 
+  useEffect(() => {
+    function handleAfterPrint() {
+      document.body.classList.remove('printing-technical-inspection')
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => window.removeEventListener('afterprint', handleAfterPrint)
+  }, [])
+
   function handlePrint() {
-    window.print()
+    document.body.classList.add('printing-technical-inspection')
+    setTimeout(() => {
+      window.print()
+    }, 50)
   }
 
   async function handleExportExcel() {
@@ -260,6 +271,14 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]')
         existing.unshift(payload)
         localStorage.setItem(storageKey, JSON.stringify(existing.slice(0, 50)))
+      }
+
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('technical-inspections-changed'))
+        }
+      } catch {
+        // ignore
       }
 
       // تسجيل في سجل العمليات والتدقيق
@@ -381,7 +400,9 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
 
         {/* Body */}
         <div className="modal-body-scroll p-4" style={{ overflowY: 'auto', maxHeight: 'calc(88vh - 120px)' }}>
-          {/* Metadata Grid */}
+          {/* Interactive Screen Editor Form (Hidden in Print) */}
+          <div className="inspection-editor-screen no-print">
+            {/* Metadata Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
             <div className="md:col-span-2">
               <label className="font-xs font-semibold text-muted block mb-1">
@@ -690,6 +711,164 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
 
           <div className="text-muted font-xs">
             مستند رسمي معتمد طبقاً لأحكام لائحة المخازن والمشتريات
+          </div>
+        </div>
+        </div>
+        {/* Unified Printable Inspection Document Sheet */}
+        <div
+          id="printable-technical-inspection"
+          className="official-modal-print-document bg-white text-slate-900"
+          style={{ color: '#0f172a' }}
+        >
+          {(settings.logoDataUrl || settings.logoUrl) && (
+            <div className="print-watermark" aria-hidden="true">
+              <img src={settings.logoDataUrl || settings.logoUrl} alt="" />
+            </div>
+          )}
+
+          <header className="print-letterhead">
+            <div className="print-header-col print-header-right">
+              <div className="print-gov-heading">جمهورية مصر العربية</div>
+              <div className="print-org-name">{settings.organization || 'جامعة الزقازيق الأهلية'}</div>
+              <div className="print-dept-name">{settings.department || 'إدارة المخازن والمشتريات'}</div>
+              <div className="print-subdept-name">لجنة الفحص والاستلام الفني والمعاينة</div>
+            </div>
+
+            <div className="print-header-col print-header-center">
+              {settings.logoDataUrl || settings.logoUrl ? (
+                <img
+                  src={settings.logoDataUrl || settings.logoUrl}
+                  alt="Logo"
+                  className="print-official-logo"
+                  style={{ maxHeight: '60px', maxWidth: '110px', objectFit: 'contain' }}
+                />
+              ) : (
+                <div className="print-logo-emblem">شعار المؤسسة</div>
+              )}
+              <div className="print-stamp-title">محضر فحص واستلام رسمي معتمد</div>
+            </div>
+
+            <div className="print-header-col print-header-left">
+              <div><strong>رقم المحضر:</strong> {inspectionNo}</div>
+              <div><strong>تاريخ الفحص:</strong> {inspectionDate}</div>
+              <div><strong>أمر التوريد:</strong> {poNumber || '—'}</div>
+              <div><strong>رقم الفاتورة:</strong> {invoiceNumber || '—'}</div>
+              <div><strong>المستودع:</strong> {targetWh.name}</div>
+            </div>
+          </header>
+
+          <div className="print-title-banner">
+            <h1 className="print-doc-title">محضر فحص واستلام فني للواردات والمهمات المخزنية</h1>
+            <div className="print-doc-subtitle">
+              إثبات المعاينة والمطابقة الفنية الميدانية طبقاً لأحكام لائحة المخازن والمشتريات
+            </div>
+          </div>
+
+          <div className="print-summary-strip">
+            <div className="print-summary-cell">
+              <span className="print-summary-label">المورد / الشركة:</span>
+              <strong className="print-summary-val">{supplier}</strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">إجمالي البنود:</span>
+              <strong className="print-summary-val">{items.length} صنف</strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">القيمة المقبولة:</span>
+              <strong className="print-summary-val accent">{formatMoney(totalAcceptedValue, currency)}</strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">قرار اللجنة:</span>
+              <strong className="print-summary-val success">
+                {decision === 'accepted' ? 'قبول مطابق' : decision === 'rejected' ? 'مرفوض كلياً' : 'قبول جزئي مشروط'}
+              </strong>
+            </div>
+          </div>
+
+          <table className="print-official-table" style={{ width: '100%', color: '#0f172a' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '35px', textAlign: 'center' }}>م</th>
+                <th>اسم ومواصفات الصنف</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>المطلوبة</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>الموردة</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>المقبولة</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>المرفوضة</th>
+                <th style={{ width: '85px', textAlign: 'center' }}>سعر الوحدة</th>
+                <th style={{ width: '95px', textAlign: 'center' }}>الإجمالي المقبول</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                    لا توجد أصناف مدرجة في محضر الفحص.
+                  </td>
+                </tr>
+              ) : (
+                items.map((r, idx) => (
+                  <tr key={r.id}>
+                    <td style={{ textAlign: 'center', color: '#0f172a' }}>{idx + 1}</td>
+                    <td style={{ textAlign: 'start', color: '#0f172a', fontWeight: 700 }}>
+                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.name || '—'}</div>
+                      {r.rejectionReason && (
+                        <div style={{ fontSize: '7pt', color: '#b91c1c', marginTop: '2px' }}>سبب الرفض: {r.rejectionReason}</div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a' }}>{r.requestedQty ?? 0}</td>
+                    <td style={{ textAlign: 'center', color: '#0f172a' }}>{r.suppliedQty ?? 0}</td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>{r.acceptedQty ?? 0}</td>
+                    <td style={{ textAlign: 'center', color: '#0f172a' }}>{r.rejectedQty ?? 0}</td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontFamily: 'monospace' }}>
+                      {formatMoney(r.unitPrice, currency)}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontFamily: 'monospace', fontWeight: 700 }}>
+                      {formatMoney((r.acceptedQty || 0) * (r.unitPrice || 0), currency)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          {finalNotes && (
+            <div style={{ fontSize: '7.5pt', marginBottom: '8px', padding: '6px 8px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+              <strong>توصيات وملاحظات اللجنة:</strong> {finalNotes}
+            </div>
+          )}
+
+          {/* Unified Signatures Block (Image 3: Anchored at end of last page) */}
+          <div className="print-signatures-section">
+            <div className="print-signatures-notice">
+              * يُقر الموقعون أدناه بأنهم أجروا المعاينة والفحص الفني الظاهري والدقيق لكافة المهمات والأصناف الموضحة أعلاه وفقاً للمواصفات واللوائح.
+            </div>
+            <div className="print-signatures-grid">
+              <div className="print-signature-box">
+                <strong className="print-sig-role">رئيس لجنة الفحص</strong>
+                <div className="print-sig-field">الاسم: {committeeHead || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box">
+                <strong className="print-sig-role">العضو الفني المتخصص</strong>
+                <div className="print-sig-field">الاسم: {technicalExpert || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box">
+                <strong className="print-sig-role">أمين المستودع المستلم</strong>
+                <div className="print-sig-field">الاسم: {custodianName || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box print-seal-box">
+                <strong className="print-sig-role">يعتمد: رئيس الجهة</strong>
+                <div className="print-sig-field">الاعتماد: ..................</div>
+                <div className="print-seal-area">
+                  <span className="print-seal-hint">(خاتم شعار المؤسسة)</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>

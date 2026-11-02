@@ -27,6 +27,7 @@ import {
   exportComprehensiveCustodyWorkbook,
   exportCustodyToExcel,
   getWarehouseStats,
+  fetchCustodyItemsFromCloud,
   loadCustodyItems,
   WAREHOUSES,
   type CustodyItem,
@@ -148,7 +149,7 @@ export default function ReportsPage({
     XLSX.writeFile(wb, `كشف_الموردين_المعتمدين_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
-  const [items] = useState<CustodyItem[]>(loadCustodyItems)
+  const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false)
@@ -179,13 +180,27 @@ export default function ReportsPage({
     return items.filter((i) => i.condition === 'damaged')
   }, [items])
 
-  // Clean up printing class after print
+  // Sync custody items with local events and cloud
   useEffect(() => {
-    function cleanupPrint() {
-      document.body.classList.remove('printing-warehouse-sheet')
+    function handleSyncUpdate() {
+      setItems(loadCustodyItems())
     }
-    window.addEventListener('afterprint', cleanupPrint)
-    return () => window.removeEventListener('afterprint', cleanupPrint)
+    window.addEventListener('custody-changed', handleSyncUpdate)
+    window.addEventListener('storage', handleSyncUpdate)
+
+    let isMounted = true
+    void fetchCustodyItemsFromCloud().then((cloudItems) => {
+      if (!isMounted) return
+      if (cloudItems && cloudItems.length > 0) {
+        setItems(cloudItems)
+      }
+    })
+
+    return () => {
+      isMounted = false
+      window.removeEventListener('custody-changed', handleSyncUpdate)
+      window.removeEventListener('storage', handleSyncUpdate)
+    }
   }, [])
 
   const selectedWhItems = useMemo(() => {
@@ -222,7 +237,7 @@ export default function ReportsPage({
               className={`reports-scope-tab-btn ${reportsDepartment === 'warehouse' ? 'active' : ''}`}
               onClick={() => setReportsDepartment('warehouse')}
             >
-              <Building2 size={16} /> تقارير وسجلات المخازن والعهدة (8 كليات)
+              <Building2 size={16} /> تقارير وسجلات المخازن والعهدة (9 مخازن)
             </button>
             <button
               type="button"
@@ -685,7 +700,7 @@ export default function ReportsPage({
         <div className="reports-wh-head">
           <div>
             <h3 className="reports-wh-title">
-              كشوف الجرد المعتمدة لمخازن وكليات المؤسسة (8 مخازن)
+              كشوف الجرد المعتمدة لمخازن ومستودعات المؤسسة (9 مخازن)
             </h3>
             <span className="reports-wh-subtitle">
               إمكانية طباعة محضر جرد رسمي معتمد أو تصدير كشف Excel مخصص لكل كلية على حدة
@@ -972,7 +987,7 @@ export default function ReportsPage({
       </AnimatePresence>
 
       {/* 6. Official Printable Inventory Sheet (A4 Portrait Template for Direct Printing) */}
-      <div className="official-custody-print-document" aria-hidden="true">
+      <div className="official-custody-print-document" aria-hidden="true" style={{ display: 'none' }}>
         {(settings.logoDataUrl || settings.logoUrl) && (
           <div className="print-watermark" aria-hidden="true">
             <img src={settings.logoDataUrl || settings.logoUrl} alt="" />
@@ -1045,23 +1060,23 @@ export default function ReportsPage({
           </div>
         </div>
 
+        {/* Printable Official Inventory Table (7 Columns Unified Layout) */}
         <table className="print-official-table">
           <thead>
             <tr>
-              <th className="col-w-4">م</th>
-              <th className="col-w-13">كود العهدة</th>
-              <th className="col-w-28">اسم الصنف والمواصفات الفنية</th>
-              <th className="col-w-13">التصنيف والنوع</th>
-              <th className="col-w-16">أمين العهدة / المكان</th>
-              <th className="col-w-8">الكمية</th>
-              <th className="col-w-10">القيمة الدفترية</th>
-              <th className="col-w-8">الحالة الفنية</th>
+              <th className="col-w-4 text-center">م</th>
+              <th className="col-w-14">كود العهدة</th>
+              <th className="col-w-32">اسم الصنف والمواصفات</th>
+              <th className="col-w-20">أمين العهدة / المكان</th>
+              <th className="col-w-10 text-center">الكمية</th>
+              <th className="col-w-10 text-center">القيمة الدفترية</th>
+              <th className="col-w-10 text-center">الحالة الفنية</th>
             </tr>
           </thead>
           <tbody>
             {selectedWhItems.length === 0 ? (
               <tr>
-                <td colSpan={8} className="print-empty-row">
+                <td colSpan={7} className="print-empty-row">
                   لا توجد بنود عهدة مسجلة في هذا المخزن حالياً.
                 </td>
               </tr>
@@ -1069,26 +1084,22 @@ export default function ReportsPage({
               selectedWhItems.map((item, index) => (
                 <tr key={item.id}>
                   <td className="text-center">{index + 1}</td>
-                  <td className="print-code-cell">{item.code}</td>
+                  <td className="print-code-cell font-mono font-bold">{item.code}</td>
                   <td>
-                    <div className="print-item-name">{item.name}</div>
+                    <div className="print-item-name font-bold">{item.name}</div>
                     {item.serialNumber && (
                       <div className="print-item-serial">سيريال: {item.serialNumber}</div>
                     )}
                     {item.notes && <div className="print-item-notes">{item.notes}</div>}
                   </td>
                   <td>
-                    <div>{item.category}</div>
-                    <span className="print-sub-type">({item.custodyType})</span>
-                  </td>
-                  <td>
-                    <div className="print-custodian-name">{item.custodian}</div>
+                    <div className="print-custodian-name font-semibold">{item.custodian}</div>
                     <div className="print-location-sub">{item.roomLocation}</div>
                   </td>
-                  <td className="text-center">
+                  <td className="text-center font-bold">
                     <strong>{item.quantity}</strong> {item.unit}
                   </td>
-                  <td className="text-center font-mono">
+                  <td className="text-center font-mono font-semibold">
                     {formatCurrency(item.value, currency)}
                   </td>
                   <td className="text-center">
@@ -1105,6 +1116,7 @@ export default function ReportsPage({
           </tbody>
         </table>
 
+        {/* Official Signatures & Approvals (Image 3: 4-box layout) */}
         <div className="print-signatures-section">
           <div className="print-signatures-notice">
             * يُقر الموقعون أدناه بصحة البيانات والمطابقة الفعلية لجرد العهدة والأصول على الطبيعة وفقاً للوائح والقوانين المخزنية.
@@ -1114,29 +1126,25 @@ export default function ReportsPage({
               <div className="print-sig-role">أمين العهدة المسؤول</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box">
               <div className="print-sig-role">عضو لجنة الجرد والفحص</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box">
               <div className="print-sig-role">مدير إدارة المخازن</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box print-approval-box">
-              <div className="print-sig-role">يعتمد: عميد الكلية / رئيس الجهة</div>
-              <div className="print-sig-field">الاسم: .......................................</div>
+              <div className="print-sig-role">يعتمد: رئيس الجهة</div>
               <div className="print-sig-field">الاعتماد: ...................................</div>
               <div className="print-seal-area">
-                <span className="print-seal-hint">(خاتم شعار الجمهورية / ختم المؤسسة)</span>
+                <span className="print-seal-hint">(خاتم شعار المؤسسة)</span>
               </div>
             </div>
           </div>

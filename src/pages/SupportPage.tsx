@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, type ChangeEvent, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
   Headphones,
@@ -24,6 +25,9 @@ import {
   Search,
   RotateCw,
   ExternalLink,
+  LogIn,
+  ArrowRight,
+  KeyRound,
 } from 'lucide-react'
 
 import {
@@ -57,25 +61,28 @@ const DEPARTMENTS = [
 ]
 
 const CATEGORIES = [
+  'مشكلة في تسجيل الدخول أو استعادة الحساب',
+  'نسيان كلمة المرور أو إعادة التعيين',
+  'طلب تفعيل حساب جديد أو تعديل الصلاحيات',
   'عطل في السيستم / أخطاء تقنية',
   'أجهزة كمبيوتر أو طابعات باركود',
-  'طلب صلاحيات أو إعادة تعيين كلمة مرور',
   'الشبكة والإنترنت والاتصال بالسيرفر',
   'مشكلة في تسجيل أذون الصرف أو الإضافة',
   'استفسار أو شكوى أخرى',
 ]
 
 export default function SupportPage({ session }: SupportPageProps) {
-  // مقتصر حصرياً على مدير النظام (System Admin) فقط ولا يظهر لأي مستخدم آخر
+  // مقتصر حصرياً على مدير النظام (System Admin) فقط - موثق عبر app_metadata الموقعة رسمياً من السيرفر
   const isSysAdmin = Boolean(
     isSystemAdmin(session) ||
     checkIsSystemAdmin(session) ||
     session?.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com' ||
     session?.user?.email?.toLowerCase() === 'marwandesowky2@gmail.com' ||
-    session?.user?.user_metadata?.username === 'marwan-desouky' ||
-    session?.user?.user_metadata?.role === 'system_admin' ||
-    session?.user?.app_metadata?.role === 'system_admin'
+    session?.user?.app_metadata?.role === 'system_admin' ||
+    session?.user?.app_metadata?.system_admin === true
   )
+
+  const isGuest = !session
 
   // Auto-fill from session metadata if available
   const initialName =
@@ -85,14 +92,18 @@ export default function SupportPage({ session }: SupportPageProps) {
 
   const [ticketNumber, setTicketNumber] = useState<string>(() => generateTicketNumber())
   const [employeeName, setEmployeeName] = useState(initialName)
-  const [employeeCode, setEmployeeCode] = useState('')
+  const [employeePhone, setEmployeePhone] = useState('')
+  const [employeeEmail, setEmployeeEmail] = useState(session?.user?.email || '')
+  const [employeeCode] = useState<string>(() => (session?.user?.app_metadata?.employee_id as string) || '')
   const [department, setDepartment] = useState('المستودعات والمخازن')
-  const [category, setCategory] = useState('عطل في السيستم / أخطاء تقنية')
+  const [category, setCategory] = useState(isGuest ? 'مشكلة في تسجيل الدخول أو استعادة الحساب' : 'عطل في السيستم / أخطاء تقنية')
   const [priority, setPriority] = useState<TicketPriority>('متوسط')
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [submittedTicket, setSubmittedTicket] = useState<SupportTicket | null>(null)
+  const [guestSubmittedTickets, setGuestSubmittedTickets] = useState<SupportTicket[]>([])
 
   // Attachment state
   const [attachment, setAttachment] = useState<{
@@ -192,7 +203,9 @@ export default function SupportPage({ session }: SupportPageProps) {
       `🎫 *بلاغ دعم فني وتذكرة جديدة - Warehouse Ledger*`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
       `🔖 *رقم التذكرة:* #${ticket.ticket_number}`,
-      `👤 *الموظف:* ${ticket.employee_name} ${ticket.employee_code ? `(${ticket.employee_code})` : ''}`,
+      `👤 *الموظف / صاحب البلاغ:* ${ticket.employee_name}`,
+      ticket.employee_code ? `📞 *الهاتف / التواصل:* ${ticket.employee_code}` : '',
+      ticket.employee_email ? `📧 *البريد / اسم الحساب:* ${ticket.employee_email}` : '',
       `🏢 *القسم / الإدارة:* ${ticket.department}`,
       `⚙️ *تصنيف العطل:* ${ticket.category}`,
       `🚨 *درجة الأهمية:* ${ticket.priority}`,
@@ -205,7 +218,7 @@ export default function SupportPage({ session }: SupportPageProps) {
         ? `📎 *مرفقات:* تم إرفاق ملف (${ticket.attachment_name || 'صورة'}) ومتاح للمسؤولين بالسيستم.`
         : `📎 *المرفقات:* لا توجد مرفقات.`,
       `⏱️ *وقت التسجيل:* ${new Date(ticket.created_at).toLocaleString('ar-EG')}`,
-    ]
+    ].filter(Boolean)
     return lines.join('\n')
   }
 
@@ -218,7 +231,8 @@ export default function SupportPage({ session }: SupportPageProps) {
 بيانات الموظف والقسم:
 --------------------
 - اسم الموظف: ${ticket.employee_name}
-- كود الموظف / الهاتف: ${ticket.employee_code || 'غير محدد'}
+- هاتف التواصل: ${ticket.employee_code || 'غير محدد'}
+- البريد / اسم المستخدم: ${ticket.employee_email || 'غير محدد'}
 - القسم / الإدارة: ${ticket.department}
 - درجة الأولوية: ${ticket.priority}
 - نوع المشكلة: ${ticket.category}
@@ -237,7 +251,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
   function validateForm(): boolean {
     if (!employeeName.trim()) {
-      alert('يرجى إدخال اسم الموظف.')
+      alert('يرجى إدخال اسم الموظف / صاحب البلاغ بالكامل.')
+      return false
+    }
+    if (isGuest && !employeePhone.trim() && !employeeEmail.trim()) {
+      alert('يرجى كتابة رقم الهاتف أو البريد الإلكتروني للتواصل معك ومساعدتك.')
       return false
     }
     if (!subject.trim()) {
@@ -245,24 +263,31 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       return false
     }
     if (!description.trim()) {
-      alert('يرجى توضيح تفاصيل المشكلة أو الشكوى.')
+      alert('يرجى توضيح تفاصيل المشكلة أو العطل.')
       return false
     }
     return true
   }
 
-  async function handleSendWhatsApp() {
+  function getContactString(): string {
+    const parts: string[] = []
+    if (employeePhone.trim()) parts.push(`هاتف: ${employeePhone.trim()}`)
+    if (employeeCode.trim()) parts.push(`كود: ${employeeCode.trim()}`)
+    return parts.join(' | ')
+  }
+
+  async function handleDirectSubmit() {
     if (!validateForm() || isSubmitting) return
 
     setIsSubmitting(true)
     try {
-      // حفظ في قاعدة البيانات وسيرفر التخزين
+      const contactInfo = getContactString()
       const savedTicket = await createSupportTicket(
         {
           ticket_number: ticketNumber,
           employee_name: employeeName.trim(),
-          employee_code: employeeCode.trim(),
-          employee_email: session?.user?.email || '',
+          employee_code: contactInfo,
+          employee_email: employeeEmail.trim() || session?.user?.email || '',
           department,
           category,
           priority,
@@ -276,6 +301,48 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       )
 
       setTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setGuestSubmittedTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setSubmittedTicket(savedTicket)
+
+      setStatusMessage({
+        text: `تم استلام وحفظ التذكرة #${savedTicket.ticket_number} بنجاح في قاعدة البيانات المركزية`,
+        type: 'success',
+      })
+      resetFormForNewTicket()
+    } catch (err) {
+      alert('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleSendWhatsApp() {
+    if (!validateForm() || isSubmitting) return
+
+    setIsSubmitting(true)
+    try {
+      const contactInfo = getContactString()
+      const savedTicket = await createSupportTicket(
+        {
+          ticket_number: ticketNumber,
+          employee_name: employeeName.trim(),
+          employee_code: contactInfo,
+          employee_email: employeeEmail.trim() || session?.user?.email || '',
+          department,
+          category,
+          priority,
+          subject: subject.trim(),
+          description: description.trim(),
+          attachment_name: attachment.name || undefined,
+          attachment_type: attachment.type || undefined,
+        },
+        attachment.file,
+        session
+      )
+
+      setTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setGuestSubmittedTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setSubmittedTicket(savedTicket)
 
       const msg = formatTicketWhatsAppMessage(savedTicket)
       const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
@@ -304,12 +371,13 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
     setIsSubmitting(true)
     try {
+      const contactInfo = getContactString()
       const savedTicket = await createSupportTicket(
         {
           ticket_number: ticketNumber,
           employee_name: employeeName.trim(),
-          employee_code: employeeCode.trim(),
-          employee_email: session?.user?.email || '',
+          employee_code: contactInfo,
+          employee_email: employeeEmail.trim() || session?.user?.email || '',
           department,
           category,
           priority,
@@ -323,6 +391,8 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       )
 
       setTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setGuestSubmittedTickets((prev) => [savedTicket, ...prev.filter((t) => t.ticket_number !== savedTicket.ticket_number)])
+      setSubmittedTicket(savedTicket)
 
       const emailSubject = `[دعم فني #${savedTicket.ticket_number}] [${savedTicket.priority}] ${savedTicket.subject}`
       const emailBody = formatTicketEmailBody(savedTicket)
@@ -448,11 +518,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
         prev.map((t) =>
           t.id === ticketId
             ? {
-                ...t,
-                status: newStatus,
-                ...(notes !== undefined ? { admin_notes: notes } : {}),
-                resolved_by: adminName,
-              }
+              ...t,
+              status: newStatus,
+              ...(notes !== undefined ? { admin_notes: notes } : {}),
+              resolved_by: adminName,
+            }
             : t
         )
       )
@@ -460,11 +530,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
         setSelectedTicket((prev) =>
           prev
             ? {
-                ...prev,
-                status: newStatus,
-                ...(notes !== undefined ? { admin_notes: notes } : {}),
-                resolved_by: adminName,
-              }
+              ...prev,
+              status: newStatus,
+              ...(notes !== undefined ? { admin_notes: notes } : {}),
+              resolved_by: adminName,
+            }
             : null
         )
       }
@@ -494,7 +564,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
   return (
     <section className="page-stack support-page" dir="rtl">
-      
+
       {/* 1. Integrated Page Header - Differentiated for System Admin vs Regular Employees */}
       {isSysAdmin ? (
         <header className="page-intro">
@@ -560,21 +630,95 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
           <div
             className="page-intro-icon"
             style={{
-              background: 'rgba(59, 130, 246, 0.12)',
-              color: 'var(--accent, #3b82f6)',
+              background: isGuest ? 'rgba(79, 70, 229, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+              color: isGuest ? '#4f46e5' : 'var(--accent, #3b82f6)',
               borderRadius: '12px',
             }}
           >
             <Headphones size={24} />
           </div>
           <div style={{ flex: 1 }}>
-            <p className="eyebrow">منظومة الخدمة والمساندة الفنية بقاعدة البيانات</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>مركز الدعم الفني وتذاكر الموظفين</h2>
+            <p className="eyebrow">
+              {isGuest
+                ? 'منظومة الدعم الفني المباشر (متاح للجميع دون الحاجة لتسجيل الدخول)'
+                : 'منظومة الخدمة والمساندة الفنية بقاعدة البيانات'}
+            </p>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>
+              {isGuest ? 'مركز الدعم الفني وبلاغات الأعطال ومشاكل الدخول' : 'مركز الدعم الفني وتذاكر الموظفين'}
+            </h2>
             <p style={{ margin: '4px 0 0', opacity: 0.8 }}>
-              تسجيل وتتبع بلاغات وشكاوى الموظفين وحفظها سحابياً مع الربط الفوري بالواتساب والإيميل
+              {isGuest
+                ? 'إذا كنت تواجه مشكلة في تسجيل الدخول، نسيان كلمة المرور، أو تحتاج مساعدة فنية بالمنظومة، افتح تذكرتك هنا فوراً وسيتم حلها.'
+                : 'تسجيل وتتبع بلاغات وشكاوى الموظفين وحفظها سحابياً مع الربط الفوري بالواتساب والإيميل'}
             </p>
           </div>
+          {isGuest && (
+            <Link
+              to="/auth"
+              className="secondary-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                fontSize: '12px',
+                fontWeight: 700,
+                textDecoration: 'none',
+              }}
+            >
+              <LogIn size={15} />
+              <span>العودة لصفحة الدخول</span>
+            </Link>
+          )}
         </header>
+      )}
+
+      {/* Guest Notice Banner */}
+      {isGuest && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            background: 'rgba(79, 70, 229, 0.08)',
+            border: '1px solid rgba(79, 70, 229, 0.2)',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <KeyRound size={22} style={{ color: '#4f46e5', flexShrink: 0 }} />
+            <div>
+              <strong style={{ display: 'block', fontSize: '13px', color: 'var(--ink, #1e293b)' }}>
+                بوابة المساعدة العامة ومشاكل تسجيل الدخول
+              </strong>
+              <span style={{ fontSize: '12px', opacity: 0.8 }}>
+                يمكنك كتابة بياناتك وتفاصيل العطل أو مشكلة الدخول أدناه، وسيتم تسجيل بلاغك فوراً والتواصل معك لمعالجة المشكلة.
+              </span>
+            </div>
+          </div>
+          <Link
+            to="/auth"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: '#4f46e5',
+              textDecoration: 'none',
+              background: '#fff',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: '1px solid rgba(79, 70, 229, 0.3)',
+            }}
+          >
+            <ArrowRight size={14} />
+            <span>الرجوع لنموذج تسجيل الدخول</span>
+          </Link>
+        </div>
       )}
 
       {/* Status Alert */}
@@ -597,17 +741,134 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
         </div>
       )}
 
-      {/* Regular Employee View: Submit ticket & personal history (Hidden from System Admin) */}
+      {/* SUCCESS CONFIRMATION CARD (Shows on Ticket Creation) */}
+      {submittedTicket && (
+        <div
+          className="card-surface"
+          style={{
+            border: '2px solid #10b981',
+            background: 'rgba(16, 185, 129, 0.05)',
+            padding: '20px',
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle2 size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#065f46' }}>
+                  تم استلام وتوثيق تذكرتك بنجاح برقم: #{submittedTicket.ticket_number}
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#047857' }}>
+                  تم حفظ البلاغ في قاعدة البيانات المركزية. سيقوم فريق الدعم الفني بمراجعة المشكلة والاتصال بك.
+                </p>
+              </div>
+            </div>
+            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '15px', background: '#d1fae5', color: '#065f46', padding: '6px 14px', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
+              #{submittedTicket.ticket_number}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '12px', background: 'var(--surface, #fff)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line, #e2e8f0)' }}>
+            <div><span style={{ opacity: 0.6 }}>الاسم:</span> <strong>{submittedTicket.employee_name}</strong></div>
+            <div><span style={{ opacity: 0.6 }}>هاتف التواصل:</span> <strong>{submittedTicket.employee_code || 'غير محدد'}</strong></div>
+            <div><span style={{ opacity: 0.6 }}>التصنيف:</span> <strong>{submittedTicket.category}</strong></div>
+            <div><span style={{ opacity: 0.6 }}>الحالة:</span> <span style={{ color: '#059669', fontWeight: 700 }}>{submittedTicket.status}</span></div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', borderTop: '1px solid rgba(16, 185, 129, 0.2)', paddingTop: '14px' }}>
+            <button
+              type="button"
+              onClick={() => handleCopyTicket(submittedTicket)}
+              className="secondary-btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 14px' }}
+            >
+              {copiedId === submittedTicket.id ? <Check size={14} style={{ color: '#16a34a' }} /> : <Copy size={14} />}
+              <span>{copiedId === submittedTicket.id ? 'تم نسخ التذكرة' : 'نسخ بيانات التذكرة'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handlePrintTicket(submittedTicket)}
+              className="secondary-btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 14px' }}
+            >
+              <Printer size={14} />
+              <span>طباعة إيصال التذكرة</span>
+            </button>
+
+            <a
+              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(formatTicketWhatsAppMessage(submittedTicket))}`}
+              target="_blank"
+              rel="noreferrer"
+              className="primary-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                backgroundColor: '#16a34a',
+                borderColor: '#16a34a',
+                textDecoration: 'none',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                color: '#fff',
+                fontWeight: 700,
+              }}
+            >
+              <Phone size={14} />
+              <span>مراسلة الدعم بالواتساب مباشرة</span>
+            </a>
+
+            {isGuest && (
+              <Link
+                to="/auth"
+                className="secondary-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  textDecoration: 'none',
+                  padding: '8px 14px',
+                  marginRight: 'auto',
+                }}
+              >
+                <LogIn size={14} />
+                <span>العودة لصفحة تسجيل الدخول</span>
+              </Link>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSubmittedTicket(null)}
+              style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}
+            >
+              فتح تذكرة أخرى
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Regular Employee / Guest View: Submit ticket & personal history (Hidden from System Admin) */}
       {!isSysAdmin && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-          
+
           {/* Primary Ticket Form Card */}
           <section className="card-surface" style={{ gridColumn: 'span 2' }}>
             <div className="section-head" style={{ borderBottom: '1px solid var(--line, #e2e8f0)', paddingBottom: '12px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileText size={18} style={{ color: 'var(--accent, #3b82f6)' }} />
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>فتح تذكرة بلاغ أو شكوى جديدة</h3>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                    {isGuest ? 'فتح تذكرة دعم فني وبلاغ مشكلة دخول' : 'فتح تذكرة بلاغ أو شكوى جديدة'}
+                  </h3>
                 </div>
                 <span
                   style={{
@@ -629,17 +890,17 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
             <form
               onSubmit={(e: FormEvent) => {
                 e.preventDefault()
-                void handleSendWhatsApp()
+                void handleDirectSubmit()
               }}
               style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
             >
-              {/* Row 1: Employee Name & Code */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+              {/* Row 1: Name, Phone, and Email */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       <User size={14} style={{ color: 'var(--accent, #3b82f6)' }} />
-                      اسم الموظف <span style={{ color: '#ef4444' }}>*</span>
+                      {isGuest ? 'الاسم بالكامل للموظف / المستخدم' : 'اسم الموظف'} <span style={{ color: '#ef4444' }}>*</span>
                     </span>
                   </label>
                   <input
@@ -647,7 +908,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                     required
                     value={employeeName}
                     onChange={(e) => setEmployeeName(e.target.value)}
-                    placeholder="مثال: مروان دسوقي"
+                    placeholder="مثال: أحمد محمد علي"
                     className="input-field"
                     style={{
                       width: '100%',
@@ -664,15 +925,41 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <Phone size={14} style={{ color: 'var(--accent, #3b82f6)' }} />
-                      كود الموظف أو رقم هاتفه <small style={{ fontWeight: 400, opacity: 0.7 }}>(اختياري)</small>
+                      <Phone size={14} style={{ color: '#16a34a' }} />
+                      رقم الهاتف / الواتساب للتواصل {isGuest && <span style={{ color: '#ef4444' }}>*</span>}
                     </span>
                   </label>
                   <input
                     type="text"
-                    value={employeeCode}
-                    onChange={(e) => setEmployeeCode(e.target.value)}
-                    placeholder="مثال: EMP-204 أو 010xxxxxxxx"
+                    required={isGuest && !employeeEmail.trim()}
+                    value={employeePhone}
+                    onChange={(e) => setEmployeePhone(e.target.value)}
+                    placeholder="مثال: 010xxxxxxxx"
+                    className="input-field"
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--line, #cbd5e1)',
+                      background: 'var(--surface, #fff)',
+                      color: 'var(--ink, #1e293b)',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <Mail size={14} style={{ color: 'var(--accent, #3b82f6)' }} />
+                      البريد أو اسم المستخدم <small style={{ fontWeight: 400, opacity: 0.7 }}>(اختياري)</small>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeEmail}
+                    onChange={(e) => setEmployeeEmail(e.target.value)}
+                    placeholder="مثال: user@example.com أو اسم الحساب"
                     className="input-field"
                     style={{
                       width: '100%',
@@ -693,7 +980,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       <Building2 size={14} style={{ color: 'var(--accent, #3b82f6)' }} />
-                      القسم / الإدارة <span style={{ color: '#ef4444' }}>*</span>
+                      الجهة / الكلية / القسم <span style={{ color: '#ef4444' }}>*</span>
                     </span>
                   </label>
                   <select
@@ -773,7 +1060,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   >
                     <option value="عادي">عادي (خلال 24-48 ساعة)</option>
                     <option value="متوسط">متوسط (خلال ساعات العمل اليومية)</option>
-                    <option value="عاجل جداً">عاجل جداً (توقف كلي للعمل)</option>
+                    <option value="عاجل جداً">عاجل جداً (توقف كلي للعمل / تعذر الدخول)</option>
                   </select>
                 </div>
 
@@ -789,7 +1076,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                     required
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder="مثال: تعذر تسجيل إذن صرف صنف معين أو خطأ في الحفظ"
+                    placeholder={isGuest ? 'مثال: تعذر تسجيل الدخول أو كلمة المرور غير صحيحة' : 'مثال: تعذر تسجيل إذن صرف صنف معين أو خطأ في الحفظ'}
                     className="input-field"
                     style={{
                       width: '100%',
@@ -814,7 +1101,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="يرجى كتابة ما حدث بالتفصيل، رقم إذن الصرف أو الصنف المتعلق به، نص رسالة الخطأ إن وجدت، وأي ملاحظات تساعد الدعم الفني لحل المشكلة بسرعة..."
+                  placeholder={
+                    isGuest
+                      ? 'يرجى كتابة ما يحدث عند محاولة تسجيل الدخول، نص رسالة الخطأ الظاهرة إن وجدت، وأي معلومات إضافية للتواصل معك...'
+                      : 'يرجى كتابة ما حدث بالتفصيل، رقم إذن الصرف أو الصنف المتعلق به، نص رسالة الخطأ إن وجدت، وأي ملاحظات تساعد الدعم الفني لحل المشكلة بسرعة...'
+                  }
                   className="input-field"
                   style={{
                     width: '100%',
@@ -921,10 +1212,33 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
               {/* Action Buttons */}
               <div style={{ borderTop: '1px solid var(--line, #e2e8f0)', paddingTop: '16px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '10px' }}>
-                  سيتم حفظ التذكرة في قاعدة البيانات تلقائياً، اختر قناة المراسلة المباشرة:
+                  سيتم تسجيل وحفظ التذكرة مركزياً، اختر طريقة الإرسال المناسبة:
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  {/* Direct Database Submit */}
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => void handleDirectSubmit()}
+                    className="primary-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: isSubmitting ? 0.7 : 1,
+                    }}
+                  >
+                    <Send size={16} />
+                    <span>{isSubmitting ? 'جارٍ الحفظ والرفع...' : 'تسجيل وحفظ التذكرة فوراً'}</span>
+                  </button>
+
                   {/* Send via WhatsApp */}
                   <button
                     type="button"
@@ -946,8 +1260,8 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                       opacity: isSubmitting ? 0.7 : 1,
                     }}
                   >
-                    <Send size={16} />
-                    <span>{isSubmitting ? 'جارٍ الحفظ والرفع...' : `حفظ وإرسال عبر الواتساب (${SUPPORT_PHONE})`}</span>
+                    <Phone size={16} />
+                    <span>{isSubmitting ? 'جارٍ الحفظ...' : `حفظ ومراسلة عبر الواتساب (${SUPPORT_PHONE})`}</span>
                   </button>
 
                   {/* Send via Email */}
@@ -955,7 +1269,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => void handleSendEmail()}
-                    className="primary-btn"
+                    className="secondary-btn"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -979,7 +1293,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
           {/* Sidebar Info & Tickets History */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
+
             {/* Support Channels Card */}
             <section className="card-surface" style={{ background: 'var(--surface-sunken, #f8fafc)' }}>
               <div className="section-head" style={{ borderBottom: '1px solid var(--line, #e2e8f0)', paddingBottom: '10px', marginBottom: '12px' }}>
@@ -1059,31 +1373,39 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Clock size={16} style={{ color: 'var(--accent, #3b82f6)' }} />
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>سجل التذاكر</h4>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>
+                      {isGuest ? 'تذاكرك في هذه الجلسة' : 'سجل التذاكر'}
+                    </h4>
                     <span style={{ background: 'var(--line, #e2e8f0)', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 700 }}>
-                      {tickets.length}
+                      {(isGuest ? guestSubmittedTickets : tickets).length}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadTickets()}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--accent, #3b82f6)' }}
-                    title="تحديث من قاعدة البيانات"
-                  >
-                    <RotateCw size={12} className={isLoading ? 'animate-spin' : ''} />
-                    <span>تحديث</span>
-                  </button>
+                  {!isGuest && (
+                    <button
+                      type="button"
+                      onClick={() => void loadTickets()}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--accent, #3b82f6)' }}
+                      title="تحديث من قاعدة البيانات"
+                    >
+                      <RotateCw size={12} className={isLoading ? 'animate-spin' : ''} />
+                      <span>تحديث</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {tickets.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 8px', opacity: 0.5, fontSize: '12px' }}>
+              {(isGuest ? guestSubmittedTickets : tickets).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 8px', opacity: 0.6, fontSize: '12px' }}>
                   <MessageSquare size={28} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
-                  <p style={{ margin: 0 }}>لا توجد تذاكر مسجلة بعد.</p>
+                  <p style={{ margin: 0 }}>
+                    {isGuest
+                      ? 'أي تذكرة تقوم بفتحها ستظهر هنا فوراً مع رقمها وحالتها.'
+                      : 'لا توجد تذاكر مسجلة بعد.'}
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '340px', overflowY: 'auto' }}>
-                  {tickets.map((t) => (
+                  {(isGuest ? guestSubmittedTickets : tickets).map((t) => (
                     <div
                       key={t.id}
                       style={{
@@ -1111,14 +1433,14 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                                 t.status === 'تم الحل'
                                   ? 'rgba(22, 163, 74, 0.15)'
                                   : t.status === 'قيد المعالجة'
-                                  ? 'rgba(245, 158, 11, 0.15)'
-                                  : 'rgba(239, 68, 68, 0.15)',
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : 'rgba(239, 68, 68, 0.15)',
                               color:
                                 t.status === 'تم الحل'
                                   ? '#16a34a'
                                   : t.status === 'قيد المعالجة'
-                                  ? '#b45309'
-                                  : '#ef4444',
+                                    ? '#b45309'
+                                    : '#ef4444',
                             }}
                           >
                             {t.status}
@@ -1188,7 +1510,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       {/* SYSTEM ADMIN VIEW: Exclusively Tickets Management & Reviewing User Issues */}
       {isSysAdmin && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
+
           {/* 4 Summary KPI Cards for System Admin */}
           <div
             style={{
@@ -1345,229 +1667,230 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   <span style={{ fontSize: '12px', opacity: 0.7 }}>متابعة فورية ومباشرة لكافة البلاغات الواردة من موظفي الأقسام والمستودعات</span>
                 </div>
 
-              {/* Filters toolbar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {/* Search */}
-                <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
-                  <input
-                    type="search"
-                    placeholder="بحث برقم التذكرة أو الموظف..."
-                    value={adminSearch}
-                    onChange={(e) => setAdminSearch(e.target.value)}
+                {/* Filters toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Search */}
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                    <input
+                      type="search"
+                      placeholder="بحث برقم التذكرة أو الموظف..."
+                      value={adminSearch}
+                      onChange={(e) => setAdminSearch(e.target.value)}
+                      style={{
+                        padding: '6px 28px 6px 10px',
+                        fontSize: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--line, #cbd5e1)',
+                        background: 'var(--surface, #fff)',
+                      }}
+                    />
+                  </div>
+
+                  {/* Status Filter */}
+                  <select
+                    value={adminStatusFilter}
+                    onChange={(e) => setAdminStatusFilter(e.target.value)}
                     style={{
-                      padding: '6px 28px 6px 10px',
+                      padding: '6px 10px',
                       fontSize: '12px',
                       borderRadius: '8px',
                       border: '1px solid var(--line, #cbd5e1)',
                       background: 'var(--surface, #fff)',
                     }}
-                  />
+                  >
+                    <option value="all">كل الحالات</option>
+                    <option value="مفتوحة">المفتوحة فقط 🔴</option>
+                    <option value="قيد المعالجة">قيد المعالجة 🟡</option>
+                    <option value="تم الحل">تم الحل 🟢</option>
+                  </select>
+
+                  {/* Dept Filter */}
+                  <select
+                    value={adminDeptFilter}
+                    onChange={(e) => setAdminDeptFilter(e.target.value)}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--line, #cbd5e1)',
+                      background: 'var(--surface, #fff)',
+                    }}
+                  >
+                    <option value="all">كل الأقسام</option>
+                    {DEPARTMENTS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => void loadTickets()}
+                    className="secondary-btn"
+                    style={{ fontSize: '12px', padding: '6px 10px' }}
+                    title="تحديث القائمة"
+                  >
+                    <RotateCw size={13} className={isLoading ? 'animate-spin' : ''} />
+                  </button>
                 </div>
-
-                {/* Status Filter */}
-                <select
-                  value={adminStatusFilter}
-                  onChange={(e) => setAdminStatusFilter(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: '12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--line, #cbd5e1)',
-                    background: 'var(--surface, #fff)',
-                  }}
-                >
-                  <option value="all">كل الحالات</option>
-                  <option value="مفتوحة">المفتوحة فقط 🔴</option>
-                  <option value="قيد المعالجة">قيد المعالجة 🟡</option>
-                  <option value="تم الحل">تم الحل 🟢</option>
-                </select>
-
-                {/* Dept Filter */}
-                <select
-                  value={adminDeptFilter}
-                  onChange={(e) => setAdminDeptFilter(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: '12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--line, #cbd5e1)',
-                    background: 'var(--surface, #fff)',
-                  }}
-                >
-                  <option value="all">كل الأقسام</option>
-                  {DEPARTMENTS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => void loadTickets()}
-                  className="secondary-btn"
-                  style={{ fontSize: '12px', padding: '6px 10px' }}
-                  title="تحديث القائمة"
-                >
-                  <RotateCw size={13} className={isLoading ? 'animate-spin' : ''} />
-                </button>
               </div>
             </div>
-          </div>
 
-          {/* Admin Tickets Table / Grid */}
-          {filteredAdminTickets.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', opacity: 0.6 }}>
-              <p>لا توجد تذاكر تطابق معايير البحث والفلترة.</p>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'right' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--line, #e2e8f0)', background: 'var(--surface-sunken, #f8fafc)' }}>
-                    <th style={{ padding: '10px 12px' }}>رقم التذكرة</th>
-                    <th style={{ padding: '10px 12px' }}>الموظف</th>
-                    <th style={{ padding: '10px 12px' }}>القسم</th>
-                    <th style={{ padding: '10px 12px' }}>الأولوية</th>
-                    <th style={{ padding: '10px 12px' }}>عنوان المشكلة</th>
-                    <th style={{ padding: '10px 12px' }}>الحالة</th>
-                    <th style={{ padding: '10px 12px' }}>التاريخ</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>إجراءات الأدمن</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAdminTickets.map((t) => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid var(--line, #e2e8f0)' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent, #3b82f6)' }}>
-                        #{t.ticket_number}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <div><strong>{t.employee_name}</strong></div>
-                        {t.employee_code && <small style={{ opacity: 0.6 }}>{t.employee_code}</small>}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>{t.department}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontWeight: 700,
-                            backgroundColor:
-                              t.priority === 'عاجل جداً'
-                                ? 'rgba(239, 68, 68, 0.15)'
-                                : t.priority === 'متوسط'
-                                ? 'rgba(245, 158, 11, 0.15)'
-                                : 'rgba(59, 130, 246, 0.15)',
-                            color:
-                              t.priority === 'عاجل جداً'
-                                ? '#ef4444'
-                                : t.priority === 'متوسط'
-                                ? '#b45309'
-                                : 'var(--accent, #3b82f6)',
-                          }}
-                        >
-                          {t.priority}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {t.subject}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontWeight: 700,
-                            backgroundColor:
-                              t.status === 'تم الحل'
-                                ? 'rgba(22, 163, 74, 0.15)'
-                                : t.status === 'قيد المعالجة'
-                                ? 'rgba(245, 158, 11, 0.15)'
-                                : 'rgba(239, 68, 68, 0.15)',
-                            color:
-                              t.status === 'تم الحل'
-                                ? '#16a34a'
-                                : t.status === 'قيد المعالجة'
-                                ? '#b45309'
-                                : '#ef4444',
-                          }}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', fontSize: '11px', opacity: 0.7 }}>
-                        {new Date(t.created_at).toLocaleDateString('ar-EG')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          {/* Quick change to in progress */}
-                          {t.status === 'مفتوحة' && (
-                            <button
-                              type="button"
-                              onClick={() => void handleUpdateStatus(t.id, 'قيد المعالجة')}
-                              title="بدء المعالجة"
-                              style={{
-                                background: 'rgba(245, 158, 11, 0.15)',
-                                color: '#b45309',
-                                border: '1px solid rgba(245, 158, 11, 0.3)',
-                                borderRadius: '6px',
-                                padding: '4px 8px',
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                              }}
-                            >
-                              معالجة ⏳
-                            </button>
-                          )}
-
-                          {/* Quick change to resolved */}
-                          {t.status !== 'تم الحل' && (
-                            <button
-                              type="button"
-                              onClick={() => void handleUpdateStatus(t.id, 'تم الحل')}
-                              title="تأكيد حل المشكلة"
-                              style={{
-                                background: 'rgba(22, 163, 74, 0.15)',
-                                color: '#16a34a',
-                                border: '1px solid rgba(22, 163, 74, 0.3)',
-                                borderRadius: '6px',
-                                padding: '4px 8px',
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                              }}
-                            >
-                              حل ✅
-                            </button>
-                          )}
-
-                          {/* Open Details Modal */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedTicket(t)
-                              setAdminNoteInput(t.admin_notes || '')
-                            }}
-                            className="secondary-btn"
-                            style={{ padding: '4px 8px', fontSize: '11px' }}
-                          >
-                            عرض كامل
-                          </button>
-                        </div>
-                      </td>
+            {/* Admin Tickets Table / Grid */}
+            {filteredAdminTickets.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', opacity: 0.6 }}>
+                <p>لا توجد تذاكر تطابق معايير البحث والفلترة.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'right' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--line, #e2e8f0)', background: 'var(--surface-sunken, #f8fafc)' }}>
+                      <th style={{ padding: '10px 12px' }}>رقم التذكرة</th>
+                      <th style={{ padding: '10px 12px' }}>الموظف</th>
+                      <th style={{ padding: '10px 12px' }}>القسم</th>
+                      <th style={{ padding: '10px 12px' }}>الأولوية</th>
+                      <th style={{ padding: '10px 12px' }}>عنوان المشكلة</th>
+                      <th style={{ padding: '10px 12px' }}>الحالة</th>
+                      <th style={{ padding: '10px 12px' }}>التاريخ</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center' }}>إجراءات الأدمن</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
-    )}
+                  </thead>
+                  <tbody>
+                    {filteredAdminTickets.map((t) => (
+                      <tr key={t.id} style={{ borderBottom: '1px solid var(--line, #e2e8f0)' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent, #3b82f6)' }}>
+                          #{t.ticket_number}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div><strong>{t.employee_name}</strong></div>
+                          {t.employee_code && <small style={{ opacity: 0.7, display: 'block' }}>{t.employee_code}</small>}
+                          {t.employee_email && <small style={{ opacity: 0.8, color: 'var(--accent, #3b82f6)', display: 'block' }}>{t.employee_email}</small>}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>{t.department}</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontWeight: 700,
+                              backgroundColor:
+                                t.priority === 'عاجل جداً'
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : t.priority === 'متوسط'
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : 'rgba(59, 130, 246, 0.15)',
+                              color:
+                                t.priority === 'عاجل جداً'
+                                  ? '#ef4444'
+                                  : t.priority === 'متوسط'
+                                    ? '#b45309'
+                                    : 'var(--accent, #3b82f6)',
+                            }}
+                          >
+                            {t.priority}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {t.subject}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontWeight: 700,
+                              backgroundColor:
+                                t.status === 'تم الحل'
+                                  ? 'rgba(22, 163, 74, 0.15)'
+                                  : t.status === 'قيد المعالجة'
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : 'rgba(239, 68, 68, 0.15)',
+                              color:
+                                t.status === 'تم الحل'
+                                  ? '#16a34a'
+                                  : t.status === 'قيد المعالجة'
+                                    ? '#b45309'
+                                    : '#ef4444',
+                            }}
+                          >
+                            {t.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', fontSize: '11px', opacity: 0.7 }}>
+                          {new Date(t.created_at).toLocaleDateString('ar-EG')}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            {/* Quick change to in progress */}
+                            {t.status === 'مفتوحة' && (
+                              <button
+                                type="button"
+                                onClick={() => void handleUpdateStatus(t.id, 'قيد المعالجة')}
+                                title="بدء المعالجة"
+                                style={{
+                                  background: 'rgba(245, 158, 11, 0.15)',
+                                  color: '#b45309',
+                                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                                  borderRadius: '6px',
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                معالجة ⏳
+                              </button>
+                            )}
+
+                            {/* Quick change to resolved */}
+                            {t.status !== 'تم الحل' && (
+                              <button
+                                type="button"
+                                onClick={() => void handleUpdateStatus(t.id, 'تم الحل')}
+                                title="تأكيد حل المشكلة"
+                                style={{
+                                  background: 'rgba(22, 163, 74, 0.15)',
+                                  color: '#16a34a',
+                                  border: '1px solid rgba(22, 163, 74, 0.3)',
+                                  borderRadius: '6px',
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                حل ✅
+                              </button>
+                            )}
+
+                            {/* Open Details Modal */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTicket(t)
+                                setAdminNoteInput(t.admin_notes || '')
+                              }}
+                              className="secondary-btn"
+                              style={{ padding: '4px 8px', fontSize: '11px' }}
+                            >
+                              عرض كامل
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {/* MODAL FOR VIEWING AND MANAGING TICKET DETAILS */}
       {selectedTicket && (
@@ -1637,6 +1960,10 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
               <div>
                 <span style={{ opacity: 0.6, display: 'block' }}>هاتف / كود:</span>
                 <span>{selectedTicket.employee_code || 'غير محدد'}</span>
+              </div>
+              <div>
+                <span style={{ opacity: 0.6, display: 'block' }}>البريد / الحساب:</span>
+                <span>{selectedTicket.employee_email || 'غير محدد'}</span>
               </div>
             </div>
 

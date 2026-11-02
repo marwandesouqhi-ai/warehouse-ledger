@@ -1,5 +1,6 @@
 import type { CustodyCategory, CustodyCondition, CustodyItem, CustodyType } from './custody'
 import { findWarehouseByRecipient, guessCategory, saveCustodyItems, saveCustodyItemsToCloud, WAREHOUSES } from './custody'
+import { classifyWorkshopItem, WORKSHOP_CATEGORIES } from './workshopCategoryClassifier'
 
 export type CustodyImportRow = {
   code?: string
@@ -32,7 +33,7 @@ const VALID_CATEGORIES: CustodyCategory[] = [
   'أجهزة معملية وتجارب',
   'أثاث وتجهيزات',
   'أدوات ومستلزمات تشغيل',
-  'أخرى',
+  ...WORKSHOP_CATEGORIES,
 ]
 
 export function normalizeArabicText(text?: unknown): string {
@@ -62,8 +63,22 @@ export function parseCustodyType(raw?: unknown): CustodyType {
   return 'مستديمة'
 }
 
-export function parseCategory(raw?: unknown, itemName = ''): CustodyCategory {
-  if (!raw) return guessCategory(itemName)
+export function parseCategory(raw?: unknown, itemName = '', targetWarehouseId = ''): CustodyCategory {
+  if (targetWarehouseId === 'engineering_workshops') {
+    if (raw) {
+      const text = String(raw).trim()
+      const found = VALID_CATEGORIES.find((c) => c === text)
+      if (found) return found
+    }
+    return classifyWorkshopItem(itemName)
+  }
+
+  if (!raw) {
+    const workshopGuess = classifyWorkshopItem(itemName)
+    if (workshopGuess !== 'أخرى') return workshopGuess
+    return guessCategory(itemName)
+  }
+
   const text = String(raw).trim()
   const found = VALID_CATEGORIES.find((c) => c === text)
   if (found) return found
@@ -74,6 +89,9 @@ export function parseCategory(raw?: unknown, itemName = ''): CustodyCategory {
   if (norm.includes('حاسب') || norm.includes('كمبيوتر') || norm.includes('الكترون') || norm.includes('شبك')) return 'أجهزة إلكترونية وحواسب'
   if (norm.includes('اثاث') || norm.includes('مكتب') || norm.includes('كرسي') || norm.includes('تجهيز')) return 'أثاث وتجهيزات'
   if (norm.includes('تشغيل') || norm.includes('مستلزم') || norm.includes('ادوات')) return 'أدوات ومستلزمات تشغيل'
+
+  const workshopGuess = classifyWorkshopItem(itemName)
+  if (workshopGuess !== 'أخرى') return workshopGuess
 
   return guessCategory(itemName)
 }
@@ -97,8 +115,8 @@ export function parseExcelDate(val: unknown, XLSX?: typeof import('xlsx')): stri
   }
 
   const str = String(val).trim()
-  // Matches YYYY-MM-DD or YYYY/MM/DD
-  const matchIso = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  // Matches YYYY-MM-DD or YYYY/MM/DD or YYYY\MM\DD
+  const matchIso = str.match(/^(\d{4})[\\/-](\d{1,2})[\\/-](\d{1,2})/)
   if (matchIso) {
     const y = matchIso[1]
     const m = matchIso[2].padStart(2, '0')
@@ -106,8 +124,8 @@ export function parseExcelDate(val: unknown, XLSX?: typeof import('xlsx')): stri
     return `${y}-${m}-${d}`
   }
 
-  // Matches DD-MM-YYYY or DD/MM/YYYY
-  const matchDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/)
+  // Matches DD-MM-YYYY or DD/MM/YYYY or DD\MM\YYYY
+  const matchDmy = str.match(/^(\d{1,2})[\\/-](\d{1,2})[\\/-](\d{4})/)
   if (matchDmy) {
     const d = matchDmy[1].padStart(2, '0')
     const m = matchDmy[2].padStart(2, '0')
@@ -299,13 +317,10 @@ export function parseRawCustodyRows(
       }
     }
 
-    // Validation: Item name is mandatory
+    // Fallback: Never skip any row. If item name is completely blank, provide defensive fallback
     if (!name) {
-      skippedCount++
-      if (Object.values(row).some((v) => v != null && String(v).trim() !== '')) {
-        warnings.push(`تم تخطي الصف رقم ${rowNum} لعدم احتوائه على اسم الصنف`)
-      }
-      continue
+      name = `صنف بدون اسم (صف ${rowNum})`
+      warnings.push(`تم استخدام اسم بديل تلقائي للصف رقم ${rowNum} لعدم احتوائه على اسم الصنف`)
     }
 
     // Determine target warehouse for this row
@@ -321,19 +336,28 @@ export function parseRawCustodyRows(
 
     // Auto-generate code if empty
     if (!code) {
-      const seq = (existingItemsCount + validItems.length + 1).toString().padStart(3, '0')
-      code = `${prefix}-${seq}`
+      if (itemWarehouseId === 'engineering_workshops') {
+        const seq = (existingItemsCount + validItems.length + 1).toString().padStart(4, '0')
+        code = `WS-${seq}`
+      } else {
+        const seq = (existingItemsCount + validItems.length + 1).toString().padStart(3, '0')
+        code = `${prefix}-${seq}`
+      }
     }
 
     // Calculate value: System automatically calculates totalValue = quantity * unitPrice
+    // If unit price is missing or invalid, default to 0 (never invent price, never skip)
+    let finalUnitPrice = 0
     let totalValue = 0
     if (unitPrice != null && unitPrice >= 0) {
+      finalUnitPrice = unitPrice
       totalValue = Math.round(quantity * unitPrice)
     } else if (rawValue != null && rawValue > 0) {
       totalValue = Math.round(rawValue)
-      if (quantity > 0 && unitPrice == null) {
-        unitPrice = Math.round(rawValue / quantity)
-      }
+      finalUnitPrice = quantity > 0 ? Math.round(rawValue / quantity) : 0
+    } else {
+      finalUnitPrice = 0
+      totalValue = 0
     }
 
     const item: CustodyItem = {
@@ -341,18 +365,19 @@ export function parseRawCustodyRows(
       warehouseId: itemWarehouseId,
       code,
       name,
-      category: parseCategory(category, name),
+      category: parseCategory(category, name, itemWarehouseId),
       custodian: custodian || `أمين عهدة ${currentWarehouse.shortName}`,
-      quantity,
-      unit,
+      quantity: Math.max(1, quantity),
+      unit: unit || 'قطعة',
       condition: parseCondition(condition),
       custodyType: parseCustodyType(custodyType),
       roomLocation: roomLocation || currentWarehouse.building,
       acquisitionDate: acquisitionDate || new Date().toISOString().slice(0, 10),
-      unitPrice,
+      unitPrice: finalUnitPrice,
       value: totalValue,
       serialNumber: serialNumber && serialNumber !== '—' ? serialNumber : undefined,
       notes: notes || undefined,
+      importBatchId: itemWarehouseId === 'engineering_workshops' ? 'ws-import-2026-11-02' : undefined,
     }
 
     validItems.push(item)

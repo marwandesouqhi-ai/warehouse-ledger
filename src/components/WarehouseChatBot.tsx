@@ -21,9 +21,10 @@ import {
   Cpu,
   Stethoscope,
   FlaskConical,
-  HeartPulse,
   Laptop,
   Wrench,
+  Warehouse,
+  Microscope,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { findBestKnowledgeAnswer } from '../lib/chatbotKnowledge'
@@ -72,21 +73,28 @@ const CATEGORY_CHIPS = [
 
 function getWarehouseIcon(id: string) {
   switch (id) {
+    case 'main':
+      return <Warehouse size={15} />
     case 'medicine':
+    case 'nursing': // legacy alias
       return <Stethoscope size={15} />
+    case 'medicine_a':
+      return <Building2 size={15} />
     case 'dentistry':
       return <Sparkles size={15} />
     case 'pharmacy':
       return <FlaskConical size={15} />
-    case 'nursing':
-      return <HeartPulse size={15} />
+    case 'central_lab':
+      return <Microscope size={15} />
     case 'engineering':
       return <Cpu size={15} />
+    case 'engineering_workshops':
+      return <Wrench size={15} />
+    case 'fci':
     case 'computers':
       return <Laptop size={15} />
     case 'management':
       return <GraduationCap size={15} />
-    case 'main':
     default:
       return <Building2 size={15} />
   }

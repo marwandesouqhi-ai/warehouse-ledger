@@ -19,6 +19,7 @@ import {
     RotateCcw,
     Save,
     ShieldAlert,
+    Sparkles,
     Sun,
     Trash2,
     Upload,
@@ -33,6 +34,7 @@ import {
     formatBackupTimestamp,
     getLastCloudBackupTime,
     getLastLocalBackupTime,
+    getLastAutoBackupTime,
     validateBackupPayload,
     restoreLocalBackup,
     restoreFromCloud,
@@ -40,6 +42,11 @@ import {
     type RestoreOptions,
     type SystemBackupCounts,
 } from '../lib/backup'
+import {
+    isAutoBackupEnabled,
+    setAutoBackupEnabled,
+    restoreFromAutoRecovery,
+} from '../lib/autoBackupEngine'
 
 type SettingsPageProps = {
     settings: AppSettings
@@ -110,6 +117,25 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
     const [localBackupError, setLocalBackupError] = useState('')
     const [lastCloudTime, setLastCloudTime] = useState<string | null>(getLastCloudBackupTime)
     const [lastLocalTime, setLastLocalTime] = useState<string | null>(getLastLocalBackupTime)
+    const [lastAutoTime, setLastAutoTime] = useState<string | null>(getLastAutoBackupTime)
+    const [autoBackupEnabled, setAutoBackupEnabledState] = useState<boolean>(isAutoBackupEnabled)
+    const [isRestoringAuto, setIsRestoringAuto] = useState(false)
+
+    useEffect(() => {
+        function handleAutoBackupCompleted(e: Event) {
+            const detail = (e as CustomEvent).detail
+            if (detail?.timestamp) {
+                setLastAutoTime(detail.timestamp)
+            }
+        }
+        window.addEventListener('auto-backup-completed', handleAutoBackupCompleted)
+        return () => window.removeEventListener('auto-backup-completed', handleAutoBackupCompleted)
+    }, [])
+
+    function handleToggleAutoBackup(enabled: boolean) {
+        setAutoBackupEnabled(enabled)
+        setAutoBackupEnabledState(enabled)
+    }
 
     // Backup tab navigation
     const [backupTab, setBackupTab] = useState<'create' | 'restore'>('create')
@@ -135,6 +161,11 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         restoreInventorySettlements: true,
         restoreTelegramSettings: true,
         restoreNotifications: true,
+        restorePurchaseRequests: true,
+        restoreSupplierQuotes: true,
+        restorePurchaseOrders: true,
+        restoreRegistrationRequests: true,
+        restoreChatbotDirectives: true,
     })
     const [isRestoringLocal, setIsRestoringLocal] = useState(false)
     const [isRestoringCloud, setIsRestoringCloud] = useState(false)
@@ -159,6 +190,11 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             restoreInventorySettlements: select,
             restoreTelegramSettings: select,
             restoreNotifications: select,
+            restorePurchaseRequests: select,
+            restoreSupplierQuotes: select,
+            restorePurchaseOrders: select,
+            restoreRegistrationRequests: select,
+            restoreChatbotDirectives: select,
         })
     }
 
@@ -174,6 +210,10 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         if (counts.supportTickets) parts.push(`${counts.supportTickets} تذكرة دعم`)
         if (counts.technicalInspections) parts.push(`${counts.technicalInspections} محضر فحص`)
         if (counts.inventorySettlements) parts.push(`${counts.inventorySettlements} تسوية جردية`)
+        if (counts.purchaseRequests) parts.push(`${counts.purchaseRequests} طلب شراء`)
+        if (counts.supplierQuotes) parts.push(`${counts.supplierQuotes} عرض سعر`)
+        if (counts.purchaseOrders) parts.push(`${counts.purchaseOrders} أمر توريد`)
+        if (counts.registrationRequests) parts.push(`${counts.registrationRequests} طلب تسجيل موظف`)
         if (counts.users) parts.push(`${counts.users} مستخدم`)
         if (counts.auditLogs) parts.push(`${counts.auditLogs} عملية تدقيق`)
         if (counts.suppliers) parts.push(`${counts.suppliers} مورد`)
@@ -246,6 +286,25 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             setRestoreError(err instanceof Error ? err.message : 'تعذر إتمام الاستعادة من Supabase.')
         } finally {
             setIsRestoringCloud(false)
+        }
+    }
+
+    async function handleExecuteAutoRecoveryRestore() {
+        if (!isSystemAdmin) return
+        setIsRestoringAuto(true)
+        setRestoreError('')
+        setRestoreSuccessNotice('')
+
+        try {
+            const result = await restoreFromAutoRecovery(session)
+            setRestoreSuccessNotice(
+                `✓ تم استعادة البيانات من أحدث لقطة تعافي تلقائية بنجاح! تم استرجاع: ${formatCountsSummary(result.counts)}.`
+            )
+        } catch (err) {
+            console.error('Auto recovery restore error:', err)
+            setRestoreError(err instanceof Error ? err.message : 'تعذر إتمام الاستعادة التلقائية.')
+        } finally {
+            setIsRestoringAuto(false)
         }
     }
 
@@ -841,6 +900,47 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* 3. Automatic Real-Time Auto-Backup Card */}
+                                <div className="backup-card auto-backup-card border border-emerald-500/30 bg-emerald-500/5">
+                                    <div className="backup-card-head">
+                                        <div className="backup-card-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                                            <Sparkles size={24} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h4>الربط والنسخ التلقائي الشامل (Real-Time Auto-Backup)</h4>
+                                                <span className="badge badge-success text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                                    {autoBackupEnabled ? '● نشط وتلقائي' : 'متوقف'}
+                                                </span>
+                                            </div>
+                                            <span className="backup-card-desc">
+                                                نظام المراقبة الحية يربط كل التعديلات والإضافات المستقبلية في جميع صفحات ووحدات النظام تلقائياً (حركات، عهد، عقود، مشتريات، محاضر جرد وفحص، تقارير، مستخدمين) ويولد لقطة تعافي فورية ومزامنة سحابية هادئة.
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="backup-card-meta">
+                                        <Clock size={14} />
+                                        <span>آخر مزامنة ونسخ تلقائي: <strong>{formatBackupTimestamp(lastAutoTime)}</strong></span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between p-3 rounded-lg bg-surface-subtle border border-border/40 text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <CheckCircle2 size={15} className="text-emerald-500" />
+                                            <span>الربط التلقائي لكل عملية إضافة أو تعديل جديدة بالنظام</span>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={autoBackupEnabled}
+                                                onChange={(e) => handleToggleAutoBackup(e.target.checked)}
+                                            />
+                                            <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             /* Restore Tab Content */
@@ -1127,6 +1227,46 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                             />
                                                             إعدادات وشعار المؤسسة
                                                         </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restorePurchaseRequests}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restorePurchaseRequests: e.target.checked })}
+                                                            />
+                                                            طلبات الشراء والبنود ({parsedBackup.metadata.counts.purchaseRequests || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreSupplierQuotes}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreSupplierQuotes: e.target.checked })}
+                                                            />
+                                                            عروض أسعار الموردين ({parsedBackup.metadata.counts.supplierQuotes || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restorePurchaseOrders}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restorePurchaseOrders: e.target.checked })}
+                                                            />
+                                                            أوامر الشراء والتوريد ({parsedBackup.metadata.counts.purchaseOrders || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreRegistrationRequests}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreRegistrationRequests: e.target.checked })}
+                                                            />
+                                                            طلبات تسجيل الموظفين ({parsedBackup.metadata.counts.registrationRequests || 0})
+                                                        </label>
+                                                        <label className="restore-checkbox-label">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!restoreOptions.restoreChatbotDirectives}
+                                                                onChange={(e) => setRestoreOptions({ ...restoreOptions, restoreChatbotDirectives: e.target.checked })}
+                                                            />
+                                                            توجيهات المساعد الذكي للمخازن
+                                                        </label>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1202,6 +1342,49 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                     <>
                                                         <RotateCcw size={16} />
                                                         <span>استعادة ومزامنة من Supabase</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 3. Hot Auto-Recovery Snapshot Restore Card */}
+                                    <div className="backup-card auto-backup-card">
+                                        <div className="backup-card-head">
+                                            <div className="backup-card-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                                                <Sparkles size={24} />
+                                            </div>
+                                            <div>
+                                                <h4>استعادة من لقطة التعافي التلقائية (Hot Auto-Recovery)</h4>
+                                                <span className="backup-card-desc">
+                                                    استرجاع فوري لآخر لقطة تم حفظها تلقائياً عند آخر تعديل أو إضافة تم تسجيلها في أي صفحة من صفحات النظام.
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="backup-card-meta">
+                                            <Clock size={14} />
+                                            <span>آخر لقطة تلقائية: <strong>{formatBackupTimestamp(lastAutoTime)}</strong></span>
+                                        </div>
+
+                                        <div className="backup-card-actions">
+                                            <button
+                                                type="button"
+                                                className="secondary-btn"
+                                                onClick={handleExecuteAutoRecoveryRestore}
+                                                disabled={isRestoringAuto}
+                                                id="btn-confirm-restore-auto"
+                                                title="استعادة فورية من لقطة التعافي التلقائية"
+                                            >
+                                                {isRestoringAuto ? (
+                                                    <>
+                                                        <RefreshCw size={16} className="spin-animation" />
+                                                        <span>جارٍ استرجاع اللقطة...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <RotateCcw size={16} />
+                                                        <span>استعادة لقطة التعافي التلقائية</span>
                                                     </>
                                                 )}
                                             </button>

@@ -2,7 +2,7 @@ export type WarehouseDefinition = {
   id: string
   name: string
   shortName: string
-  iconKey: 'Warehouse' | 'Stethoscope' | 'Sparkles' | 'FlaskConical' | 'HeartPulse' | 'Microscope' | 'Cpu' | 'Laptop'
+  iconKey: 'Warehouse' | 'Stethoscope' | 'Sparkles' | 'FlaskConical' | 'HeartPulse' | 'Microscope' | 'Cpu' | 'Laptop' | 'Wrench' | 'Building2'
   description: string
   building: string
   isHub?: boolean
@@ -21,11 +21,20 @@ export const WAREHOUSES: WarehouseDefinition[] = [
   },
   {
     id: 'medicine',
-    name: 'مخزن كلية طب بشري',
-    shortName: 'طب بشري',
+    name: 'مخزن كلية طب بشري وتمريض',
+    shortName: 'طب بشري وتمريض',
     iconKey: 'Stethoscope',
-    description: 'عهدة الأجهزة والمجسمات الطبية ومستلزمات المعامل (توريد من المخزن الرئيسي)',
-    building: 'مبنى كلية الطب البشري - جناح المعامل والمشرحة',
+    description: 'عهدة الأجهزة والمجسمات الطبية ومحاكيات التمريض ومستلزمات المعامل (توريد من المخزن الرئيسي)',
+    building: 'مبنى كليتي الطب البشري والتمريض - مجمع الكليات الطبية',
+    suppliedBy: 'المخزن الرئيسي',
+  },
+  {
+    id: 'medicine_a',
+    name: 'مخزن مبنى بشري أ',
+    shortName: 'بشري أ',
+    iconKey: 'Building2',
+    description: 'عهدة مبنى بشري أ (توريد من المخزن الرئيسي)',
+    building: 'مبنى بشري أ',
     suppliedBy: 'المخزن الرئيسي',
   },
   {
@@ -47,15 +56,6 @@ export const WAREHOUSES: WarehouseDefinition[] = [
     suppliedBy: 'المخزن الرئيسي',
   },
   {
-    id: 'nursing',
-    name: 'كلية تمريض',
-    shortName: 'تمريض',
-    iconKey: 'HeartPulse',
-    description: 'عرائس ومحاكيات التمريض وأجهزة المراقبة السريرية (توريد من المخزن الرئيسي)',
-    building: 'مبنى كلية التمريض - معامل المهارات التمريضية',
-    suppliedBy: 'المخزن الرئيسي',
-  },
-  {
     id: 'central_lab',
     name: 'معمل مركزي',
     shortName: 'المعمل المركزي',
@@ -71,6 +71,15 @@ export const WAREHOUSES: WarehouseDefinition[] = [
     iconKey: 'Cpu',
     description: 'أجهزة ورش الميكانيكا ومعامل القوى الكهربية والمحطات المساحية (توريد من المخزن الرئيسي)',
     building: 'مجمع ورش ومعامل الهندسة - مبنى ج',
+    suppliedBy: 'المخزن الرئيسي',
+  },
+  {
+    id: 'engineering_workshops',
+    name: 'مخزن الورش الهندسية',
+    shortName: 'الورش الهندسية',
+    iconKey: 'Wrench',
+    description: 'عهدة معدات وآلات ورش النجارة والحدادة والتشغيل والسيارات (توريد من المخزن الرئيسي)',
+    building: 'مجمع الورش المركزية والهندسية',
     suppliedBy: 'المخزن الرئيسي',
   },
   {
@@ -92,6 +101,15 @@ export type CustodyCategory =
   | 'أجهزة معملية وتجارب'
   | 'أثاث وتجهيزات'
   | 'أدوات ومستلزمات تشغيل'
+  | 'أدوات وأجهزة قياس'
+  | 'ماكينات ومعدات ورش'
+  | 'عدد وأدوات يدوية'
+  | 'ثقب وتفريز وقلاووظ'
+  | 'سباكة وقوالب ومعادن'
+  | 'معدات ولوازم لحام'
+  | 'نجارة وأخشاب'
+  | 'أفران ومكابس'
+  | 'مهمات وسلامة مهنية'
   | 'أخرى'
 
 export type CustodyType = 'مستديمة' | 'مستهلكة' | 'شخصية'
@@ -113,9 +131,13 @@ export type CustodyItem = {
   unitPrice?: number // سعر القطعة الواحدة أو الوحدة التقديري
   serialNumber?: string
   notes?: string
+  importBatchId?: string
 }
 
 export const CUSTODY_STORAGE_KEY = 'warehouse-ledger-custody-items'
+
+import { MEDICINE_NURSING_88_ITEMS } from './medicineCustody88'
+import { ENGINEERING_WORKSHOPS_81_ITEMS } from './engineeringWorkshopsCustody81'
 
 export const fixtureCustodyItems: CustodyItem[] = [
   {
@@ -693,10 +715,137 @@ export const fixtureCustodyItems: CustodyItem[] = [
     value: 2800,
     serialNumber: '',
     notes: 'توريد من: الهيئة العربية للتصنيع'
-  }
+  },
+  ...MEDICINE_NURSING_88_ITEMS,
+  ...ENGINEERING_WORKSHOPS_81_ITEMS,
 ]
 
+export const MIGRATION_NURSING_TO_MEDICINE_KEY = 'warehouse-ledger-migration-nursing-to-medicine-v3'
+
+/**
+ * Safe deduplication helper: Only removes exact duplicate records sharing the identical item ID.
+ * Distinct physical equipment items (even if they share similar names, categories, or permit codes)
+ * are NEVER removed or pruned to prevent data loss.
+ */
+export function deduplicateMedicineItems(items: CustodyItem[]): {
+  items: CustodyItem[]
+  removedIds: string[]
+} {
+  const seenIds = new Set<string>()
+  const cleanItems: CustodyItem[] = []
+  const removedIds: string[] = []
+
+  for (const item of items) {
+    const key = item.id ? String(item.id).trim() : null
+    if (key && seenIds.has(key)) {
+      removedIds.push(key)
+      continue
+    }
+    if (key) {
+      seenIds.add(key)
+    }
+    cleanItems.push(item)
+  }
+
+  return {
+    items: cleanItems,
+    removedIds,
+  }
+}
+
+export function migrateClientCustodyData(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    const migrated = localStorage.getItem(MIGRATION_NURSING_TO_MEDICINE_KEY)
+    if (migrated === 'done') return
+
+    const raw = localStorage.getItem(CUSTODY_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        let changed = false
+        const items = parsed as CustodyItem[]
+        const existingMedCodes = new Set(
+          items
+            .filter((i) => i.warehouseId === 'medicine' && i.code)
+            .map((i) => String(i.code).trim().toUpperCase())
+        )
+
+        const updatedItems = items.map((item) => {
+          if (item && item.warehouseId === 'nursing') {
+            changed = true
+            let code = item.code
+            let notes = item.notes || ''
+            if (code && existingMedCodes.has(String(code).trim().toUpperCase())) {
+              const oldCode = code
+              code = `${code}-NUR`
+              notes = notes ? `${notes} (كود سابق قبل الدمج: ${oldCode})` : `(كود سابق قبل الدمج: ${oldCode})`
+            }
+            let custodian = item.custodian
+            if (custodian && custodian.includes('تمريض')) {
+              custodian = 'أمين عهدة طب بشري وتمريض'
+            }
+            return {
+              ...item,
+              warehouseId: 'medicine',
+              code,
+              custodian: custodian || 'أمين عهدة طب بشري وتمريض',
+              roomLocation: item.roomLocation || 'مبنى كليتي الطب البشري والتمريض - مجمع الكليات الطبية',
+              notes,
+            }
+          }
+          return item
+        })
+
+        // Retain all items without destructive deduplication
+        const finalItems = updatedItems
+
+        if (changed) {
+          localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(finalItems))
+          void saveCustodyItemsToCloud(finalItems).catch((err) => {
+            console.warn('[custody migration] cloud sync warning:', err)
+          })
+        }
+      }
+    }
+
+    // Also migrate local movements
+    const rawMovements = localStorage.getItem('warehouse_movements')
+    if (rawMovements) {
+      try {
+        const mvs = JSON.parse(rawMovements)
+        if (Array.isArray(mvs)) {
+          let mvChanged = false
+          const updatedMvs = mvs.map((m: Record<string, unknown>) => {
+            const mCopy = { ...m }
+            if (mCopy.source_warehouse_id === 'nursing') {
+              mCopy.source_warehouse_id = 'medicine'
+              mvChanged = true
+            }
+            if (mCopy.dest_warehouse_id === 'nursing') {
+              mCopy.dest_warehouse_id = 'medicine'
+              mvChanged = true
+            }
+            return mCopy
+          })
+          if (mvChanged) {
+            localStorage.setItem('warehouse_movements', JSON.stringify(updatedMvs))
+          }
+        }
+      } catch (e) {
+        console.warn('[custody migration] movements sync warning:', e)
+      }
+    }
+
+    localStorage.setItem(MIGRATION_NURSING_TO_MEDICINE_KEY, 'done')
+  } catch (err) {
+    console.error('[custody migration] failed:', err)
+  }
+}
+
 export function loadCustodyItems(): CustodyItem[] {
+  // Always perform client migration first to ensure nursing items are safely mapped before warehouseId filtering
+  migrateClientCustodyData()
   try {
     const raw = localStorage.getItem(CUSTODY_STORAGE_KEY)
     if (raw) {
@@ -723,9 +872,12 @@ export function loadCustodyItems(): CustodyItem[] {
               !item.code?.startsWith('COM-')
           )
           .map((item) => {
-            const qty = Number(item.quantity) || 1
-            const val = Number(item.value) || 0
-            const up = item.unitPrice != null ? Number(item.unitPrice) : null
+            const parsedQty = Number(item.quantity)
+            const qty = !isNaN(parsedQty) ? Math.max(0, parsedQty) : 0
+            const parsedVal = Number(item.value)
+            const val = !isNaN(parsedVal) ? Math.max(0, parsedVal) : 0
+            const parsedUp = item.unitPrice != null ? Number(item.unitPrice) : null
+            const up = parsedUp != null && !isNaN(parsedUp) ? Math.max(0, parsedUp) : null
 
             // Auto-repair legacy items where the user entered the unit price into the value field
             if (up == null && qty > 1 && !item.id.startsWith('c-in-') && val > 0) {
@@ -757,6 +909,32 @@ export function loadCustodyItems(): CustodyItem[] {
             return item
           })
 
+        // Ensure unique item records by ID without discarding distinct physical assets
+        const uniqueItems = Array.from(
+          new Map(items.map((item) => [item.id || `${item.warehouseId}-${item.code}-${item.name}`, item])).values()
+        )
+        if (uniqueItems.length !== items.length) {
+          needsResave = true
+          items = uniqueItems
+        }
+
+        // Auto-heal medicine items: if medicine records were truncated to < 88 items,
+        // immediately restore the full verified 88 items from the official inventory dataset
+        const medCount = items.filter((i) => i.warehouseId === 'medicine').length
+        if (medCount < 88) {
+          const nonMed = items.filter((i) => i.warehouseId !== 'medicine' && i.warehouseId !== 'nursing')
+          items = [...nonMed, ...MEDICINE_NURSING_88_ITEMS]
+          needsResave = true
+        }
+
+        // Auto-heal engineering workshops items: ensure all 81 official workshop items are loaded
+        const wsCount = items.filter((i) => i.warehouseId === 'engineering_workshops').length
+        if (wsCount < 81) {
+          const nonWs = items.filter((i) => i.warehouseId !== 'engineering_workshops')
+          items = [...nonWs, ...ENGINEERING_WORKSHOPS_81_ITEMS]
+          needsResave = true
+        }
+
         if (needsResave) {
           saveCustodyItems(items)
         }
@@ -785,30 +963,103 @@ import { supabase } from './supabase'
 export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
   if (!supabase) return []
   try {
-    const { data, error } = await supabase.from('custody_items').select('*').order('created_at', { ascending: true })
-    if (error || !data) return []
-    return data.map((row) => ({
-      id: row.id,
-      warehouseId: row.warehouse_id,
-      code: row.code,
-      name: row.name,
-      category: (row.category || guessCategory(row.name)) as CustodyCategory,
-      quantity: Number(row.quantity) || 1,
-      unit: row.unit || 'قطعة',
-      unitPrice: row.unit_price ? Number(row.unit_price) : undefined,
-      value: Number(row.value) || 0,
-      condition: (row.condition || 'good') as CustodyCondition,
-      custodian: row.custodian || '',
-      roomLocation: row.room_location || '',
-      serialNumber: row.serial_number || '',
-      notes: row.notes || '',
-      custodyType: (row.custody_type || 'مستديمة') as CustodyType,
-      acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
-    }))
+    const PAGE_SIZE = 1000
+    let allRows: any[] = []
+    let from = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('custody_items')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) {
+        console.error('Error fetching custody items from Supabase:', error)
+        throw error
+      }
+
+      if (!data || data.length === 0) {
+        hasMore = false
+      } else {
+        allRows = allRows.concat(data)
+        if (data.length < PAGE_SIZE) {
+          hasMore = false
+        } else {
+          from += PAGE_SIZE
+        }
+      }
+    }
+
+    const mappedItems: CustodyItem[] = allRows.map((row): CustodyItem => {
+      const parsedQty = Number(row.quantity)
+      const qty = !isNaN(parsedQty) ? Math.max(0, parsedQty) : 0
+      const parsedVal = Number(row.value)
+      const val = !isNaN(parsedVal) ? Math.max(0, parsedVal) : 0
+      const parsedUp = row.unit_price != null ? Number(row.unit_price) : undefined
+      const unitPrice = parsedUp != null && !isNaN(parsedUp) ? Math.max(0, parsedUp) : undefined
+
+      return {
+        id: row.id,
+        warehouseId: row.warehouse_id,
+        code: row.code || '',
+        name: row.name,
+        category: (row.category || guessCategory(row.name)) as CustodyCategory,
+        quantity: qty,
+        unit: row.unit || 'قطعة',
+        unitPrice,
+        value: val,
+        condition: (row.condition || 'good') as CustodyCondition,
+        custodian: row.custodian || '',
+        roomLocation: row.room_location || '',
+        serialNumber: row.serial_number || '',
+        notes: row.notes || '',
+        custodyType: (row.custody_type || 'مستديمة') as CustodyType,
+        acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      }
+    })
+
+    let resultItems: CustodyItem[] = mappedItems
+
+    const medCount = resultItems.filter((i) => i.warehouseId === 'medicine').length
+    if (medCount < 88) {
+      const nonMed = resultItems.filter((i) => i.warehouseId !== 'medicine' && i.warehouseId !== 'nursing')
+      resultItems = [...nonMed, ...MEDICINE_NURSING_88_ITEMS]
+      saveCustodyItems(resultItems)
+      void saveCustodyItemsToCloud(MEDICINE_NURSING_88_ITEMS).catch((err) => {
+        console.warn('Syncing restored medicine items to cloud:', err)
+      })
+    }
+
+    const wsCount = resultItems.filter((i) => i.warehouseId === 'engineering_workshops').length
+    if (wsCount < 81) {
+      const nonWs = resultItems.filter((i) => i.warehouseId !== 'engineering_workshops')
+      resultItems = [...nonWs, ...ENGINEERING_WORKSHOPS_81_ITEMS]
+      saveCustodyItems(resultItems)
+      void saveCustodyItemsToCloud(ENGINEERING_WORKSHOPS_81_ITEMS).catch((err) => {
+        console.warn('Syncing restored workshop items to cloud:', err)
+      })
+    }
+
+    return resultItems
   } catch (err) {
-    console.warn('Could not fetch custody items from cloud:', err)
+    console.error('Could not fetch custody items from cloud:', err)
     return []
   }
+}
+
+/**
+ * Single source of truth: returns both items and computed warehouse summary
+ * from the exact same dataset to guarantee printed reports and summary cards never diverge.
+ */
+export function getWarehouseCustodySnapshot(items: CustodyItem[], warehouseId: string): {
+  warehouseItems: CustodyItem[]
+  stats: ReturnType<typeof getWarehouseStats>
+} {
+  const warehouseItems = items.filter((i) => i.warehouseId === warehouseId)
+  const stats = getWarehouseStats(warehouseItems)
+  return { warehouseItems, stats }
 }
 
 export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<void> {
@@ -1213,7 +1464,10 @@ export function findWarehouseByRecipient(toText?: string): WarehouseDefinition |
   const clean = toText.trim().toLowerCase()
   if (!clean) return undefined
 
-  // 1. Direct ID match
+  // 1. Direct ID match & legacy aliases
+  if (clean === 'nursing') {
+    return WAREHOUSES.find((w) => w.id === 'medicine')
+  }
   const byId = WAREHOUSES.find((w) => w.id.toLowerCase() === clean)
   if (byId) return byId
 
@@ -1230,33 +1484,85 @@ export function findWarehouseByRecipient(toText?: string): WarehouseDefinition |
       .replace(/[أإآ]/g, 'ا')
       .replace(/ة/g, 'ه')
       .replace(/ى/g, 'ي')
+      .replace(/[\u064B-\u065F]/g, '')
+      .replace(/[-_./\\]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
 
   const cleanNorm = norm(clean)
 
-  if (cleanNorm.includes('بشري') || cleanNorm.includes('طب بشري') || cleanNorm.includes('medicine')) {
+  // 4. Specific warehouse matches BEFORE generic ones!
+
+  // A. Building A ("مبنى بشري أ"):
+  // Aliases: "بشري أ", "بشرى أ", "مبنى بشري أ", "مبنى بشرى أ", "طب بشري أ", "medicine_a", "بشري ا", "مبني بشري ا"
+  // MUST NOT match bare "بشري" or "طب بشري"!
+  const isBuildingA =
+    cleanNorm === 'medicine a' ||
+    cleanNorm === 'medicine_a' ||
+    cleanNorm === 'بشري ا' ||
+    cleanNorm === 'بشري أ' ||
+    cleanNorm.includes('بشري ا') ||
+    cleanNorm.includes('بشري أ') ||
+    cleanNorm.includes('medicine a') ||
+    cleanNorm.includes('medicine_a')
+
+  if (isBuildingA) {
+    return WAREHOUSES.find((w) => w.id === 'medicine_a')
+  }
+
+  // B. Engineering Workshops ("مخزن الورش الهندسية"):
+  // Aliases: "ورش", "الورش الهندسية", "ورش هندسية", "engineering_workshops", "الورش"
+  // MUST match before generic "هندس" / "engineering"!
+  const isWorkshops =
+    cleanNorm === 'engineering workshops' ||
+    cleanNorm === 'engineering_workshops' ||
+    cleanNorm.includes('ورش') ||
+    cleanNorm.includes('workshops') ||
+    cleanNorm.includes('workshop')
+
+  if (isWorkshops) {
+    return WAREHOUSES.find((w) => w.id === 'engineering_workshops')
+  }
+
+  // C. Merged Medicine & Nursing ("مخزن كلية طب بشري وتمريض"):
+  // Aliases: "تمريض", "كلية تمريض", "طب بشري", "طب بشري وتمريض", "nursing", "medicine", "بشري وتمريض", "كلية التمريض", "كلية الطب البشري", and bare "بشري"
+  const isMedicineMerged =
+    cleanNorm.includes('تمريض') ||
+    cleanNorm.includes('nursing') ||
+    cleanNorm.includes('بشري') ||
+    cleanNorm.includes('medicine')
+
+  if (isMedicineMerged) {
     return WAREHOUSES.find((w) => w.id === 'medicine')
   }
-  if (cleanNorm.includes('اسنان') || cleanNorm.includes('طب اسنان') || cleanNorm.includes('dentistry')) {
-    return WAREHOUSES.find((w) => w.id === 'dentistry')
-  }
-  if (cleanNorm.includes('صيدل') || cleanNorm.includes('pharmacy')) {
-    return WAREHOUSES.find((w) => w.id === 'pharmacy')
-  }
-  if (cleanNorm.includes('تمريض') || cleanNorm.includes('nursing')) {
-    return WAREHOUSES.find((w) => w.id === 'nursing')
-  }
-  if (cleanNorm.includes('مركزي') || cleanNorm.includes('معمل مركزي') || cleanNorm.includes('central_lab')) {
-    return WAREHOUSES.find((w) => w.id === 'central_lab')
-  }
+
+  // D. Engineering ("كلية هندسة"):
   if (cleanNorm.includes('هندس') || cleanNorm.includes('engineering')) {
     return WAREHOUSES.find((w) => w.id === 'engineering')
   }
-  if (cleanNorm.includes('حاسب') || cleanNorm.includes('معلومات') || cleanNorm.includes('fci')) {
+
+  // E. Dentistry ("كلية طب أسنان"):
+  if (cleanNorm.includes('اسنان') || cleanNorm.includes('dentistry') || cleanNorm.includes('طب اسنان')) {
+    return WAREHOUSES.find((w) => w.id === 'dentistry')
+  }
+
+  // F. Pharmacy ("كلية صيدلة"):
+  if (cleanNorm.includes('صيدل') || cleanNorm.includes('pharmacy')) {
+    return WAREHOUSES.find((w) => w.id === 'pharmacy')
+  }
+
+  // G. Central Lab ("معمل مركزي"):
+  if (cleanNorm.includes('معمل') || cleanNorm.includes('مركزي') || cleanNorm.includes('central_lab')) {
+    return WAREHOUSES.find((w) => w.id === 'central_lab')
+  }
+
+  // H. FCI ("كلية حاسبات و معلومات"):
+  if (cleanNorm.includes('حاسب') || cleanNorm.includes('معلومات') || cleanNorm.includes('ذكاء') || cleanNorm.includes('fci')) {
     return WAREHOUSES.find((w) => w.id === 'fci')
   }
-  if (cleanNorm.includes('رئيسي') || cleanNorm.includes('الرئيسي') || cleanNorm.includes('main')) {
+
+  // I. Main ("مخزن رئيسي"):
+  if (cleanNorm.includes('رئيسي') || cleanNorm.includes('main')) {
     return WAREHOUSES.find((w) => w.id === 'main')
   }
 

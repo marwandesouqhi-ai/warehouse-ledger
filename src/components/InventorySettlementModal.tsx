@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
@@ -158,9 +158,20 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
     }
   }, [calculatedRows, warehouseItems.length])
 
+  useEffect(() => {
+    function handleAfterPrint() {
+      document.body.classList.remove('printing-inventory-settlement')
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => window.removeEventListener('afterprint', handleAfterPrint)
+  }, [])
+
   // Print function
   function handlePrintSettlement() {
-    window.print()
+    document.body.classList.add('printing-inventory-settlement')
+    setTimeout(() => {
+      window.print()
+    }, 50)
   }
 
   // Excel export
@@ -251,6 +262,14 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
         localStorage.setItem(storageKey, JSON.stringify(existing.slice(0, 50)))
       }
 
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('inventory-settlements-changed'))
+        }
+      } catch {
+        // ignore
+      }
+
       // تسجيل العملية في سجل العمليات والتدقيق بالداتابيز
       void logAuditEvent({
         action: `توثيق محضر تسوية جردية للمخزن (${settlementData.warehouseName})`,
@@ -279,6 +298,8 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
     month: 'long',
     day: 'numeric',
   }).format(new Date())
+
+  const logoUrl = settings.logoDataUrl || settings.logoUrl
 
   return (
     <motion.div
@@ -377,7 +398,9 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
 
         {/* Modal Scrollable Body */}
         <div className="modal-body-scroll p-4" style={{ overflowY: 'auto', maxHeight: 'calc(88vh - 120px)' }}>
-          {/* Warehouse Selector Strip */}
+          {/* Interactive Screen Editor Form (Hidden in Print) */}
+          <div className="settlement-editor-screen no-print">
+            {/* Warehouse Selector Strip */}
           <div className="card-surface p-3 mb-4 flex items-center justify-between flex-wrap gap-3" style={{ background: 'var(--surface-sunken, #f8fafc)', border: '1px solid var(--line, #e2e8f0)', borderRadius: '12px' }}>
             <span className="font-xs font-semibold text-muted">
               إجمالي الأصناف بالمخزن: <strong>{warehouseItems.length}</strong> صنف
@@ -610,6 +633,173 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
 
           <div className="text-muted font-xs">
             تاريخ التحرير: {todayArabic} • محضر رسمي معتمد لخاتم الجامعة
+          </div>
+        </div>
+        </div>
+
+        {/* Unified Printable Inventory Settlement Document Sheet */}
+        <div
+          id="printable-inventory-settlement"
+          className="official-modal-print-document bg-white text-slate-900"
+          style={{ color: '#0f172a' }}
+        >
+          {logoUrl && (
+            <div className="print-watermark" aria-hidden="true">
+              <img src={logoUrl} alt="" />
+            </div>
+          )}
+
+          <header className="print-letterhead">
+            <div className="print-header-col print-header-right">
+              <div className="print-gov-heading">جمهورية مصر العربية</div>
+              <div className="print-org-name">{settings.organization || 'جامعة الزقازيق الأهلية'}</div>
+              <div className="print-dept-name">{settings.department || 'إدارة المخازن والمشتريات'}</div>
+              <div className="print-subdept-name">لجنة الجرد والمطابقة وحصر الفروقات المخزنية</div>
+            </div>
+
+            <div className="print-header-col print-header-center">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo"
+                  className="print-official-logo"
+                  style={{ maxHeight: '60px', maxWidth: '110px', objectFit: 'contain' }}
+                />
+              ) : (
+                <div className="print-logo-emblem">شعار المؤسسة</div>
+              )}
+              <div className="print-stamp-title">محضر تسوية جردية معتمد</div>
+            </div>
+
+            <div className="print-header-col print-header-left">
+              <div><strong>المستودع:</strong> {currentWarehouse.name}</div>
+              <div><strong>الموقع:</strong> {currentWarehouse.building}</div>
+              <div><strong>تاريخ التحرير:</strong> {todayArabic}</div>
+              <div><strong>رقم المحضر:</strong> STL-{currentWarehouse.id.toUpperCase()}-{new Date().getFullYear()}</div>
+            </div>
+          </header>
+
+          <div className="print-title-banner">
+            <h1 className="print-doc-title">محضر تسوية وجرد الفروقات المخزنية وحصر العجز والزيادة</h1>
+            <div className="print-doc-subtitle">
+              إثبات نتائج المطابقة الفعلية بين الأرصدة الدفترية والمجودة على الطبيعة طبقاً للائحة المخازن
+            </div>
+          </div>
+
+          <div className="print-summary-strip">
+            <div className="print-summary-cell">
+              <span className="print-summary-label">إجمالي بنود الجرد:</span>
+              <strong className="print-summary-val">{summary.totalItems} صنف</strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">الأصناف المطابقة:</span>
+              <strong className="print-summary-val success">{summary.matchedCount} صنف</strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">أصناف العجز:</span>
+              <strong className="print-summary-val" style={{ color: '#b91c1c' }}>
+                {summary.deficitCount} صنف ({formatMoney(summary.totalDeficitVal, currency)})
+              </strong>
+            </div>
+            <div className="print-summary-cell">
+              <span className="print-summary-label">أصناف الزيادة:</span>
+              <strong className="print-summary-val" style={{ color: '#1d4ed8' }}>
+                {summary.surplusCount} صنف ({formatMoney(summary.totalSurplusVal, currency)})
+              </strong>
+            </div>
+          </div>
+
+          <table className="print-official-table" style={{ width: '100%', color: '#0f172a' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '35px', textAlign: 'center' }}>م</th>
+                <th style={{ width: '80px', textAlign: 'center' }}>كود الأصل</th>
+                <th>اسم الصنف والمواصفات</th>
+                <th style={{ width: '130px' }}>أمين العهدة / المكان</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>الدفتري</th>
+                <th style={{ width: '65px', textAlign: 'center' }}>الفعلي</th>
+                <th style={{ width: '85px', textAlign: 'center' }}>الفارق الجردي</th>
+                <th style={{ width: '90px', textAlign: 'center' }}>قيمة الفارق</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calculatedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="print-empty-row" style={{ padding: '12px', textAlign: 'center', color: '#64748b' }}>
+                    لا توجد أصناف مقيدة في هذا المستودع.
+                  </td>
+                </tr>
+              ) : (
+                calculatedRows.map((r, idx) => (
+                  <tr key={r.item.id}>
+                    <td style={{ textAlign: 'center', color: '#0f172a' }}>{idx + 1}</td>
+                    <td className="print-code-cell" style={{ textAlign: 'center', color: '#0f172a', fontFamily: 'monospace', fontWeight: 700 }}>
+                      {r.item.code || '—'}
+                    </td>
+                    <td style={{ textAlign: 'start', color: '#0f172a' }}>
+                      <div className="print-item-name" style={{ fontWeight: 700, color: '#0f172a' }}>{r.item.name || '—'}</div>
+                      {r.item.serialNumber && (
+                        <div className="print-item-serial" style={{ fontSize: '7pt', color: '#475569', marginTop: '1px' }}>S/N: {r.item.serialNumber}</div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'start', color: '#0f172a' }}>
+                      <div className="print-custodian-name" style={{ fontWeight: 700, color: '#0f172a' }}>{r.item.custodian || 'أمين المستودع'}</div>
+                      <div className="print-location-sub" style={{ fontSize: '7pt', color: '#64748b', marginTop: '1px' }}>{r.item.roomLocation || currentWarehouse.building}</div>
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>
+                      {r.item.quantity ?? 0} {r.item.unit || 'قطعة'}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>
+                      {r.actualQty ?? 0} {r.item.unit || 'قطعة'}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>
+                      {r.diffQty === 0
+                        ? 'مطابق (0)'
+                        : r.diffQty < 0
+                        ? `عجز (${r.diffQty})`
+                        : `زيادة (+${r.diffQty})`}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#0f172a', fontFamily: 'monospace', fontWeight: 700 }}>
+                      {r.diffQty === 0 ? '—' : formatMoney(Math.abs(r.diffValue), currency)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          {/* Unified Signatures Block (Anchored at end of last page) */}
+          <div className="print-signatures-section">
+            <div className="print-signatures-notice">
+              * يُقر الموقعون أدناه بصحة البيانات والمطابقة الفعلية لجرد العهدة والأصول على الطبيعة وحصر الفروقات وفقاً للوائح والقوانين المخزنية.
+            </div>
+            <div className="print-signatures-grid">
+              <div className="print-signature-box">
+                <strong className="print-sig-role">رئيس لجنة الجرد والمطابقة</strong>
+                <div className="print-sig-field">الاسم: {committeeHead || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box">
+                <strong className="print-sig-role">عضو لجنة الجرد والمراقب المالي</strong>
+                <div className="print-sig-field">الاسم: {financialAuditor || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box">
+                <strong className="print-sig-role">أمين المستودع المختص</strong>
+                <div className="print-sig-field">الاسم: {custodianName || '....................'}</div>
+                <div className="print-sig-field">التوقيع: ..................</div>
+              </div>
+
+              <div className="print-signature-box print-seal-box">
+                <strong className="print-sig-role">يعتمد: رئيس الجهة</strong>
+                <div className="print-sig-field">الاعتماد: ..................</div>
+                <div className="print-seal-area">
+                  <span className="print-seal-hint">(خاتم شعار المؤسسة)</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>

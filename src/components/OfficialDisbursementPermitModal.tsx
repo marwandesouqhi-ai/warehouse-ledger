@@ -4,7 +4,6 @@ import {
   X,
   Printer,
   FileCheck2,
-  Warehouse,
   Search,
   Plus,
   Minus,
@@ -44,11 +43,13 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
     return 'main'
   })
   const [targetWarehouseId, setTargetWarehouseId] = useState<string>(() => {
-    if (defaultWarehouseId && defaultWarehouseId !== 'main') {
-      return defaultWarehouseId
+    const rawDefault = defaultWarehouseId === 'nursing' ? 'medicine' : defaultWarehouseId
+    if (rawDefault && rawDefault !== 'main') {
+      return rawDefault
     }
-    if (initialItems[0]?.warehouseId && initialItems[0].warehouseId !== 'main') {
-      return initialItems[0].warehouseId
+    const initialRaw = initialItems[0]?.warehouseId === 'nursing' ? 'medicine' : initialItems[0]?.warehouseId
+    if (initialRaw && initialRaw !== 'main') {
+      return initialRaw
     }
     return 'fci'
   })
@@ -107,8 +108,16 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
   }, [allWarehouseItems, sourceWarehouseId, itemSearchTerm])
 
   const itemsToPrint = useMemo(() => {
-    return allWarehouseItems.filter((i) => selectedItemIds.has(i.id))
-  }, [allWarehouseItems, selectedItemIds])
+    const pool = [...allWarehouseItems]
+    if (initialItems && initialItems.length > 0) {
+      for (const init of initialItems) {
+        if (!pool.some((p) => p.id === init.id)) {
+          pool.push(init)
+        }
+      }
+    }
+    return pool.filter((i) => selectedItemIds.has(i.id))
+  }, [allWarehouseItems, initialItems, selectedItemIds])
 
   const totalDisbursedPieces = useMemo(() => {
     return itemsToPrint.reduce((sum, it) => sum + (itemQuantities[it.id] ?? it.quantity), 0)
@@ -116,7 +125,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
 
   function handlePrintPermit() {
     document.body.classList.add('printing-official-permit')
-    window.print()
+    setTimeout(() => {
+      window.print()
+    }, 50)
   }
 
   function toggleItem(item: CustodyItem) {
@@ -499,7 +510,8 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
               {/* ═══════════════════════════════════════════════════════════ */}
               <div
                 id="printable-official-permit"
-                className="printable-official-permit"
+                className="printable-official-permit bg-white text-slate-900"
+                style={{ color: '#0f172a' }}
               >
                 {/* Security Watermark (Logo centered behind text) */}
                 {logoUrl && (
@@ -508,45 +520,49 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                   </div>
                 )}
 
-                {/* Header */}
-                <div className="permit-doc-header">
-                  <div className="text-right">
-                    <div className="text-md font-bold">جمهورية مصر العربية</div>
-                    <div className="font-sm font-bold">{settings.organization || 'المؤسسة التعليمية'}</div>
-                    <div className="font-sm">{settings.department || 'إدارة المخازن المركزية'}</div>
-                    <div className="font-xs">قسم مراقبة وحسابات العهد الحكومية</div>
+                {/* Unified Letterhead */}
+                <header className="print-letterhead">
+                  <div className="print-header-col print-header-right">
+                    <div className="print-gov-heading">جمهورية مصر العربية</div>
+                    <div className="print-org-name">{settings.organization || 'جامعة الزقازيق الأهلية'}</div>
+                    <div className="print-dept-name">{settings.department || 'إدارة المخازن والمشتريات'}</div>
+                    <div className="print-subdept-name">قسم مراقبة وحسابات العهد الحكومية</div>
                   </div>
 
-                  <div className="text-center">
+                  <div className="print-header-col print-header-center">
                     {logoUrl ? (
-                      <img src={logoUrl} alt="Logo" className="permit-logo-img" />
+                      <img
+                        src={logoUrl}
+                        alt="Logo"
+                        className="print-official-logo"
+                        style={{ maxHeight: '60px', maxWidth: '110px', objectFit: 'contain' }}
+                      />
                     ) : (
-                      <div className="permit-logo-placeholder">
-                        <Warehouse size={28} className="mx-auto block" />
-                        <div>شعار المؤسسة</div>
-                      </div>
+                      <div className="print-logo-emblem">شعار المؤسسة</div>
                     )}
+                    <div className="print-stamp-title">إذن رسمي معتمد</div>
                   </div>
 
-                  <div className="text-left font-sm">
+                  <div className="print-header-col print-header-left">
                     <div><strong>رقم الإذن:</strong> {permitNumber}</div>
                     <div><strong>التاريخ:</strong> {permitDate}</div>
-                    <div><strong>السنة المالية:</strong> 2026/2027</div>
+                    <div><strong>المخزن المسلّم:</strong> {sourceWh.name}</div>
+                    <div><strong>المخزن المستلم:</strong> {targetWh.name}</div>
                   </div>
-                </div>
+                </header>
 
-                {/* Title */}
-                <div className="permit-doc-title-block">
-                  <h2 className="m-0 text-xl font-bold underline">
+                {/* Unified Title Banner */}
+                <div className="print-title-banner">
+                  <h1 className="print-doc-title">
                     {permitType === 'disburse' ? 'إذن صرف ونقل عهدة ومهمات مخزنية' : 'محضر فحص واستلام عهدة مستديمة'}
-                  </h2>
-                  <div className="font-sm mt-1">
+                  </h1>
+                  <div className="print-doc-subtitle">
                     طبقاً للائحة المخازن والمشتريات الحكومية وقواعد حصر وتدقيق الأصول المستديمة
                   </div>
                 </div>
 
                 {/* Meta Strip */}
-                <div className="permit-meta-grid">
+                <div className="permit-meta-grid mb-4">
                   <div><strong>المخزن المنصرف منه (المسلّم):</strong> {sourceWh.name}</div>
                   <div><strong>الجهة المستلمة:</strong> {targetWh.name}</div>
                   <div><strong>اسم أمين العهدة المستلم:</strong> {recipientName || 'أمين عهدة الجهة'}</div>
@@ -555,41 +571,47 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 </div>
 
                 {/* Items Table */}
-                <table className="permit-table">
+                <table className="print-official-table permit-table">
                   <thead>
                     <tr className="permit-table-header-row">
-                      <th className="w-10 text-center">م</th>
-                      <th className="w-24">كود العهدة</th>
+                      <th style={{ width: '38px', textAlign: 'center' }}>م</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>كود العهدة</th>
                       <th>اسم الصنف ومواصفاته الفنية</th>
-                      <th className="w-16 text-center">الكمية</th>
-                      <th className="w-16 text-center">الوحدة</th>
-                      <th className="w-20 text-center">الحالة</th>
-                      <th className="w-32">ملاحظات / السيريال</th>
+                      <th style={{ width: '65px', textAlign: 'center' }}>الكمية</th>
+                      <th style={{ width: '65px', textAlign: 'center' }}>الوحدة</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>الحالة</th>
+                      <th style={{ width: '140px' }}>ملاحظات / السيريال</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itemsToPrint.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-4 text-center text-muted">
+                        <td colSpan={7} className="p-4 text-center text-muted" style={{ padding: '16px', textAlign: 'center', color: '#64748b' }}>
                           يرجى اختيار صنف واحد على الأقل وتحديد عدد القطع لإدراجه في إذن الصرف.
                         </td>
                       </tr>
                     ) : (
                       itemsToPrint.map((item, idx) => {
-                        const disburseQty = itemQuantities[item.id] ?? item.quantity
+                        const disburseQty = itemQuantities[item.id] !== undefined ? itemQuantities[item.id] : (item.quantity || 1)
+                        const conditionLabel =
+                          item.condition === 'excellent'
+                            ? 'ممتازة'
+                            : item.condition === 'good'
+                            ? 'جيدة'
+                            : item.condition === 'maintenance'
+                            ? 'تحتاج صيانة'
+                            : 'كهنة'
                         return (
                           <tr key={item.id}>
-                            <td className="text-center">{idx + 1}</td>
-                            <td className="font-mono font-semibold">{item.code}</td>
-                            <td className="font-bold">{item.name}</td>
-                            <td className="text-center font-extrabold text-base">
+                            <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                            <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600 }}>{item.code || '—'}</td>
+                            <td style={{ fontWeight: 700 }}>{item.name}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '11pt' }}>
                               {disburseQty}
                             </td>
-                            <td className="text-center">{item.unit}</td>
-                            <td className="text-center">
-                              {item.condition === 'excellent' ? 'ممتازة' : item.condition === 'good' ? 'جيدة' : item.condition === 'maintenance' ? 'تحتاج صيانة' : 'كهنة'}
-                            </td>
-                            <td className="font-xs">
+                            <td style={{ textAlign: 'center' }}>{item.unit || 'قطعة'}</td>
+                            <td style={{ textAlign: 'center' }}>{conditionLabel}</td>
+                            <td style={{ fontSize: '7.5pt' }}>
                               {item.serialNumber ? `S/N: ${item.serialNumber}` : item.notes || '—'}
                             </td>
                           </tr>
@@ -600,13 +622,13 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                   {itemsToPrint.length > 0 && (
                     <tfoot>
                       <tr className="permit-table-footer-row">
-                        <td colSpan={3} className="text-start">
+                        <td colSpan={3} className="text-start" style={{ textAlign: 'start', fontWeight: 700 }}>
                           إجمالي عدد القطع المصرّحة بالإذن:
                         </td>
-                        <td className="text-center font-extrabold text-base">
+                        <td className="text-center font-extrabold text-base" style={{ textAlign: 'center', fontWeight: 800, fontSize: '11pt' }}>
                           {totalDisbursedPieces}
                         </td>
-                        <td colSpan={3}>
+                        <td colSpan={3} style={{ fontWeight: 600 }}>
                           قطعة / وحدة عهدة
                         </td>
                       </tr>
@@ -619,33 +641,37 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                   <strong>إقرار استلام:</strong> أقر أنا الموقع أدناه بأنني عاينت واستلمت كافة الأصناف والمهمات المبينة أعلاه بالعدد والكمية المحددة بحالة فنية سليمة ومطابقة للمواصفات، وقيدت بعهدتي الشخصية والمصلحية تحت مسؤوليتي المباشرة طبقاً للائحة المخازن الرسمية.
                 </div>
 
-                {/* Signatures Strip */}
-                <div className="permit-signatures-grid">
-                  <div>
-                    <strong>أمين العهدة المستلم</strong>
-                    <div className="permit-spacer-42" />
-                    <div>الاسم: ....................</div>
-                    <div>التوقيع: ..................</div>
+                {/* Unified Signatures Block (Image 3: Anchored at end of last page) */}
+                <div className="print-signatures-section">
+                  <div className="print-signatures-notice">
+                    * يُقر الموقعون أدناه بصحة بيانات الصرف والمعاينة الفنية والاستلام الفعلي لكافة الأصناف الموضحة أعلاه وفقاً للوائح والقوانين المخزنية.
                   </div>
+                  <div className="print-signatures-grid">
+                    <div className="print-signature-box">
+                      <strong className="print-sig-role">أمين العهدة المستلم</strong>
+                      <div className="print-sig-field">الاسم: {recipientName || '....................'}</div>
+                      <div className="print-sig-field">التوقيع: ..................</div>
+                    </div>
 
-                  <div>
-                    <strong>أمين المخزن المسلّم</strong>
-                    <div className="permit-spacer-42" />
-                    <div>الاسم: ....................</div>
-                    <div>التوقيع: ..................</div>
-                  </div>
+                    <div className="print-signature-box">
+                      <strong className="print-sig-role">أمين المخزن المسلّم</strong>
+                      <div className="print-sig-field">الاسم: ....................</div>
+                      <div className="print-sig-field">التوقيع: ..................</div>
+                    </div>
 
-                  <div>
-                    <strong>المراجع المخزني</strong>
-                    <div className="permit-spacer-42" />
-                    <div>الاسم: ....................</div>
-                    <div>التوقيع: ..................</div>
-                  </div>
+                    <div className="print-signature-box">
+                      <strong className="print-sig-role">المراجع المخزني</strong>
+                      <div className="print-sig-field">الاسم: ....................</div>
+                      <div className="print-sig-field">التوقيع: ..................</div>
+                    </div>
 
-                  <div className="permit-stamp-box">
-                    <strong>يعتمد، مدير عام المخازن</strong>
-                    <div className="permit-spacer-28" />
-                    <div className="permit-stamp-subtext">(خاتم شعار المؤسسة)</div>
+                    <div className="print-signature-box print-seal-box">
+                      <strong className="print-sig-role">يعتمد: مدير عام المخازن</strong>
+                      <div className="print-sig-field">الاعتماد: ..................</div>
+                      <div className="print-seal-area">
+                        <span className="print-seal-hint">(خاتم شعار المؤسسة)</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -506,7 +506,6 @@ html, body {
   position: relative !important;
   margin: 0 !important;
   padding: 0 !important;
-  -webkit-text-size-adjust: 100% !important;
 }
 
 #root {
@@ -539,5 +538,253 @@ html, body {
     font-size: 16.5px !important;
   }
 }
+
+/* ==========================================================================
+   PRINT ENGINE UNIFICATION & SCROLL CONTAINER SHIELD
+   Ensures unfragmented pagination, visible table cells, and reset of will-change/animations
+   ========================================================================== */
+@media print {
+  /* 0. Absolute Suppression of Screen Chrome, Topbars, Mobile Greetings, and Navigation */
+  header.topbar,
+  .topbar,
+  .mobile-topbar-row,
+  .mobile-native-greeting,
+  .mobile-greeting-date,
+  .mobile-greeting-title,
+  .mobile-greeting-subtitle,
+  .mobile-quick-chips,
+  .quick-chip,
+  .mobile-bottom-dock,
+  .bottom-dock-item,
+  .mobile-sidebar-backdrop,
+  .mobile-brand-pill,
+  .mobile-menu-trigger-btn,
+  .mobile-theme-toggle,
+  .topbar-meta,
+  .toolbar-actions,
+  .toolbar-search,
+  .topbar-user-wrap,
+  .theme-toggle,
+  .sidebar,
+  .app-shell > aside,
+  nav,
+  .no-print,
+  .modal-header,
+  .modal-footer,
+  .modal-close-btn,
+  .permit-left-col,
+  .permit-preview-topbar,
+  .inspection-editor-screen,
+  .settlement-editor-screen,
+  button,
+  .action-btn {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+  }
+
+  /* 1. Global Layout & Root Reset: Remove scroll containment and forced dimensions */
+  html,
+  body,
+  #root,
+  .app-shell,
+  .main-panel,
+  .content-area,
+  .custody-module,
+  .reports-module,
+  .route-content-container {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* 2. Modal Hierarchy Reset: Eliminate composited layers, will-change, transforms, animations */
+  .modal-backdrop,
+  .modal-dialog,
+  .official-permit-dialog,
+  .official-inventory-modal-dialog,
+  .inspection-modal-dialog,
+  .settlement-modal-dialog,
+  .modal-body-scroll,
+  .permit-modal-body-scroll,
+  .permit-right-col-preview {
+    will-change: auto !important;
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    contain: none !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Official Printable Documents: Ensure visibility, proper document flow and page boundaries */
+  #printable-inventory-settlement,
+  #printable-technical-inspection,
+  #printable-official-permit,
+  #printable-official-inventory {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    z-index: auto !important;
+  }
+
+  /* 4. Table Pagination & Header Repetition */
+  .print-official-table,
+  .permit-table {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    width: 100% !important;
+  }
+
+  .print-official-table thead,
+  .permit-table thead {
+    display: table-header-group !important;
+  }
+
+  .print-official-table tbody,
+  .permit-table tbody {
+    display: table-row-group !important;
+  }
+
+  .print-official-table tr,
+  .permit-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-official-table th,
+  .print-official-table th *,
+  .permit-table th,
+  .permit-table th * {
+    background: #0f172a !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .print-official-table td,
+  .print-official-table td *,
+  .print-official-table td div,
+  .print-official-table td span,
+  .print-official-table td strong,
+  .print-official-table td code,
+  .permit-table td,
+  .permit-table td *,
+  .permit-table td div,
+  .permit-table td span,
+  .permit-table td strong,
+  .permit-table td code,
+  .print-item-name,
+  .print-code-cell,
+  .print-custodian-name,
+  .print-location-sub {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* 5. Watermark Centered on EVERY Printed Page */
+  .print-watermark {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    max-width: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transform: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 0 !important;
+    pointer-events: none !important;
+    opacity: 0.08 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-watermark img {
+    width: auto !important;
+    height: auto !important;
+    max-width: 320px !important;
+    max-height: 320px !important;
+    object-fit: contain !important;
+    transform: none !important;
+    opacity: 1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-watermark-fallback {
+    font-size: 26pt !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    opacity: 0.06 !important;
+    transform: rotate(-30deg) !important;
+    text-align: center !important;
+  }
+
+  /* 6. Transparent table cells so watermark is cleanly visible underneath text */
+  .print-official-table,
+  .print-official-table tbody,
+  .print-official-table tr,
+  .print-official-table td,
+  .print-signature-box,
+  .print-summary-cell,
+  .permit-table,
+  .permit-table tbody,
+  .permit-table tr,
+  .permit-table td {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+}
+
 
 

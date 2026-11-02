@@ -32,6 +32,7 @@ import {
   Trash2,
   Upload,
   Warehouse,
+  Wrench,
   X,
 } from 'lucide-react'
 
@@ -52,6 +53,9 @@ import {
   type CustodyType,
   type WarehouseDefinition,
 } from '../lib/custody'
+import { MEDICINE_NURSING_88_ITEMS } from '../lib/medicineCustody88'
+import { ENGINEERING_WORKSHOPS_81_ITEMS } from '../lib/engineeringWorkshopsCustody81'
+import { WORKSHOP_CATEGORIES } from '../lib/workshopCategoryClassifier'
 import {
   downloadCustodyTemplate,
   mergeImportedCustody,
@@ -80,9 +84,12 @@ const ICONS_MAP: Record<WarehouseDefinition['iconKey'], React.ComponentType<{ si
   Microscope,
   Cpu,
   Laptop,
+  Wrench,
+  Building2,
 }
 
 function formatCurrency(value: number, currency: AppSettings['currency']): string {
+  if (value === 0) return '0.00 ج.م'
   if (!Number.isFinite(value)) return '—'
   return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
 }
@@ -137,18 +144,19 @@ export default function CustodyPage({
   const [isNewDisbursementOpen, setIsNewDisbursementOpen] = useState(false)
 
   const urlWarehouseId = searchParams.get('warehouse')
+  const resolvedUrlWh = urlWarehouseId === 'nursing' ? 'medicine' : urlWarehouseId
   const [activeWarehouseId, setActiveWarehouseId] = useState<string>(() => {
-    if (urlWarehouseId && WAREHOUSES.some((w) => w.id === urlWarehouseId)) {
-      return urlWarehouseId
+    if (resolvedUrlWh && WAREHOUSES.some((w) => w.id === resolvedUrlWh)) {
+      return resolvedUrlWh
     }
     return 'main'
   })
 
   useEffect(() => {
-    if (urlWarehouseId && WAREHOUSES.some((w) => w.id === urlWarehouseId)) {
-      setActiveWarehouseId(urlWarehouseId)
+    if (resolvedUrlWh && WAREHOUSES.some((w) => w.id === resolvedUrlWh)) {
+      setActiveWarehouseId(resolvedUrlWh)
     }
-  }, [urlWarehouseId])
+  }, [resolvedUrlWh])
 
   const [searchTerm, setSearchTerm] = useState(globalSearchTerm || '')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -168,8 +176,13 @@ export default function CustodyPage({
     window.addEventListener('custody-changed', handleSyncUpdate)
     window.addEventListener('storage', handleSyncUpdate)
 
-    // Ensure main warehouse items exist locally if missing
+    // Ensure main warehouse items exist locally if missing and restore full medicine & workshop custody if truncated
     setItems((currentItems) => {
+      const medCount = currentItems.filter((i) => i.warehouseId === 'medicine').length
+      const wsCount = currentItems.filter((i) => i.warehouseId === 'engineering_workshops').length
+      if (medCount < 88 || wsCount < 81) {
+        return loadCustodyItems()
+      }
       const hasMain = currentItems.some((i) => i.warehouseId === 'main')
       if (!hasMain && fixtureCustodyItems.length > 0) {
         const merged = [...fixtureCustodyItems.map((i) => ({ ...i })), ...currentItems]
@@ -185,7 +198,15 @@ export default function CustodyPage({
       if (!isMounted) return
       if (cloudItems && cloudItems.length > 0) {
         const hasMain = cloudItems.some((i) => i.warehouseId === 'main')
-        const finalItems = hasMain ? cloudItems : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudItems]
+        let finalItems = hasMain ? cloudItems : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudItems]
+        const medCount = finalItems.filter((i) => i.warehouseId === 'medicine').length
+        if (medCount < 88) {
+          finalItems = [...finalItems.filter((i) => i.warehouseId !== 'medicine'), ...MEDICINE_NURSING_88_ITEMS]
+        }
+        const wsCount = finalItems.filter((i) => i.warehouseId === 'engineering_workshops').length
+        if (wsCount < 81) {
+          finalItems = [...finalItems.filter((i) => i.warehouseId !== 'engineering_workshops'), ...ENGINEERING_WORKSHOPS_81_ITEMS]
+        }
         setItems(finalItems)
         saveCustodyItems(finalItems)
       }
@@ -509,18 +530,6 @@ export default function CustodyPage({
     setSupplyingRowItem(null)
   }
 
-  function handlePrint() {
-    const logo = settings.logoDataUrl || settings.logoUrl
-    if (logo && logo.startsWith('http')) {
-      const img = new Image()
-      img.onload = () => window.print()
-      img.onerror = () => window.print()
-      img.src = logo
-    } else {
-      window.print()
-    }
-  }
-
   function handleImportCustody(newItems: CustodyItem[], targetWarehouseId: string, mode: 'append' | 'replace') {
     const result = mergeImportedCustody(items, newItems, targetWarehouseId, mode)
     setItems(result.updatedItems)
@@ -816,8 +825,8 @@ export default function CustodyPage({
           <button
             type="button"
             className="secondary-btn"
-            onClick={handlePrint}
-            title="طباعة كشف الجرد والعهدة للمخزن الحالي"
+            onClick={() => setIsInventoryModalOpen(true)}
+            title="طباعة ومعاينة كشف الجرد والعهدة للمخزن الحالي"
             id="btn-print-custody"
           >
             <Printer size={16} /> طباعة الكشف
@@ -875,582 +884,585 @@ export default function CustodyPage({
         <>
           {/* 2. Warehouses Tabs Strip */}
           <div className="warehouses-tabs-container card-surface" role="tablist" aria-label="أقسام ومخازن العهدة">
-        <div className="warehouses-scroll-strip">
-          {WAREHOUSES.map((wh) => {
-            const Icon = ICONS_MAP[wh.iconKey] || Warehouse
-            const count = warehouseCounts[wh.id] || 0
-            const isActive = wh.id === activeWarehouseId
+            <div className="warehouses-scroll-strip">
+              {WAREHOUSES.map((wh) => {
+                const Icon = ICONS_MAP[wh.iconKey] || Warehouse
+                const count = warehouseCounts[wh.id] || 0
+                const isActive = wh.id === activeWarehouseId
 
-            return (
-              <button
-                key={wh.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={`warehouse-tab-btn ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveWarehouseId(wh.id)
-                  setSearchTerm('')
-                }}
-                id={`tab-warehouse-${wh.id}`}
-              >
-                <div className="tab-icon-wrap">
-                  <Icon size={18} />
-                </div>
-                <div className="tab-text-wrap">
-                  <span className="tab-name">{wh.name}</span>
-                  <span className="tab-count-badge">
-                    {wh.isHub ? `${count} عهدة (مغذي)` : `${count} عهدة`}
-                  </span>
-                </div>
-                {isActive && <span className="tab-active-indicator" />}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* 3. Warehouse KPI Strip */}
-      <div className="custody-kpis-grid">
-        <div className="custody-kpi-card card-surface tone-teal">
-          <div className="kpi-mini-head">
-            <span>إجمالي بنود العهدة</span>
-            <Package size={17} />
-          </div>
-          <strong className="kpi-big-num">{activeStats.totalItems.toLocaleString('ar-EG')}</strong>
-          <small className="kpi-mini-sub">{activeStats.totalUnits.toLocaleString('ar-EG')} قطعة / وحدة مسجلة</small>
-        </div>
-
-        <div className="custody-kpi-card card-surface tone-emerald">
-          <div className="kpi-mini-head">
-            <span>القيمة الدفترية المقدرة</span>
-            <FileSpreadsheet size={17} />
-          </div>
-          <strong className="kpi-big-num">{formatCurrency(activeStats.totalValue, currency)}</strong>
-          <small className="kpi-mini-sub">إجمالي قيمة أصول {activeWarehouse.shortName}</small>
-        </div>
-
-        <div className="custody-kpi-card card-surface tone-blue">
-          <div className="kpi-mini-head">
-            <span>الصلاحية الفنية التامة</span>
-            <CheckCircle2 size={17} />
-          </div>
-          <strong className="kpi-big-num">{activeStats.healthyRatio}%</strong>
-          <small className="kpi-mini-sub">
-            {activeStats.excellent + activeStats.good} صنف بحالة ممتازة وجيدة
-          </small>
-        </div>
-
-        <div className="custody-kpi-card card-surface tone-amber">
-          <div className="kpi-mini-head">
-            <span>تتطلب صيانة أو فحص</span>
-            <AlertTriangle size={17} />
-          </div>
-          <strong className="kpi-big-num">
-            {(activeStats.maintenance + activeStats.damaged).toLocaleString('ar-EG')}
-          </strong>
-          <small className="kpi-mini-sub">
-            {activeStats.maintenance} قيد الصيانة • {activeStats.damaged} كهنة
-          </small>
-        </div>
-      </div>
-
-      {/* 4. Filter and Search Toolbar */}
-      <div className="custody-toolbar card-surface">
-        <div className="custody-search-wrap">
-          <Search size={16} />
-          <input
-            type="search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={`ابحث في عهدة ${activeWarehouse.name} (الصنف، الكود، أمين العهدة، المعمل)...`}
-            id="input-custody-search"
-          />
-          {searchTerm && (
-            <button type="button" className="clear-search-btn" onClick={() => setSearchTerm('')}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        <div className="custody-filter-selects">
-          <div className="filter-select-group">
-            <Filter size={14} />
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              aria-label="تصفية حسب التصنيف"
-            >
-              <option value="all">كافة التصنيفات</option>
-              <option value="أجهزة إلكترونية وحواسب">أجهزة إلكترونية وحواسب</option>
-              <option value="أجهزة ومعدات طبية">أجهزة ومعدات طبية</option>
-              <option value="أجهزة معملية وتجارب">أجهزة معملية وتجارب</option>
-              <option value="أثاث وتجهيزات">أثاث وتجهيزات</option>
-              <option value="أدوات ومستلزمات تشغيل">أدوات ومستلزمات تشغيل</option>
-              <option value="أخرى">أخرى</option>
-            </select>
-          </div>
-
-          <div className="filter-select-group">
-            <select
-              value={selectedCondition}
-              onChange={(e) => setSelectedCondition(e.target.value)}
-              aria-label="تصفية حسب الحالة الفنية"
-            >
-              <option value="all">كافة الحالات الفنية</option>
-              <option value="excellent">ممتازة (جاهزة للعمل)</option>
-              <option value="good">جيدة (تعمل بكفاءة)</option>
-              <option value="maintenance">تحتاج صيانة / فحص</option>
-              <option value="damaged">تالفة / كهنة</option>
-            </select>
-          </div>
-
-          <div className="filter-select-group">
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              aria-label="تصفية حسب نوع العهدة"
-            >
-              <option value="all">كافة أنواع العهد</option>
-              <option value="مستديمة">عهدة مستديمة</option>
-              <option value="مستهلكة">عهدة مستهلكة</option>
-              <option value="شخصية">عهدة شخصية</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Main Custody Table */}
-      <div className="custody-table-card card-surface">
-        <div className="table-scroll-container">
-          <table className="custody-table">
-            <thead>
-              <tr>
-                <th>كود العهدة</th>
-                <th>اسم الصنف والمواصفات</th>
-                <th>التصنيف</th>
-                <th>أمين العهدة والموقع</th>
-                <th>الكمية</th>
-                <th>القيمة الدفترية (الإجمالي)</th>
-                <th>الحالة الفنية</th>
-                <th>النوع</th>
-                <th className="actions-header">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="table-empty">
-                    <div className="ledger-empty-box">
-                      <div className="ledger-empty-icon">
-                        <Package size={28} />
-                      </div>
-                      <h3>
-                        {searchTerm || selectedCategory !== 'all' || selectedCondition !== 'all'
-                          ? 'لا توجد أصناف مطابقة للبحث أو التصفية'
-                          : `لا توجد أصناف مسجلة في ${activeWarehouse.name} حالياً`}
-                      </h3>
-                      <p>
-                        {searchTerm
-                          ? 'جرّب تعديل كلمات البحث أو مسح عوامل التصفية لعرض بنود العهدة.'
-                          : activeWarehouse.isHub
-                          ? 'يمكنك البدء بإضافة صنف عهدة مركزي وتوزيعه على الكليات.'
-                          : `يمكنك استلام وتوريد أصناف من المخزن الرئيسي أو إضافة قيد عهدة جديد.`}
-                      </p>
-                      {canEdit && (
-                        <div className="empty-quick-actions">
-                          {!activeWarehouse.isHub && (
-                            <button
-                              type="button"
-                              className="highlight-action-btn"
-                              onClick={() => setIsSupplyingFromMain(true)}
-                            >
-                              <ArrowLeftRight size={16} /> استلام صرف من المخزن الرئيسي
-                            </button>
-                          )}
-                          <button type="button" className="primary-btn" onClick={() => setIsAddingNew(true)}>
-                            <Plus size={16} /> إضافة صنف عهدة جديد
-                          </button>
-                        </div>
-                      )}
+                return (
+                  <button
+                    key={wh.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`warehouse-tab-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveWarehouseId(wh.id)
+                      setSearchTerm('')
+                    }}
+                    id={`tab-warehouse-${wh.id}`}
+                  >
+                    <div className="tab-icon-wrap">
+                      <Icon size={18} />
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredItems.map((item) => {
-                  const conditionClass =
-                    item.condition === 'excellent' ? 'condition-excellent' :
-                    item.condition === 'good' ? 'condition-good' :
-                    item.condition === 'maintenance' ? 'condition-maintenance' : 'condition-damaged'
+                    <div className="tab-text-wrap">
+                      <span className="tab-name">{wh.name}</span>
+                      <span className="tab-count-badge">
+                        {wh.isHub ? `${count} عهدة (مغذي)` : `${count} عهدة`}
+                      </span>
+                    </div>
+                    {isActive && <span className="tab-active-indicator" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
-                  const conditionLabel =
-                    item.condition === 'excellent' ? 'ممتازة' :
-                    item.condition === 'good' ? 'جيدة' :
-                    item.condition === 'maintenance' ? 'تحتاج صيانة' : 'تالفة / كهنة'
+          {/* 3. Warehouse KPI Strip */}
+          <div className="custody-kpis-grid">
+            <div className="custody-kpi-card card-surface tone-teal">
+              <div className="kpi-mini-head">
+                <span>إجمالي بنود العهدة</span>
+                <Package size={17} />
+              </div>
+              <strong className="kpi-big-num">{activeStats.totalItems.toLocaleString('ar-EG')}</strong>
+              <small className="kpi-mini-sub">{activeStats.totalUnits.toLocaleString('ar-EG')} قطعة / وحدة مسجلة</small>
+            </div>
 
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <span className="code-pill">{item.code}</span>
-                      </td>
-                      <td>
-                        <div className="cell-item-name">{item.name}</div>
-                        <div className="cell-sub-tags">
-                          {item.serialNumber && <span className="serial-tag">سيريال: {item.serialNumber}</span>}
-                          {item.notes && <span className="notes-tag">{item.notes}</span>}
-                        </div>
-                      </td>
-                      <td>
-                        <span className="category-tag">{item.category}</span>
-                      </td>
-                      <td>
-                        <div className="custodian-name">{item.custodian}</div>
-                        <small className="cell-sub">{item.roomLocation}</small>
-                      </td>
-                      <td>
-                        <span className="qty-tag">
-                          {item.quantity} {item.unit}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="custody-val-cell">
-                          <strong className="total-val">{formatCurrency(item.value, currency)}</strong>
-                          {item.unitPrice ? (
-                            <small className="unit-price-sub" title="سعر القطعة الواحدة">
-                              ({formatCurrency(item.unitPrice, currency)} / {item.unit})
-                            </small>
-                          ) : item.quantity > 1 ? (
-                            <small className="unit-price-sub" title="متوسط سعر الوحدة">
-                              ({formatCurrency(Math.round(item.value / item.quantity), currency)} / {item.unit})
-                            </small>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`status-pill ${conditionClass}`}>{conditionLabel}</span>
-                      </td>
-                      <td>
-                        <span className="type-badge">{item.custodyType}</span>
-                      </td>
-                      <td className="actions-cell">
-                        <div className="action-buttons-wrap">
-                          <button
-                            type="button"
-                            className="table-action-btn history-action-btn"
-                            onClick={() => setHistoryItem(item)}
-                            title="سجل تتبع تاريخ وحركة الأصل وفحوصات الصيانة"
-                            aria-label={`تاريخ ${item.name}`}
-                          >
-                            <History size={14} />
-                            <span>تاريخ الأصل</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="table-action-btn permit-action-btn"
-                            onClick={() => {
-                              setPermitInitialItems([item])
-                              setIsPermitModalOpen(true)
-                            }}
-                            title="إعداد وطباعة إذن صرف رسمي لهذا الصنف"
-                            aria-label={`إذن صرف ${item.name}`}
-                          >
-                            <FileCheck2 size={14} />
-                            <span>إذن صرف</span>
-                          </button>
-                          {canEdit ? (
-                            <>
-                              {activeWarehouse.isHub && (
+            <div className="custody-kpi-card card-surface tone-emerald">
+              <div className="kpi-mini-head">
+                <span>القيمة الدفترية المقدرة</span>
+                <FileSpreadsheet size={17} />
+              </div>
+              <strong className="kpi-big-num">{formatCurrency(activeStats.totalValue, currency)}</strong>
+              <small className="kpi-mini-sub">إجمالي قيمة أصول {activeWarehouse.shortName}</small>
+            </div>
+
+            <div className="custody-kpi-card card-surface tone-blue">
+              <div className="kpi-mini-head">
+                <span>الصلاحية الفنية التامة</span>
+                <CheckCircle2 size={17} />
+              </div>
+              <strong className="kpi-big-num">{activeStats.healthyRatio}%</strong>
+              <small className="kpi-mini-sub">
+                {activeStats.excellent + activeStats.good} صنف بحالة ممتازة وجيدة
+              </small>
+            </div>
+
+            <div className="custody-kpi-card card-surface tone-amber">
+              <div className="kpi-mini-head">
+                <span>تتطلب صيانة أو فحص</span>
+                <AlertTriangle size={17} />
+              </div>
+              <strong className="kpi-big-num">
+                {(activeStats.maintenance + activeStats.damaged).toLocaleString('ar-EG')}
+              </strong>
+              <small className="kpi-mini-sub">
+                {activeStats.maintenance} قيد الصيانة • {activeStats.damaged} كهنة
+              </small>
+            </div>
+          </div>
+
+          {/* 4. Filter and Search Toolbar */}
+          <div className="custody-toolbar card-surface">
+            <div className="custody-search-wrap">
+              <Search size={16} />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={`ابحث في عهدة ${activeWarehouse.name} (الصنف، الكود، أمين العهدة، المعمل)...`}
+                id="input-custody-search"
+              />
+              {searchTerm && (
+                <button type="button" className="clear-search-btn" onClick={() => setSearchTerm('')}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="custody-filter-selects">
+              <div className="filter-select-group">
+                <Filter size={14} />
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  aria-label="تصفية حسب التصنيف"
+                >
+                  <option value="all">كافة التصنيفات</option>
+                  <option value="أجهزة إلكترونية وحواسب">أجهزة إلكترونية وحواسب</option>
+                  <option value="أجهزة ومعدات طبية">أجهزة ومعدات طبية</option>
+                  <option value="أجهزة معملية وتجارب">أجهزة معملية وتجارب</option>
+                  <option value="أثاث وتجهيزات">أثاث وتجهيزات</option>
+                  <option value="أدوات ومستلزمات تشغيل">أدوات ومستلزمات تشغيل</option>
+                  {WORKSHOP_CATEGORIES.filter((c) => c !== 'أخرى').map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="أخرى">أخرى</option>
+                </select>
+              </div>
+
+              <div className="filter-select-group">
+                <select
+                  value={selectedCondition}
+                  onChange={(e) => setSelectedCondition(e.target.value)}
+                  aria-label="تصفية حسب الحالة الفنية"
+                >
+                  <option value="all">كافة الحالات الفنية</option>
+                  <option value="excellent">ممتازة (جاهزة للعمل)</option>
+                  <option value="good">جيدة (تعمل بكفاءة)</option>
+                  <option value="maintenance">تحتاج صيانة / فحص</option>
+                  <option value="damaged">تالفة / كهنة</option>
+                </select>
+              </div>
+
+              <div className="filter-select-group">
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  aria-label="تصفية حسب نوع العهدة"
+                >
+                  <option value="all">كافة أنواع العهد</option>
+                  <option value="مستديمة">عهدة مستديمة</option>
+                  <option value="مستهلكة">عهدة مستهلكة</option>
+                  <option value="شخصية">عهدة شخصية</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Main Custody Table */}
+          <div className="custody-table-card card-surface">
+            <div className="table-scroll-container">
+              <table className="custody-table">
+                <thead>
+                  <tr>
+                    <th>كود العهدة</th>
+                    <th>اسم الصنف والمواصفات</th>
+                    <th>التصنيف</th>
+                    <th>أمين العهدة والموقع</th>
+                    <th>الكمية</th>
+                    <th>القيمة الدفترية (الإجمالي)</th>
+                    <th>الحالة الفنية</th>
+                    <th>النوع</th>
+                    <th className="actions-header">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="table-empty">
+                        <div className="ledger-empty-box">
+                          <div className="ledger-empty-icon">
+                            <Package size={28} />
+                          </div>
+                          <h3>
+                            {searchTerm || selectedCategory !== 'all' || selectedCondition !== 'all'
+                              ? 'لا توجد أصناف مطابقة للبحث أو التصفية'
+                              : `لا توجد أصناف مسجلة في ${activeWarehouse.name} حالياً`}
+                          </h3>
+                          <p>
+                            {searchTerm
+                              ? 'جرّب تعديل كلمات البحث أو مسح عوامل التصفية لعرض بنود العهدة.'
+                              : activeWarehouse.isHub
+                                ? 'يمكنك البدء بإضافة صنف عهدة مركزي وتوزيعه على الكليات.'
+                                : `يمكنك استلام وتوريد أصناف من المخزن الرئيسي أو إضافة قيد عهدة جديد.`}
+                          </p>
+                          {canEdit && (
+                            <div className="empty-quick-actions">
+                              {!activeWarehouse.isHub && (
                                 <button
                                   type="button"
-                                  className="table-action-btn supply-action-btn"
-                                  onClick={() => {
-                                    setSupplyingRowItem(item)
-                                    setIsSupplyingFromMain(true)
-                                  }}
-                                  title="صرف وتوريد هذا الصنف إلى كلية أو مخزن فرعي"
-                                  aria-label={`صرف ${item.name} لكلية`}
+                                  className="highlight-action-btn"
+                                  onClick={() => setIsSupplyingFromMain(true)}
                                 >
-                                  <ArrowLeftRight size={14} />
-                                  <span>صرف لفرعي</span>
+                                  <ArrowLeftRight size={16} /> استلام صرف من المخزن الرئيسي
                                 </button>
                               )}
-                              {isSystemAdmin && (
-                                <button
-                                  type="button"
-                                  className="table-action-btn edit-action-btn"
-                                  onClick={() => setEditingItem(item)}
-                                  title="تعديل بيانات العهدة"
-                                  aria-label={`تعديل ${item.name}`}
-                                >
-                                  <Pencil size={14} />
-                                  <span>تعديل</span>
-                                </button>
-                              )}
+                              <button type="button" className="primary-btn" onClick={() => setIsAddingNew(true)}>
+                                <Plus size={16} /> إضافة صنف عهدة جديد
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredItems.map((item) => {
+                      const conditionClass =
+                        item.condition === 'excellent' ? 'condition-excellent' :
+                          item.condition === 'good' ? 'condition-good' :
+                            item.condition === 'maintenance' ? 'condition-maintenance' : 'condition-damaged'
+
+                      const conditionLabel =
+                        item.condition === 'excellent' ? 'ممتازة' :
+                          item.condition === 'good' ? 'جيدة' :
+                            item.condition === 'maintenance' ? 'تحتاج صيانة' : 'تالفة / كهنة'
+
+                      return (
+                        <tr key={item.id}>
+                          <td>
+                            <span className="code-pill">{item.code}</span>
+                          </td>
+                          <td>
+                            <div className="cell-item-name">{item.name}</div>
+                            <div className="cell-sub-tags">
+                              {item.serialNumber && <span className="serial-tag">سيريال: {item.serialNumber}</span>}
+                              {item.notes && <span className="notes-tag">{item.notes}</span>}
+                            </div>
+                          </td>
+                          <td>
+                            <span className="category-tag">{item.category}</span>
+                          </td>
+                          <td>
+                            <div className="custodian-name">{item.custodian}</div>
+                            <small className="cell-sub">{item.roomLocation}</small>
+                          </td>
+                          <td>
+                            <span className="qty-tag">
+                              {item.quantity} {item.unit}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="custody-val-cell">
+                              <strong className="total-val">{formatCurrency(item.value, currency)}</strong>
+                              {item.unitPrice != null ? (
+                                <small className="unit-price-sub" title="سعر القطعة الواحدة">
+                                  ({formatCurrency(item.unitPrice, currency)} / {item.unit})
+                                </small>
+                              ) : item.quantity > 1 ? (
+                                <small className="unit-price-sub" title="متوسط سعر الوحدة">
+                                  ({formatCurrency(Math.round(item.value / item.quantity), currency)} / {item.unit})
+                                </small>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`status-pill ${conditionClass}`}>{conditionLabel}</span>
+                          </td>
+                          <td>
+                            <span className="type-badge">{item.custodyType}</span>
+                          </td>
+                          <td className="actions-cell">
+                            <div className="action-buttons-wrap">
                               <button
                                 type="button"
-                                className="table-action-btn transfer-action-btn"
-                                onClick={() => setTransferringItem(item)}
-                                title="نقل العهدة إلى مخزن أو كلية أخرى"
-                                aria-label={`نقل ${item.name}`}
+                                className="table-action-btn history-action-btn"
+                                onClick={() => setHistoryItem(item)}
+                                title="سجل تتبع تاريخ وحركة الأصل وفحوصات الصيانة"
+                                aria-label={`تاريخ ${item.name}`}
                               >
-                                <ArrowLeftRight size={14} />
-                                <span>نقل</span>
+                                <History size={14} />
+                                <span>تاريخ الأصل</span>
                               </button>
-                              {isSystemAdmin && (
-                                <button
-                                  type="button"
-                                  className="table-action-btn delete-action-btn"
-                                  onClick={() => setDeletingItem(item)}
-                                  title="حذف الصنف من العهدة"
-                                  aria-label={`حذف ${item.name}`}
-                                >
-                                  <Trash2 size={14} />
-                                  <span>حذف</span>
-                                </button>
-                              )}
-                              {!isSystemAdmin && (
-                                <span className="read-only-badge" title="التعديل والحذف لمدير النظام فقط">
-                                  <Eye size={12} /> تعديل/حذف: للمدير فقط
+                              <button
+                                type="button"
+                                className="table-action-btn permit-action-btn"
+                                onClick={() => {
+                                  setPermitInitialItems([item])
+                                  setIsPermitModalOpen(true)
+                                }}
+                                title="إعداد وطباعة إذن صرف رسمي لهذا الصنف"
+                                aria-label={`إذن صرف ${item.name}`}
+                              >
+                                <FileCheck2 size={14} />
+                                <span>إذن صرف</span>
+                              </button>
+                              {canEdit ? (
+                                <>
+                                  {activeWarehouse.isHub && (
+                                    <button
+                                      type="button"
+                                      className="table-action-btn supply-action-btn"
+                                      onClick={() => {
+                                        setSupplyingRowItem(item)
+                                        setIsSupplyingFromMain(true)
+                                      }}
+                                      title="صرف وتوريد هذا الصنف إلى كلية أو مخزن فرعي"
+                                      aria-label={`صرف ${item.name} لكلية`}
+                                    >
+                                      <ArrowLeftRight size={14} />
+                                      <span>صرف لفرعي</span>
+                                    </button>
+                                  )}
+                                  {isSystemAdmin && (
+                                    <button
+                                      type="button"
+                                      className="table-action-btn edit-action-btn"
+                                      onClick={() => setEditingItem(item)}
+                                      title="تعديل بيانات العهدة"
+                                      aria-label={`تعديل ${item.name}`}
+                                    >
+                                      <Pencil size={14} />
+                                      <span>تعديل</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="table-action-btn transfer-action-btn"
+                                    onClick={() => setTransferringItem(item)}
+                                    title="نقل العهدة إلى مخزن أو كلية أخرى"
+                                    aria-label={`نقل ${item.name}`}
+                                  >
+                                    <ArrowLeftRight size={14} />
+                                    <span>نقل</span>
+                                  </button>
+                                  {isSystemAdmin && (
+                                    <button
+                                      type="button"
+                                      className="table-action-btn delete-action-btn"
+                                      onClick={() => setDeletingItem(item)}
+                                      title="حذف الصنف من العهدة"
+                                      aria-label={`حذف ${item.name}`}
+                                    >
+                                      <Trash2 size={14} />
+                                      <span>حذف</span>
+                                    </button>
+                                  )}
+                                  {!isSystemAdmin && (
+                                    <span className="read-only-badge" title="التعديل والحذف لمدير النظام فقط">
+                                      <Eye size={12} /> تعديل/حذف: للمدير فقط
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="read-only-badge" title="صلاحية قراءة وعرض فقط">
+                                  <Eye size={12} /> عرض فقط
                                 </span>
                               )}
-                            </>
-                          ) : (
-                            <span className="read-only-badge" title="صلاحية قراءة وعرض فقط">
-                              <Eye size={12} /> عرض فقط
-                            </span>
-                          )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="custody-table-footer">
+              <span>
+                عرض {filteredItems.length.toLocaleString('ar-EG')} صنف من إجمالي{' '}
+                {activeWarehouseItems.length.toLocaleString('ar-EG')} مسجل في {activeWarehouse.name}
+              </span>
+              <button
+                type="button"
+                className="text-link-btn"
+                onClick={() => void exportCustodyToExcel(activeWarehouse.name, activeWarehouseItems, currency)}
+              >
+                تحميل تقرير Excel كامل <ArrowDownToLine size={14} />
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Disbursements View */
+        <div className="custody-disbursements-view">
+          {/* 2. Disbursements KPI Strip */}
+          <div className="custody-kpis-grid">
+            <div className="custody-kpi-card card-surface tone-teal">
+              <div className="kpi-mini-head">
+                <span>إجمالي أذون المنصرف</span>
+                <ArrowLeftRight size={17} />
+              </div>
+              <strong className="kpi-big-num">{disbursementStats.count.toLocaleString('ar-EG')}</strong>
+              <small className="kpi-mini-sub">{disbursementStats.uniqueItems.toLocaleString('ar-EG')} صنف مختلف تم صرفه</small>
+            </div>
+
+            <div className="custody-kpi-card card-surface tone-emerald">
+              <div className="kpi-mini-head">
+                <span>إجمالي الوحدات المنصرفة</span>
+                <Package size={17} />
+              </div>
+              <strong className="kpi-big-num">{disbursementStats.totalQty.toLocaleString('ar-EG')}</strong>
+              <small className="kpi-mini-sub">قطعة / وحدة محولة ومنصرفة</small>
+            </div>
+
+            <div className="custody-kpi-card card-surface tone-blue">
+              <div className="kpi-mini-head">
+                <span>إجمالي القيمة التقديرية</span>
+                <FileSpreadsheet size={17} />
+              </div>
+              <strong className="kpi-big-num">{formatCurrency(disbursementStats.totalVal, currency)}</strong>
+              <small className="kpi-mini-sub">القيمة الدفترية للأصناف المنصرفة</small>
+            </div>
+
+            <div className="custody-kpi-card card-surface tone-amber">
+              <div className="kpi-mini-head">
+                <span>عدد المخازن المستفيدة</span>
+                <Warehouse size={17} />
+              </div>
+              <strong className="kpi-big-num">
+                {new Set(outwardMovements.map((m) => m.destWarehouseId || m.to).filter(Boolean)).size.toLocaleString('ar-EG')}
+              </strong>
+              <small className="kpi-mini-sub">كليات ومستودعات وجهات مستلمة</small>
+            </div>
+          </div>
+
+          {/* 3. Filter & Search Toolbar */}
+          <div className="custody-toolbar card-surface">
+            <div className="custody-search-wrap">
+              <Search size={16} />
+              <input
+                type="search"
+                value={disbursementSearch}
+                onChange={(e) => setDisbursementSearch(e.target.value)}
+                placeholder="ابحث في حركات المنصرف (الصنف، المستلم، المخزن المصدر، إذن الصرف)..."
+                id="input-disbursement-search"
+              />
+              {disbursementSearch && (
+                <button type="button" className="clear-search-btn" onClick={() => setDisbursementSearch('')}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="custody-filter-selects">
+              <div className="filter-select-group">
+                <Filter size={14} />
+                <select
+                  value={disbursementSourceWh}
+                  onChange={(e) => setDisbursementSourceWh(e.target.value)}
+                  aria-label="تصفية حسب المخزن المصدر"
+                >
+                  <option value="all">كافة المخازن المصدر</option>
+                  {WAREHOUSES.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-select-group">
+                <select
+                  value={disbursementDestWh}
+                  onChange={(e) => setDisbursementDestWh(e.target.value)}
+                  aria-label="تصفية حسب المخزن المستلم"
+                >
+                  <option value="all">كافة الوجهات والمخازن المستلمة</option>
+                  {WAREHOUSES.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {canDisburse && (
+                <button
+                  type="button"
+                  className="primary-btn inline-flex items-center gap-1"
+                  onClick={() => setIsNewDisbursementOpen(true)}
+                  id="btn-add-disbursement-toolbar"
+                >
+                  <Plus size={16} />
+                  <span>إذن صرف / تحويل جديد</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={handleExportDisbursements}
+                title="تصدير كشف المنصرف والتحويلات إلى Excel"
+              >
+                <FileSpreadsheet size={16} />
+                <span>تصدير Excel</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4. Disbursements Table */}
+          <div className="custody-table-card card-surface">
+            <div className="table-scroll-container">
+              <table className="custody-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>تاريخ الصرف</th>
+                    <th>اسم الصنف</th>
+                    <th>الكمية المنصرفة</th>
+                    <th>سعر الوحدة</th>
+                    <th>إجمالي القيمة</th>
+                    <th>المخزن المصدر</th>
+                    <th>الوجهة / المستلم</th>
+                    <th>رقم المستند / الإذن</th>
+                    <th>ملاحظات</th>
+                    <th className="actions-header">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDisbursements.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="table-empty">
+                        <div className="ledger-empty-box">
+                          <div className="ledger-empty-icon">
+                            <ArrowLeftRight size={28} />
+                          </div>
+                          <h3>
+                            {disbursementSearch || disbursementSourceWh !== 'all' || disbursementDestWh !== 'all'
+                              ? 'لا توجد حركات منصرف مطابقة للبحث أو التصفية'
+                              : 'لا توجد حركات منصرف أو تحويل مسجلة بعد'}
+                          </h3>
+                          <p>
+                            {canDisburse
+                              ? 'يمكنك تسجيل أول حركة صرف أو تحويل بين المخازن بالضغط على «إذن صرف / تحويل جديد» أعلاه.'
+                              : 'لم يتم تسجيل أية أذون صرف في النظام حتى الآن.'}
+                          </p>
                         </div>
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="custody-table-footer">
-          <span>
-            عرض {filteredItems.length.toLocaleString('ar-EG')} صنف من إجمالي{' '}
-            {activeWarehouseItems.length.toLocaleString('ar-EG')} مسجل في {activeWarehouse.name}
-          </span>
-          <button
-            type="button"
-            className="text-link-btn"
-            onClick={() => void exportCustodyToExcel(activeWarehouse.name, activeWarehouseItems, currency)}
-          >
-            تحميل تقرير Excel كامل <ArrowDownToLine size={14} />
-          </button>
-        </div>
-      </div>
-    </>
-  ) : (
-    /* Disbursements View */
-    <div className="custody-disbursements-view">
-      {/* 2. Disbursements KPI Strip */}
-      <div className="custody-kpis-grid">
-        <div className="custody-kpi-card card-surface tone-teal">
-          <div className="kpi-mini-head">
-            <span>إجمالي أذون المنصرف</span>
-            <ArrowLeftRight size={17} />
+                  ) : (
+                    filteredDisbursements.map((m, idx) => {
+                      const qty = Number(m.qout) || 0
+                      const price = Number(m.price) || 0
+                      const total = qty * price
+                      return (
+                        <tr key={m.id || idx}>
+                          <td>{idx + 1}</td>
+                          <td className="nowrap">{m.date || m.issue || '—'}</td>
+                          <td className="font-semibold">{m.item}</td>
+                          <td className="font-bold text-bad">{qty}</td>
+                          <td>{formatCurrency(price, currency)}</td>
+                          <td className="font-bold text-ink">{formatCurrency(total, currency)}</td>
+                          <td>
+                            <span className="inline-flex items-center gap-1 font-sm">
+                              <Warehouse size={13} className="text-accent" />
+                              <span>{m.from || 'المخزن الرئيسي'}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <span className="font-semibold">{m.to || m.custodianName || '—'}</span>
+                          </td>
+                          <td>
+                            {m.permit || m.issue ? (
+                              <code className="code-pill">
+                                {m.permit || m.issue}
+                              </code>
+                            ) : '—'}
+                          </td>
+                          <td className="truncate-cell">
+                            {m.notes || '—'}
+                          </td>
+                          <td className="actions-cell">
+                            <button
+                              type="button"
+                              className="table-action-btn secondary-btn btn-sm inline-flex items-center gap-1"
+                              onClick={() => handleOpenPermitForMovement(m)}
+                              title="طباعة إذن صرف رسمي معتمد لهذا البند"
+                            >
+                              <Printer size={14} />
+                              <span>إذن رسمي</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <strong className="kpi-big-num">{disbursementStats.count.toLocaleString('ar-EG')}</strong>
-          <small className="kpi-mini-sub">{disbursementStats.uniqueItems.toLocaleString('ar-EG')} صنف مختلف تم صرفه</small>
         </div>
-
-        <div className="custody-kpi-card card-surface tone-emerald">
-          <div className="kpi-mini-head">
-            <span>إجمالي الوحدات المنصرفة</span>
-            <Package size={17} />
-          </div>
-          <strong className="kpi-big-num">{disbursementStats.totalQty.toLocaleString('ar-EG')}</strong>
-          <small className="kpi-mini-sub">قطعة / وحدة محولة ومنصرفة</small>
-        </div>
-
-        <div className="custody-kpi-card card-surface tone-blue">
-          <div className="kpi-mini-head">
-            <span>إجمالي القيمة التقديرية</span>
-            <FileSpreadsheet size={17} />
-          </div>
-          <strong className="kpi-big-num">{formatCurrency(disbursementStats.totalVal, currency)}</strong>
-          <small className="kpi-mini-sub">القيمة الدفترية للأصناف المنصرفة</small>
-        </div>
-
-        <div className="custody-kpi-card card-surface tone-amber">
-          <div className="kpi-mini-head">
-            <span>عدد المخازن المستفيدة</span>
-            <Warehouse size={17} />
-          </div>
-          <strong className="kpi-big-num">
-            {new Set(outwardMovements.map((m) => m.destWarehouseId || m.to).filter(Boolean)).size.toLocaleString('ar-EG')}
-          </strong>
-          <small className="kpi-mini-sub">كليات ومستودعات وجهات مستلمة</small>
-        </div>
-      </div>
-
-      {/* 3. Filter & Search Toolbar */}
-      <div className="custody-toolbar card-surface">
-        <div className="custody-search-wrap">
-          <Search size={16} />
-          <input
-            type="search"
-            value={disbursementSearch}
-            onChange={(e) => setDisbursementSearch(e.target.value)}
-            placeholder="ابحث في حركات المنصرف (الصنف، المستلم، المخزن المصدر، إذن الصرف)..."
-            id="input-disbursement-search"
-          />
-          {disbursementSearch && (
-            <button type="button" className="clear-search-btn" onClick={() => setDisbursementSearch('')}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        <div className="custody-filter-selects">
-          <div className="filter-select-group">
-            <Filter size={14} />
-            <select
-              value={disbursementSourceWh}
-              onChange={(e) => setDisbursementSourceWh(e.target.value)}
-              aria-label="تصفية حسب المخزن المصدر"
-            >
-              <option value="all">كافة المخازن المصدر</option>
-              {WAREHOUSES.map((w) => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="filter-select-group">
-            <select
-              value={disbursementDestWh}
-              onChange={(e) => setDisbursementDestWh(e.target.value)}
-              aria-label="تصفية حسب المخزن المستلم"
-            >
-              <option value="all">كافة الوجهات والمخازن المستلمة</option>
-              {WAREHOUSES.map((w) => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {canDisburse && (
-            <button
-              type="button"
-              className="primary-btn inline-flex items-center gap-1"
-              onClick={() => setIsNewDisbursementOpen(true)}
-              id="btn-add-disbursement-toolbar"
-            >
-              <Plus size={16} />
-              <span>إذن صرف / تحويل جديد</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={handleExportDisbursements}
-            title="تصدير كشف المنصرف والتحويلات إلى Excel"
-          >
-            <FileSpreadsheet size={16} />
-            <span>تصدير Excel</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Disbursements Table */}
-      <div className="custody-table-card card-surface">
-        <div className="table-scroll-container">
-          <table className="custody-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>تاريخ الصرف</th>
-                <th>اسم الصنف</th>
-                <th>الكمية المنصرفة</th>
-                <th>سعر الوحدة</th>
-                <th>إجمالي القيمة</th>
-                <th>المخزن المصدر</th>
-                <th>الوجهة / المستلم</th>
-                <th>رقم المستند / الإذن</th>
-                <th>ملاحظات</th>
-                <th className="actions-header">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDisbursements.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="table-empty">
-                    <div className="ledger-empty-box">
-                      <div className="ledger-empty-icon">
-                        <ArrowLeftRight size={28} />
-                      </div>
-                      <h3>
-                        {disbursementSearch || disbursementSourceWh !== 'all' || disbursementDestWh !== 'all'
-                          ? 'لا توجد حركات منصرف مطابقة للبحث أو التصفية'
-                          : 'لا توجد حركات منصرف أو تحويل مسجلة بعد'}
-                      </h3>
-                      <p>
-                        {canDisburse
-                          ? 'يمكنك تسجيل أول حركة صرف أو تحويل بين المخازن بالضغط على «إذن صرف / تحويل جديد» أعلاه.'
-                          : 'لم يتم تسجيل أية أذون صرف في النظام حتى الآن.'}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredDisbursements.map((m, idx) => {
-                  const qty = Number(m.qout) || 0
-                  const price = Number(m.price) || 0
-                  const total = qty * price
-                  return (
-                    <tr key={m.id || idx}>
-                      <td>{idx + 1}</td>
-                      <td className="nowrap">{m.date || m.issue || '—'}</td>
-                      <td className="font-semibold">{m.item}</td>
-                      <td className="font-bold text-bad">{qty}</td>
-                      <td>{formatCurrency(price, currency)}</td>
-                      <td className="font-bold text-ink">{formatCurrency(total, currency)}</td>
-                      <td>
-                        <span className="inline-flex items-center gap-1 font-sm">
-                          <Warehouse size={13} className="text-accent" />
-                          <span>{m.from || 'المخزن الرئيسي'}</span>
-                        </span>
-                      </td>
-                      <td>
-                        <span className="font-semibold">{m.to || m.custodianName || '—'}</span>
-                      </td>
-                      <td>
-                        {m.permit || m.issue ? (
-                          <code className="code-pill">
-                            {m.permit || m.issue}
-                          </code>
-                        ) : '—'}
-                      </td>
-                      <td className="truncate-cell">
-                        {m.notes || '—'}
-                      </td>
-                      <td className="actions-cell">
-                        <button
-                          type="button"
-                          className="table-action-btn secondary-btn btn-sm inline-flex items-center gap-1"
-                          onClick={() => handleOpenPermitForMovement(m)}
-                          title="طباعة إذن صرف رسمي معتمد لهذا البند"
-                        >
-                          <Printer size={14} />
-                          <span>إذن رسمي</span>
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )}
+      )}
 
       {/* 6. Add/Edit Modal */}
       {(isAddingNew || (isSystemAdmin && editingItem)) && (
@@ -1626,7 +1638,7 @@ export default function CustodyPage({
       )}
 
       {/* 10. Official Printed Document Template (A4 Portrait - Certified Inventory Sheet) */}
-      <div className="official-custody-print-document" aria-hidden="true">
+      <div className="official-custody-print-document" aria-hidden="true" style={{ display: 'none' }}>
         {(settings.logoDataUrl || settings.logoUrl) && (
           <div className="print-watermark" aria-hidden="true">
             <img src={settings.logoDataUrl || settings.logoUrl} alt="" />
@@ -1724,24 +1736,23 @@ export default function CustodyPage({
           </div>
         </div>
 
-        {/* Printable Official Inventory Table */}
+        {/* Printable Official Inventory Table (7 Columns Unified Layout) */}
         <table className="print-official-table">
           <thead>
             <tr>
-              <th className="col-w-4p">م</th>
-              <th className="col-w-13p">كود العهدة</th>
-              <th className="col-w-28p">اسم الصنف والمواصفات الفنية</th>
-              <th className="col-w-13p">التصنيف والنوع</th>
-              <th className="col-w-16p">أمين العهدة / المكان</th>
-              <th className="col-w-8p">الكمية</th>
-              <th className="col-w-10p">القيمة الدفترية</th>
-              <th className="col-w-8p">الحالة الفنية</th>
+              <th className="col-w-4p text-center">م</th>
+              <th className="col-w-14p">كود العهدة</th>
+              <th className="col-w-32p">اسم الصنف والمواصفات</th>
+              <th className="col-w-20p">أمين العهدة / المكان</th>
+              <th className="col-w-10p text-center">الكمية</th>
+              <th className="col-w-10p text-center">القيمة الدفترية</th>
+              <th className="col-w-10p text-center">الحالة الفنية</th>
             </tr>
           </thead>
           <tbody>
             {activeWarehouseItems.length === 0 ? (
               <tr>
-                <td colSpan={8} className="print-empty-row">
+                <td colSpan={7} className="print-empty-row">
                   لا توجد بنود عهدة مسجلة في هذا المخزن حالياً — الكشف نظيف ومعد لإدراج الأصول الجديدة.
                 </td>
               </tr>
@@ -1749,26 +1760,22 @@ export default function CustodyPage({
               activeWarehouseItems.map((item, index) => (
                 <tr key={item.id}>
                   <td className="text-center">{index + 1}</td>
-                  <td className="print-code-cell">{item.code}</td>
+                  <td className="print-code-cell font-mono font-bold">{item.code}</td>
                   <td>
-                    <div className="print-item-name">{item.name}</div>
+                    <div className="print-item-name font-bold">{item.name}</div>
                     {item.serialNumber && (
                       <div className="print-item-serial">سيريال: {item.serialNumber}</div>
                     )}
                     {item.notes && <div className="print-item-notes">{item.notes}</div>}
                   </td>
                   <td>
-                    <div>{item.category}</div>
-                    <span className="print-sub-type">({item.custodyType})</span>
-                  </td>
-                  <td>
-                    <div className="print-custodian-name">{item.custodian}</div>
+                    <div className="print-custodian-name font-semibold">{item.custodian}</div>
                     <div className="print-location-sub">{item.roomLocation}</div>
                   </td>
-                  <td className="text-center">
+                  <td className="text-center font-bold">
                     <strong>{item.quantity}</strong> {item.unit}
                   </td>
-                  <td className="text-center font-mono">
+                  <td className="text-center font-mono font-semibold">
                     {formatCurrency(item.value, currency)}
                   </td>
                   <td className="text-center">
@@ -1785,7 +1792,7 @@ export default function CustodyPage({
           </tbody>
         </table>
 
-        {/* Official Signatures & Approvals */}
+        {/* Official Signatures & Approvals (Image 3: 4-box layout) */}
         <div className="print-signatures-section">
           <div className="print-signatures-notice">
             * يُقر الموقعون أدناه بصحة البيانات والمطابقة الفعلية لجرد العهدة والأصول على الطبيعة وفقاً للوائح والقوانين المخزنية.
@@ -1795,29 +1802,25 @@ export default function CustodyPage({
               <div className="print-sig-role">أمين العهدة المسؤول</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box">
               <div className="print-sig-role">عضو لجنة الجرد والفحص</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box">
               <div className="print-sig-role">مدير إدارة المخازن</div>
               <div className="print-sig-field">الاسم: .......................................</div>
               <div className="print-sig-field">التوقيع: ...................................</div>
-              <div className="print-sig-field">التاريخ: ..... / ..... / 2026 م</div>
             </div>
 
             <div className="print-signature-box print-approval-box">
-              <div className="print-sig-role">يعتمد: عميد الكلية / رئيس الجهة</div>
-              <div className="print-sig-field">الاسم: .......................................</div>
+              <div className="print-sig-role">يعتمد: رئيس الجهة</div>
               <div className="print-sig-field">الاعتماد: ...................................</div>
               <div className="print-seal-area">
-                <span className="print-seal-hint">(خاتم شعار الجمهورية / ختم المؤسسة)</span>
+                <span className="print-seal-hint">(خاتم شعار المؤسسة)</span>
               </div>
             </div>
           </div>
@@ -1995,6 +1998,9 @@ function CustodyItemModal({
                 <option value="أجهزة معملية وتجارب">أجهزة معملية وتجارب</option>
                 <option value="أثاث وتجهيزات">أثاث وتجهيزات</option>
                 <option value="أدوات ومستلزمات تشغيل">أدوات ومستلزمات تشغيل</option>
+                {WORKSHOP_CATEGORIES.filter((c) => c !== 'أخرى').map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
                 <option value="أخرى">أخرى</option>
               </select>
             </label>
@@ -2725,7 +2731,7 @@ function ImportCustodyModal({
               <button
                 type="button"
                 onClick={handleResetFile}
-               className="secondary-btn btn-sm">
+                className="secondary-btn btn-sm">
                 تغيير الملف
               </button>
             </div>

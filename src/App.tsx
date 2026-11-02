@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -28,6 +28,7 @@ import {
   History,
   Info,
   LayoutDashboard,
+  LogIn,
   LogOut,
   Menu,
   Moon,
@@ -86,6 +87,7 @@ import {
   clearLocalSession,
   syncUsersWithCloud,
 } from './lib/localUsers'
+import { startAutoBackupWatcher } from './lib/autoBackupEngine'
 import { usePwaInstall } from './lib/pwa'
 import AuditLogPage from './pages/AuditLogPage'
 import AuthPage from './pages/AuthPage'
@@ -698,6 +700,12 @@ function App() {
   useEffect(() => {
     document.title = `${systemDisplayName} | ${settings.organization || 'إدارة المخازن'}`
   }, [systemDisplayName, settings.organization])
+
+  // مراقب النسخ الاحتياطي التلقائي: يربط كافة صفحات وتعديلات النظام تلقائياً بالنسخ الاحتياطي
+  useEffect(() => {
+    const cleanup = startAutoBackupWatcher(session)
+    return () => cleanup()
+  }, [session])
 
   useEffect(() => {
     purgeLocalDemoData()
@@ -1439,6 +1447,29 @@ function App() {
 
 
   if (!session) {
+    if (location.pathname === '/support' || location.pathname.startsWith('/support')) {
+      return (
+        <div className="public-support-shell" dir="rtl">
+          <header className="public-support-topbar">
+            <div className="public-support-brand">
+              <Warehouse size={22} className="text-accent" />
+              <div>
+                <strong>{systemDisplayName}</strong>
+                <span className="public-support-badge">بوابة الدعم الفني والمساعدة المباشرة</span>
+              </div>
+            </div>
+            <Link to="/auth" className="public-support-back-btn">
+              <LogIn size={16} />
+              <span>العودة لصفحة تسجيل الدخول</span>
+            </Link>
+          </header>
+          <main className="public-support-main">
+            <SupportPage session={null} />
+          </main>
+        </div>
+      )
+    }
+
     return (
       <AuthPage
         settings={settings}

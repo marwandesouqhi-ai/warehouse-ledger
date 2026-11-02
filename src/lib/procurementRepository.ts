@@ -10,6 +10,8 @@ import type { FixtureMovement } from './fixture'
 import { normalizeArabicName } from './arabicUtils'
 
 const LOCAL_STORAGE_KEY_PR = 'warehouse_purchase_requests_cache'
+export const LOCAL_STORAGE_KEY_QUOTES = 'warehouse_supplier_quotes_cache'
+export const LOCAL_STORAGE_KEY_PO = 'warehouse_purchase_orders_cache'
 
 export function getLocalPurchaseRequests(): PurchaseRequest[] {
   try {
@@ -23,6 +25,50 @@ export function getLocalPurchaseRequests(): PurchaseRequest[] {
 export function saveLocalPurchaseRequests(items: PurchaseRequest[]): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY_PR, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
+export function getLocalSupplierQuotes(): SupplierQuote[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY_QUOTES)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalSupplierQuotes(items: SupplierQuote[]): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_QUOTES, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
+export function getLocalPurchaseOrders(): PurchaseOrder[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PO)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalPurchaseOrders(items: PurchaseOrder[]): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_PO, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
+function notifyProcurementChanged(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('procurement-updated'))
+    }
   } catch {
     // ignore
   }
@@ -322,6 +368,7 @@ export async function createPurchaseRequest(
 
   const localList = getLocalPurchaseRequests()
   saveLocalPurchaseRequests([resultReq, ...localList.filter((r) => r.id !== resultReq.id)])
+  notifyProcurementChanged()
   return resultReq
 }
 
@@ -387,6 +434,7 @@ export async function updatePurchaseRequestDraft(
   }
 
   const finalReq = await fetchPurchaseRequestById(id)
+  notifyProcurementChanged()
   return finalReq || (updatedReq as PurchaseRequest)
 }
 
@@ -407,6 +455,7 @@ export async function submitPurchaseRequestRpc(requestId: string): Promise<void>
   if (data && data.success === false) {
     throw new Error(data.message || 'فشلت عملية إرسال الطلب.')
   }
+  notifyProcurementChanged()
 }
 
 /**
@@ -434,6 +483,7 @@ export async function recordApprovalRpc(
   if (data && data.success === false) {
     throw new Error(data.message || 'فشلت عملية تسجيل القرار.')
   }
+  notifyProcurementChanged()
 }
 
 /**
@@ -449,6 +499,37 @@ export async function deletePurchaseRequest(requestId: string): Promise<void> {
 
   if (error) {
     throw new Error(error.message || 'تعذر حذف طلب الشراء.')
+  }
+  notifyProcurementChanged()
+}
+
+/**
+ * جلب جميع عروض الأسعار المسجلة في النظام (للنسخ الاحتياطي والتقارير)
+ */
+export async function fetchAllSupplierQuotes(): Promise<SupplierQuote[]> {
+  if (!supabase) return getLocalSupplierQuotes()
+
+  try {
+    const { data, error } = await supabase
+      .from('supplier_quotes')
+      .select(`
+        *,
+        supplier:suppliers(name, status, rating)
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error || !data) return getLocalSupplierQuotes()
+
+    const mapped: SupplierQuote[] = data.map((q) => ({
+      ...q,
+      supplier_name: q.supplier?.name || 'مورد غير معروف',
+      supplier_status: q.supplier?.status || 'active',
+      supplier_rating: q.supplier?.rating,
+    }))
+    saveLocalSupplierQuotes(mapped)
+    return mapped
+  } catch {
+    return getLocalSupplierQuotes()
   }
 }
 
@@ -527,6 +608,7 @@ export async function createSupplierQuote(payload: {
     throw new Error(error?.message || 'تعذر تسجيل عرض السعر.')
   }
 
+  notifyProcurementChanged()
   return data as SupplierQuote
 }
 
@@ -548,6 +630,7 @@ export async function selectQuoteRpc(requestId: string, quoteId: string): Promis
   if (data && data.success === false) {
     throw new Error(data.message || 'فشلت عملية الترسية.')
   }
+  notifyProcurementChanged()
 }
 
 /**
@@ -568,6 +651,7 @@ export async function createPurchaseOrderRpc(quoteId: string): Promise<{ po_id: 
     throw new Error(data.message || 'فشلت عملية إصدار أمر الشراء.')
   }
 
+  notifyProcurementChanged()
   return {
     po_id: data.po_id,
     po_no: data.po_no,
@@ -578,7 +662,7 @@ export async function createPurchaseOrderRpc(quoteId: string): Promise<{ po_id: 
  * جلب قائمة أوامر الشراء الصادرة
  */
 export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
-  if (!supabase) return []
+  if (!supabase) return getLocalPurchaseOrders()
 
   try {
     const { data, error } = await supabase
@@ -590,16 +674,18 @@ export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
       `)
       .order('created_at', { ascending: false })
 
-    if (error || !data) return []
+    if (error || !data) return getLocalPurchaseOrders()
 
-    return data.map((po) => ({
+    const mapped = data.map((po) => ({
       ...po,
       request_no: po.request?.request_no,
       department: po.request?.department,
       supplier_name: po.supplier?.name || 'مورد غير محدد',
     }))
+    saveLocalPurchaseOrders(mapped)
+    return mapped
   } catch {
-    return []
+    return getLocalPurchaseOrders()
   }
 }
 
@@ -620,6 +706,7 @@ export async function markPoReceivedRpc(poId: string): Promise<void> {
   if (data && data.success === false) {
     throw new Error(data.message || 'فشلت العملية.')
   }
+  notifyProcurementChanged()
 }
 
 /**
@@ -639,6 +726,7 @@ export async function markPoInvoicedRpc(poId: string): Promise<void> {
   if (data && data.success === false) {
     throw new Error(data.message || 'فشلت العملية.')
   }
+  notifyProcurementChanged()
 }
 
 /**

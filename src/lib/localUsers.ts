@@ -726,11 +726,12 @@ export function getLocalSession(): LocalUserSession | null {
       const sess = JSON.parse(raw) as LocalUserSession
       const u = sess?.user
       if (u) {
-        const uName = (u.user_metadata?.username || u.app_metadata?.username || u.email || '').toLowerCase()
-        if (uName === 'marwan-desouky') {
+        // Security hardened: strictly respect signed app_metadata, never forge roles from user_metadata or unverified username
+        const appMetaRole = u.app_metadata?.role
+        const isSysAdmin = appMetaRole === 'system_admin' || u.app_metadata?.system_admin === true
+        if (isSysAdmin) {
           sess.user.app_metadata.role = 'system_admin'
           sess.user.app_metadata.system_admin = true
-          sess.user.user_metadata.role = 'system_admin'
           if (!sess.user.app_metadata.permissions || sess.user.app_metadata.permissions.length === 0) {
             sess.user.app_metadata.permissions = ['view_audit', 'view_settings', 'manage_records']
           }
@@ -745,7 +746,7 @@ export function getLocalSession(): LocalUserSession | null {
 }
 
 export function setLocalSession(user: LocalUser): LocalUserSession {
-  const isSysAdmin = user.role === 'system_admin' || user.username.toLowerCase() === 'marwan-desouky'
+  const isSysAdmin = user.role === 'system_admin'
   const effectiveRole: UserRole = isSysAdmin ? 'system_admin' : user.role
   const effectivePermissions = isSysAdmin
     ? ['view_audit', 'view_settings', 'manage_records']

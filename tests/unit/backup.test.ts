@@ -377,6 +377,63 @@ describe('System Backup Suite', () => {
     const storedLogs = JSON.parse(localStorage.getItem('warehouse-ledger-audit-logs') || '[]')
     expect(storedLogs.length).toBe(2)
   })
+
+  it('restores procurement purchase requests, quotes, orders, and chatbot directives with event notifications', async () => {
+    const payload = {
+      app: 'warehouse-ledger' as const,
+      version: '2.0.0' as const,
+      backupDate: new Date().toISOString(),
+      generator: { role: 'admin' },
+      metadata: {
+        organization: 'ZNU',
+        department: 'المخازن',
+        currency: 'EGP',
+        counts: {
+          movements: 0,
+          custody: 0,
+          users: 0,
+          auditLogs: 0,
+          purchaseRequests: 1,
+          supplierQuotes: 1,
+          purchaseOrders: 1,
+          chatbotDirectives: true,
+        },
+      },
+      data: {
+        settings: { organization: 'ZNU', department: 'المخازن', currency: 'EGP' as const },
+        movements: [],
+        custody: [],
+        users: [],
+        auditLogs: [],
+        purchaseRequests: [
+          { id: 'pr-1', request_no: 'PR-2026-001', department: 'الهندسة', status: 'approved' } as any,
+        ],
+        supplierQuotes: [
+          { id: 'q-1', request_id: 'pr-1', total_price: 15000, supplier_name: 'شركة النيل' } as any,
+        ],
+        purchaseOrders: [
+          { id: 'po-1', po_no: 'PO-2026-001', request_id: 'pr-1', total: 15000, status: 'open' } as any,
+        ],
+        chatbotDirectives: 'تعليمات اختبار المساعد الذكي',
+      },
+    }
+
+    const eventsFired: string[] = []
+    const track = (e: Event) => eventsFired.push(e.type)
+    window.addEventListener('procurement-updated', track)
+    window.addEventListener('chatbot-directives-changed', track)
+
+    const result = await restoreLocalBackup(payload, adminSession)
+    expect(result.success).toBe(true)
+    expect(result.counts.purchaseRequests).toBe(1)
+    expect(result.counts.supplierQuotes).toBe(1)
+    expect(result.counts.purchaseOrders).toBe(1)
+    expect(result.counts.chatbotDirectives).toBe(true)
+
+    expect(eventsFired).toContain('procurement-updated')
+    expect(eventsFired).toContain('chatbot-directives-changed')
+    expect(localStorage.getItem('znu_chatbot_custom_developer_directives')).toBe('تعليمات اختبار المساعد الذكي')
+  })
 })
 
 

@@ -12,6 +12,16 @@ import { logAuditEvent } from './auditLogger'
 
 const LOCAL_STORAGE_REQ_KEY = 'warehouse_ledger_registration_requests'
 
+function notifyRegistrationChanged(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('registration-requests-changed'))
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]> {
   if (supabase) {
     try {
@@ -50,9 +60,12 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
                 prefixCounts[p] = (prefixCounts[p] || 1) + 1
                 const newCode = `${p}-${String(prefixCounts[p]).padStart(6, '0')}`
                 r.employee_id = newCode
-                // Asynchronously heal in Supabase
-                void supabase.from('registration_requests').update({ employee_id: newCode }).eq('id', r.id)
-                void supabase.from('app_users').update({ employee_id: newCode }).eq('email', r.email)
+                // Asynchronously trigger server-side repair via admin-users Edge Function
+                if (supabase) {
+                  void supabase.functions.invoke('admin-users', {
+                    body: { action: 'repair_data_quality' },
+                  }).catch(() => {})
+                }
               }
             } else {
               seenCodes.add(empUpper)
@@ -143,6 +156,7 @@ export async function approveRegistrationRequest(
       })
 
       if (!edgeErr && edgeData?.success) {
+        notifyRegistrationChanged()
         return {
           success: true,
           employeeId: edgeData.employeeId,
@@ -206,6 +220,7 @@ export async function approveRegistrationRequest(
     details: { requestId, employeeId: allocatedId, role: approvedRole, email: req.email },
   })
 
+  notifyRegistrationChanged()
   return {
     success: true,
     employeeId: allocatedId,
@@ -228,6 +243,7 @@ export async function rejectRegistrationRequest(
         },
       })
       if (!error && data?.success) {
+        notifyRegistrationChanged()
         return { success: true, message: 'تم رفض طلب التسجيل.' }
       }
       if (error || (data && !data.success)) {
@@ -255,6 +271,8 @@ export async function rejectRegistrationRequest(
     entity_id: requestId,
     details: { requestId, rejectionReason },
   })
+
+  notifyRegistrationChanged()
 
   return { success: true, message: 'تم رفض طلب التسجيل بنجاح.' }
 }
@@ -385,6 +403,7 @@ export async function resendRegistrationInvitation(
         },
       })
       if (!error && data?.success) {
+        notifyRegistrationChanged()
         return { success: true, message: data.message || 'تمت إعادة إرسال الدعوة بنجاح.' }
       }
       if (error || (data && !data.success)) {
@@ -427,6 +446,7 @@ export async function cancelRegistrationInvitation(
         },
       })
       if (!error && data?.success) {
+        notifyRegistrationChanged()
         return { success: true, message: data.message || 'تم إلغاء الدعوة بنجاح.' }
       }
       if (error || (data && !data.success)) {

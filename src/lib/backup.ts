@@ -17,12 +17,31 @@ import { fetchAssetMovements, getLocalAssetMovements, saveLocalAssetMovements, t
 import { fetchSupportTickets, getLocalTickets, saveLocalTickets, type SupportTicket } from './supportTicketsRepository'
 import { fetchTelegramBotSettings, saveTelegramBotSettings, type TelegramBotSettings } from './telegramSettingsRepository'
 import { fetchNotifications, getLocalNotifications, saveLocalNotifications, type AppNotification } from './notificationsRepository'
+import {
+  fetchPurchaseRequests,
+  getLocalPurchaseRequests,
+  saveLocalPurchaseRequests,
+  fetchAllSupplierQuotes,
+  getLocalSupplierQuotes,
+  saveLocalSupplierQuotes,
+  fetchPurchaseOrders,
+  getLocalPurchaseOrders,
+  saveLocalPurchaseOrders,
+  type PurchaseRequest,
+  type SupplierQuote,
+  type PurchaseOrder,
+} from './procurementRepository'
+import { fetchRegistrationRequests } from './registrationService'
+import type { RegistrationRequest } from './employeeIdentity'
 
 export const LAST_CLOUD_BACKUP_KEY = 'warehouse-ledger-last-cloud-backup'
 export const LAST_LOCAL_BACKUP_KEY = 'warehouse-ledger-last-local-backup'
+export const LAST_AUTO_BACKUP_KEY = 'warehouse-ledger-last-auto-backup-time'
+export const AUTO_RECOVERY_STORAGE_KEY = 'warehouse-ledger-auto-recovery-snapshot'
 
 const INSPECTIONS_STORAGE_KEY = 'warehouse_inspection_reports'
 const SETTLEMENTS_STORAGE_KEY = 'warehouse_settlement_history'
+const CHATBOT_DIRECTIVES_STORAGE_KEY = 'znu_chatbot_custom_developer_directives'
 
 export type SystemBackupCounts = {
   movements: number
@@ -40,6 +59,11 @@ export type SystemBackupCounts = {
   inventorySettlements?: number
   telegramSettings?: number
   notifications?: number
+  purchaseRequests?: number
+  supplierQuotes?: number
+  purchaseOrders?: number
+  registrationRequests?: number
+  chatbotDirectives?: boolean
   settings?: boolean
 }
 
@@ -75,6 +99,11 @@ export type SystemBackupPayload = {
     inventorySettlements?: Record<string, unknown>[]
     telegramSettings?: TelegramBotSettings
     notifications?: AppNotification[]
+    purchaseRequests?: PurchaseRequest[]
+    supplierQuotes?: SupplierQuote[]
+    purchaseOrders?: PurchaseOrder[]
+    registrationRequests?: RegistrationRequest[]
+    chatbotDirectives?: string
   }
 }
 
@@ -102,6 +131,11 @@ export type RestoreOptions = {
   restoreInventorySettlements?: boolean
   restoreTelegramSettings?: boolean
   restoreNotifications?: boolean
+  restorePurchaseRequests?: boolean
+  restoreSupplierQuotes?: boolean
+  restorePurchaseOrders?: boolean
+  restoreRegistrationRequests?: boolean
+  restoreChatbotDirectives?: boolean
 }
 
 export type RestoreResult = {
@@ -150,6 +184,25 @@ export function getLastCloudBackupTime(): string | null {
 export function getLastLocalBackupTime(): string | null {
   try {
     return localStorage.getItem(LAST_LOCAL_BACKUP_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function getLastAutoBackupTime(): string | null {
+  try {
+    return localStorage.getItem(LAST_AUTO_BACKUP_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function getAutoRecoverySnapshot(): SystemBackupPayload | null {
+  try {
+    const raw = localStorage.getItem(AUTO_RECOVERY_STORAGE_KEY)
+    if (!raw) return null
+    const valid = validateBackupPayload(raw)
+    return valid.valid && valid.payload ? valid.payload : null
   } catch {
     return null
   }
@@ -447,6 +500,67 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
     // ignore
   }
 
+  // 16. Purchase Requests (طلبات الشراء وبنودها واعتماداتها)
+  let purchaseRequests: PurchaseRequest[] = getLocalPurchaseRequests()
+  try {
+    const cloudRequests = await fetchPurchaseRequests()
+    if (cloudRequests && cloudRequests.length > 0) {
+      const prMap = new Map<string, PurchaseRequest>()
+      for (const pr of purchaseRequests) if (pr.id) prMap.set(pr.id, pr)
+      for (const pr of cloudRequests) if (pr.id) prMap.set(pr.id, pr)
+      purchaseRequests = Array.from(prMap.values())
+    }
+  } catch {
+    // ignore
+  }
+
+  // 17. Supplier Quotes (عروض أسعار الموردين)
+  let supplierQuotes: SupplierQuote[] = getLocalSupplierQuotes()
+  try {
+    const cloudQuotes = await fetchAllSupplierQuotes()
+    if (cloudQuotes && cloudQuotes.length > 0) {
+      const qMap = new Map<string, SupplierQuote>()
+      for (const q of supplierQuotes) if (q.id) qMap.set(q.id, q)
+      for (const q of cloudQuotes) if (q.id) qMap.set(q.id, q)
+      supplierQuotes = Array.from(qMap.values())
+    }
+  } catch {
+    // ignore
+  }
+
+  // 18. Purchase Orders (أوامر الشراء والتوريد الصادرة)
+  let purchaseOrders: PurchaseOrder[] = getLocalPurchaseOrders()
+  try {
+    const cloudPO = await fetchPurchaseOrders()
+    if (cloudPO && cloudPO.length > 0) {
+      const poMap = new Map<string, PurchaseOrder>()
+      for (const po of purchaseOrders) if (po.id) poMap.set(po.id, po)
+      for (const po of cloudPO) if (po.id) poMap.set(po.id, po)
+      purchaseOrders = Array.from(poMap.values())
+    }
+  } catch {
+    // ignore
+  }
+
+  // 19. Registration Requests (طلبات تسجيل الموظفين الجدد)
+  let registrationRequests: RegistrationRequest[] = []
+  try {
+    const regReqs = await fetchRegistrationRequests()
+    if (regReqs && regReqs.length > 0) {
+      registrationRequests = regReqs
+    }
+  } catch {
+    // ignore
+  }
+
+  // 20. Chatbot Developer Directives (توجيهات الذكاء الاصطناعي للمخازن)
+  let chatbotDirectives = ''
+  try {
+    chatbotDirectives = localStorage.getItem(CHATBOT_DIRECTIVES_STORAGE_KEY) || ''
+  } catch {
+    // ignore
+  }
+
   const timestamp = new Date().toISOString()
 
   const payload: SystemBackupPayload = {
@@ -478,6 +592,11 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
         inventorySettlements: inventorySettlements.length,
         telegramSettings: telegramSettings ? 1 : 0,
         notifications: notifications.length,
+        purchaseRequests: purchaseRequests.length,
+        supplierQuotes: supplierQuotes.length,
+        purchaseOrders: purchaseOrders.length,
+        registrationRequests: registrationRequests.length,
+        chatbotDirectives: chatbotDirectives ? true : false,
       },
     },
     data: {
@@ -497,6 +616,11 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
       inventorySettlements,
       telegramSettings,
       notifications,
+      purchaseRequests,
+      supplierQuotes,
+      purchaseOrders,
+      registrationRequests,
+      chatbotDirectives,
     },
   }
 
@@ -729,6 +853,55 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
     }
   }
 
+  // 14. Purchase Requests Backup to Cloud (طلبات الشراء)
+  const purchaseRequests = getLocalPurchaseRequests()
+  if (purchaseRequests.length > 0) {
+    for (const pr of purchaseRequests) {
+      try {
+        const { items, approvals, ...reqRow } = pr as any
+        const payload = sanitizeForUuidPk(reqRow)
+        await supabase.from('purchase_requests').upsert(payload, { onConflict: 'request_no' })
+      } catch (err) {
+        console.warn('Could not sync purchase request to cloud:', err)
+      }
+    }
+  }
+
+  // 15. Supplier Quotes Backup to Cloud (عروض الأسعار)
+  const supplierQuotes = getLocalSupplierQuotes()
+  if (supplierQuotes.length > 0) {
+    for (const q of supplierQuotes) {
+      try {
+        const payload = sanitizeForUuidPk(q)
+        await supabase.from('supplier_quotes').upsert(payload)
+      } catch (err) {
+        console.warn('Could not sync supplier quote to cloud:', err)
+      }
+    }
+  }
+
+  // 16. Purchase Orders Backup to Cloud (أوامر الشراء)
+  const purchaseOrders = getLocalPurchaseOrders()
+  if (purchaseOrders.length > 0) {
+    for (const po of purchaseOrders) {
+      try {
+        const payload = sanitizeForUuidPk(po)
+        await supabase.from('purchase_orders').upsert(payload, { onConflict: 'po_no' })
+      } catch (err) {
+        console.warn('Could not sync purchase order to cloud:', err)
+      }
+    }
+  }
+
+  // 17. Registration Requests Backup to Cloud (طلبات تسجيل الموظفين)
+  let registrationRequestsCount = 0
+  try {
+    const regReqs = await fetchRegistrationRequests()
+    registrationRequestsCount = regReqs.length
+  } catch {
+    // ignore
+  }
+
   try {
     localStorage.setItem(LAST_CLOUD_BACKUP_KEY, timestamp)
   } catch {
@@ -749,6 +922,10 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
     technicalInspections: technicalInspections.length,
     inventorySettlements: inventorySettlements.length,
     notifications: notifications.length,
+    purchaseRequests: purchaseRequests.length,
+    supplierQuotes: supplierQuotes.length,
+    purchaseOrders: purchaseOrders.length,
+    registrationRequests: registrationRequestsCount,
     settings: true,
   }
 
@@ -821,6 +998,11 @@ export function validateBackupPayload(jsonString: string): {
           inventorySettlements: Array.isArray(candidate.data.inventorySettlements) ? candidate.data.inventorySettlements.length : 0,
           telegramSettings: candidate.data.telegramSettings ? 1 : 0,
           notifications: Array.isArray(candidate.data.notifications) ? candidate.data.notifications.length : 0,
+          purchaseRequests: Array.isArray(candidate.data.purchaseRequests) ? candidate.data.purchaseRequests.length : 0,
+          supplierQuotes: Array.isArray(candidate.data.supplierQuotes) ? candidate.data.supplierQuotes.length : 0,
+          purchaseOrders: Array.isArray(candidate.data.purchaseOrders) ? candidate.data.purchaseOrders.length : 0,
+          registrationRequests: Array.isArray(candidate.data.registrationRequests) ? candidate.data.registrationRequests.length : 0,
+          chatbotDirectives: Boolean(candidate.data.chatbotDirectives),
         },
       },
       data: {
@@ -840,6 +1022,11 @@ export function validateBackupPayload(jsonString: string): {
         inventorySettlements: Array.isArray(candidate.data.inventorySettlements) ? candidate.data.inventorySettlements : [],
         telegramSettings: candidate.data.telegramSettings,
         notifications: Array.isArray(candidate.data.notifications) ? candidate.data.notifications : [],
+        purchaseRequests: Array.isArray(candidate.data.purchaseRequests) ? candidate.data.purchaseRequests : [],
+        supplierQuotes: Array.isArray(candidate.data.supplierQuotes) ? candidate.data.supplierQuotes : [],
+        purchaseOrders: Array.isArray(candidate.data.purchaseOrders) ? candidate.data.purchaseOrders : [],
+        registrationRequests: Array.isArray(candidate.data.registrationRequests) ? candidate.data.registrationRequests : [],
+        chatbotDirectives: typeof candidate.data.chatbotDirectives === 'string' ? candidate.data.chatbotDirectives : '',
       },
     }
 
@@ -884,6 +1071,11 @@ export async function restoreLocalBackup(
     restoreInventorySettlements: true,
     restoreTelegramSettings: true,
     restoreNotifications: true,
+    restorePurchaseRequests: true,
+    restoreSupplierQuotes: true,
+    restorePurchaseOrders: true,
+    restoreRegistrationRequests: true,
+    restoreChatbotDirectives: true,
     ...options,
   }
 
@@ -902,6 +1094,11 @@ export async function restoreLocalBackup(
     technicalInspections: 0,
     inventorySettlements: 0,
     notifications: 0,
+    purchaseRequests: 0,
+    supplierQuotes: 0,
+    purchaseOrders: 0,
+    registrationRequests: 0,
+    chatbotDirectives: false,
     settings: false,
   }
 
@@ -1143,6 +1340,80 @@ export async function restoreLocalBackup(
     }
   }
 
+  // 17. Purchase Requests restoration (طلبات الشراء)
+  if (opts.restorePurchaseRequests && Array.isArray(payload.data.purchaseRequests)) {
+    saveLocalPurchaseRequests(payload.data.purchaseRequests)
+    counts.purchaseRequests = payload.data.purchaseRequests.length
+    if (supabase && payload.data.purchaseRequests.length > 0) {
+      for (const pr of payload.data.purchaseRequests) {
+        try {
+          const { items, approvals, ...reqRow } = pr as any
+          const clean = sanitizeForUuidPk(reqRow)
+          await supabase.from('purchase_requests').upsert(clean, { onConflict: 'request_no' })
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  // 18. Supplier Quotes restoration (عروض الأسعار)
+  if (opts.restoreSupplierQuotes && Array.isArray(payload.data.supplierQuotes)) {
+    saveLocalSupplierQuotes(payload.data.supplierQuotes)
+    counts.supplierQuotes = payload.data.supplierQuotes.length
+    if (supabase && payload.data.supplierQuotes.length > 0) {
+      for (const q of payload.data.supplierQuotes) {
+        try {
+          const clean = sanitizeForUuidPk(q)
+          await supabase.from('supplier_quotes').upsert(clean)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  // 19. Purchase Orders restoration (أوامر الشراء والتوريد)
+  if (opts.restorePurchaseOrders && Array.isArray(payload.data.purchaseOrders)) {
+    saveLocalPurchaseOrders(payload.data.purchaseOrders)
+    counts.purchaseOrders = payload.data.purchaseOrders.length
+    if (supabase && payload.data.purchaseOrders.length > 0) {
+      for (const po of payload.data.purchaseOrders) {
+        try {
+          const clean = sanitizeForUuidPk(po)
+          await supabase.from('purchase_orders').upsert(clean, { onConflict: 'po_no' })
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  // 20. Registration Requests restoration (طلبات تسجيل الموظفين)
+  if (opts.restoreRegistrationRequests && Array.isArray(payload.data.registrationRequests)) {
+    counts.registrationRequests = payload.data.registrationRequests.length
+    if (supabase && payload.data.registrationRequests.length > 0) {
+      for (const reg of payload.data.registrationRequests) {
+        try {
+          const clean = sanitizeForUuidPk(reg)
+          await supabase.from('registration_requests').upsert(clean)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  // 21. Chatbot Directives restoration (توجيهات الذكاء الاصطناعي للمخازن)
+  if (opts.restoreChatbotDirectives && typeof payload.data.chatbotDirectives === 'string') {
+    try {
+      localStorage.setItem(CHATBOT_DIRECTIVES_STORAGE_KEY, payload.data.chatbotDirectives)
+      counts.chatbotDirectives = true
+    } catch {
+      // ignore
+    }
+  }
+
   const timestamp = new Date().toISOString()
 
   // Dispatch global events for ALL system pages so that views react immediately
@@ -1165,6 +1436,9 @@ export async function restoreLocalBackup(
       window.dispatchEvent(new CustomEvent('inventory-settlements-changed'))
       window.dispatchEvent(new CustomEvent('telegram-settings-changed'))
       window.dispatchEvent(new CustomEvent('notifications-changed'))
+      window.dispatchEvent(new CustomEvent('procurement-updated'))
+      window.dispatchEvent(new CustomEvent('registration-requests-changed'))
+      window.dispatchEvent(new CustomEvent('chatbot-directives-changed'))
     }
   } catch {
     // ignore
@@ -1388,6 +1662,49 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
     console.warn('Could not restore notifications from cloud:', err)
   }
 
+  // 17. Purchase Requests (طلبات الشراء)
+  try {
+    const { data: cloudPR } = await supabase.from('purchase_requests').select('*').order('created_at', { ascending: false })
+    if (cloudPR && Array.isArray(cloudPR)) {
+      saveLocalPurchaseRequests(cloudPR)
+      counts.purchaseRequests = cloudPR.length
+    }
+  } catch (err) {
+    console.warn('Could not restore purchase requests from cloud:', err)
+  }
+
+  // 18. Supplier Quotes (عروض الأسعار)
+  try {
+    const { data: cloudQuotes } = await supabase.from('supplier_quotes').select('*').order('created_at', { ascending: false })
+    if (cloudQuotes && Array.isArray(cloudQuotes)) {
+      saveLocalSupplierQuotes(cloudQuotes)
+      counts.supplierQuotes = cloudQuotes.length
+    }
+  } catch (err) {
+    console.warn('Could not restore supplier quotes from cloud:', err)
+  }
+
+  // 19. Purchase Orders (أوامر الشراء)
+  try {
+    const { data: cloudPO } = await supabase.from('purchase_orders').select('*').order('created_at', { ascending: false })
+    if (cloudPO && Array.isArray(cloudPO)) {
+      saveLocalPurchaseOrders(cloudPO)
+      counts.purchaseOrders = cloudPO.length
+    }
+  } catch (err) {
+    console.warn('Could not restore purchase orders from cloud:', err)
+  }
+
+  // 20. Registration Requests (طلبات تسجيل الموظفين)
+  try {
+    const { data: cloudReg } = await supabase.from('registration_requests').select('*').order('created_at', { ascending: false })
+    if (cloudReg && Array.isArray(cloudReg)) {
+      counts.registrationRequests = cloudReg.length
+    }
+  } catch (err) {
+    console.warn('Could not restore registration requests from cloud:', err)
+  }
+
   const timestamp = new Date().toISOString()
 
   // Dispatch global events for UI views
@@ -1410,6 +1727,9 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
       window.dispatchEvent(new CustomEvent('inventory-settlements-changed'))
       window.dispatchEvent(new CustomEvent('telegram-settings-changed'))
       window.dispatchEvent(new CustomEvent('notifications-changed'))
+      window.dispatchEvent(new CustomEvent('procurement-updated'))
+      window.dispatchEvent(new CustomEvent('registration-requests-changed'))
+      window.dispatchEvent(new CustomEvent('chatbot-directives-changed'))
     }
   } catch {
     // ignore

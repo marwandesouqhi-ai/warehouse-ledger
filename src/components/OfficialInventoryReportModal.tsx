@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
@@ -48,8 +48,19 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
     return getWarehouseStats(whItems)
   }, [whItems])
 
+  useEffect(() => {
+    function handleAfterPrint() {
+      document.body.classList.remove('printing-official-inventory')
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => window.removeEventListener('afterprint', handleAfterPrint)
+  }, [])
+
   function handlePrint() {
-    window.print()
+    document.body.classList.add('printing-official-inventory')
+    setTimeout(() => {
+      window.print()
+    }, 50)
   }
 
   const logoUrl = settings.logoDataUrl || settings.logoUrl
@@ -78,7 +89,7 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
         transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
         style={{ maxWidth: '1020px', width: '96vw' }}
       >
-        {/* Top Header Controls (Hidden when printed) */}
+        {/* Top Header Controls (Hidden in Print) */}
         <div className="modal-header no-print flex items-center justify-between p-4 border-b border-line bg-surface">
           <div className="flex items-center gap-2">
             <button
@@ -122,46 +133,39 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
 
         {/* Scrollable Document Preview Body */}
         <div className="modal-body-scroll p-6 bg-slate-50 dark:bg-slate-900/40" style={{ overflowY: 'auto', maxHeight: 'calc(88vh - 120px)' }}>
-          <div className="card-surface p-8 max-w-4xl mx-auto shadow-md rounded-xl bg-white relative">
-            {/* Watermark */}
+          <div
+            id="printable-official-inventory"
+            className="card-surface official-print-card-surface p-8 max-w-4xl mx-auto shadow-md rounded-xl bg-white text-slate-900 relative"
+            style={{ color: '#0f172a' }}
+          >
+            {/* Watermark: centered on every page in print */}
             {logoUrl && (
-              <div
-                className="print-watermark"
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  opacity: 0.05,
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                }}
-              >
-                <img src={logoUrl} alt="" style={{ maxWidth: '280px', maxHeight: '280px' }} />
+              <div className="print-watermark" aria-hidden="true">
+                <img src={logoUrl} alt="" />
               </div>
             )}
 
-            {/* Letterhead */}
-            <header className="flex items-start justify-between border-b pb-4 mb-4 gap-4">
-              <div className="text-right">
-                <div className="font-bold text-sm text-ink">جمهورية مصر العربية</div>
-                <div className="font-bold text-base text-accent">{settings.organization || 'جامعة الزقازيق الأهلية'}</div>
-                <div className="font-sm text-ink">{settings.department || 'إدارة المخازن والمشتريات'}</div>
-                <div className="font-xs text-muted">قسم مراقبة وتوثيق العهد والأصول المستديمة</div>
+            {/* Official Letterhead */}
+            <header className="print-letterhead flex items-start justify-between border-b pb-4 mb-4 gap-4">
+              <div className="print-header-col print-header-right text-right">
+                <div className="print-gov-heading font-bold text-sm text-ink">جمهورية مصر العربية</div>
+                <div className="print-org-name font-bold text-base text-accent">{settings.organization || 'جامعة الزقازيق الأهلية'}</div>
+                <div className="print-dept-name font-sm text-ink">{settings.department || 'إدارة المخازن والمشتريات'}</div>
+                <div className="print-subdept-name font-xs text-muted">قسم مراقبة وتوثيق العهد والأصول المستديمة</div>
               </div>
 
-              <div className="text-center">
+              <div className="print-header-col print-header-center text-center">
                 {logoUrl ? (
-                  <img src={logoUrl} alt="Logo" style={{ maxHeight: '64px', maxWidth: '120px', objectFit: 'contain' }} />
+                  <img src={logoUrl} alt="Logo" className="print-official-logo mx-auto" style={{ maxHeight: '64px', maxWidth: '120px', objectFit: 'contain' }} />
                 ) : (
                   <div className="p-3 rounded-full bg-slate-100 text-muted inline-block">
                     <Warehouse size={32} />
                   </div>
                 )}
-                <div className="text-xs font-bold text-accent mt-1">كشف جرد رسمي معتمد</div>
+                <div className="print-stamp-title text-xs font-bold text-accent mt-1">كشف جرد رسمي معتمد</div>
               </div>
 
-              <div className="text-left font-xs">
+              <div className="print-header-col print-header-left text-left font-xs">
                 <div><strong>المستودع:</strong> {warehouse.name}</div>
                 <div><strong>الموقع:</strong> {warehouse.building}</div>
                 <div><strong>تاريخ الجرد:</strong> {todayArabic}</div>
@@ -170,35 +174,35 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
             </header>
 
             {/* Document Title Banner */}
-            <div className="text-center py-3 bg-slate-50 rounded-lg mb-4 border border-line">
-              <h1 className="text-xl font-black text-ink m-0">محضر جرد وإثبات العهدة والأصول المستديمة</h1>
-              <div className="text-xs text-muted mt-1">
+            <div className="print-title-banner text-center py-3 bg-slate-50 rounded-lg mb-4 border border-line">
+              <h1 className="print-doc-title text-xl font-black text-ink m-0">محضر جرد وإثبات العهدة والأصول المستديمة</h1>
+              <div className="print-doc-subtitle text-xs text-muted mt-1">
                 طبقاً للائحة المخازن والمشتريات وقواعد حصر وتدقيق الأصول التخصصية
               </div>
             </div>
 
-            {/* Summary Strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center p-3 bg-slate-100/70 rounded-lg mb-4 font-xs border border-line">
-              <div>
-                <span className="text-muted block">إجمالي بنود العهدة:</span>
-                <strong className="text-sm font-bold text-ink">{whItems.length} صنف</strong>
+            {/* Summary KPI Strip */}
+            <div className="print-summary-strip grid grid-cols-2 md:grid-cols-4 gap-2 text-center p-3 bg-slate-100/70 rounded-lg mb-4 font-xs border border-line">
+              <div className="print-summary-cell">
+                <span className="print-summary-label text-muted block">إجمالي بنود العهدة:</span>
+                <strong className="print-summary-val text-sm font-bold text-ink">{whItems.length} صنف</strong>
               </div>
-              <div>
-                <span className="text-muted block">إجمالي الوحدات:</span>
-                <strong className="text-sm font-bold text-ink">{stats.totalUnits} جهاز / وحدة</strong>
+              <div className="print-summary-cell">
+                <span className="print-summary-label text-muted block">إجمالي الوحدات:</span>
+                <strong className="print-summary-val text-sm font-bold text-ink">{stats.totalUnits} جهاز / وحدة</strong>
               </div>
-              <div>
-                <span className="text-muted block">القيمة الدفترية:</span>
-                <strong className="text-sm font-bold text-accent">{formatMoney(stats.totalValue, currency)}</strong>
+              <div className="print-summary-cell">
+                <span className="print-summary-label text-muted block">القيمة الدفترية:</span>
+                <strong className="print-summary-val accent text-sm font-bold text-accent">{formatMoney(stats.totalValue, currency)}</strong>
               </div>
-              <div>
-                <span className="text-muted block">نسبة الجاهزية:</span>
-                <strong className="text-sm font-bold text-emerald-700">{stats.healthyRatio}% صالحة</strong>
+              <div className="print-summary-cell">
+                <span className="print-summary-label text-muted block">نسبة الجاهزية:</span>
+                <strong className="print-summary-val success text-sm font-bold text-emerald-700">{stats.healthyRatio}% صالحة</strong>
               </div>
             </div>
 
-            {/* Items Table */}
-            <table className="w-full text-xs text-right mb-6" style={{ borderCollapse: 'collapse' }}>
+            {/* Main Items Table */}
+            <table className="print-official-table w-full text-xs text-right mb-6" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr className="bg-slate-100 border-b border-line">
                   <th className="p-2 text-center w-8">م</th>
@@ -252,34 +256,36 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
               </tbody>
             </table>
 
-            {/* Official Signatures Grid */}
-            <div className="border-t pt-4 mt-6">
-              <div className="text-xs text-muted text-center mb-4">
+            {/* Official Signatures Grid (Image 3: Anchored at end of last page) */}
+            <div className="print-signatures-section border-t pt-4 mt-6">
+              <div className="print-signatures-notice text-xs text-muted text-center mb-4">
                 * يُقر الموقعون أدناه بصحة البيانات والمطابقة الفعلية لجرد العهدة والأصول على الطبيعة وفقاً للوائح والقوانين المخزنية.
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-xs">
-                <div className="p-3 border border-line rounded-lg">
-                  <strong className="block mb-6 text-ink">أمين العهدة المسؤول</strong>
-                  <div className="text-muted">الاسم: ....................</div>
-                  <div className="text-muted mt-1">التوقيع: ..................</div>
+              <div className="print-signatures-grid grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-xs">
+                <div className="print-signature-box p-3 border border-line rounded-lg">
+                  <strong className="print-sig-role block mb-6 text-ink">أمين العهدة المسؤول</strong>
+                  <div className="print-sig-field text-muted">الاسم: ....................</div>
+                  <div className="print-sig-field text-muted mt-1">التوقيع: ..................</div>
                 </div>
 
-                <div className="p-3 border border-line rounded-lg">
-                  <strong className="block mb-6 text-ink">عضو لجنة الجرد والفحص</strong>
-                  <div className="text-muted">الاسم: ....................</div>
-                  <div className="text-muted mt-1">التوقيع: ..................</div>
+                <div className="print-signature-box p-3 border border-line rounded-lg">
+                  <strong className="print-sig-role block mb-6 text-ink">عضو لجنة الجرد والفحص</strong>
+                  <div className="print-sig-field text-muted">الاسم: ....................</div>
+                  <div className="print-sig-field text-muted mt-1">التوقيع: ..................</div>
                 </div>
 
-                <div className="p-3 border border-line rounded-lg">
-                  <strong className="block mb-6 text-ink">مدير إدارة المخازن</strong>
-                  <div className="text-muted">الاسم: ....................</div>
-                  <div className="text-muted mt-1">التوقيع: ..................</div>
+                <div className="print-signature-box p-3 border border-line rounded-lg">
+                  <strong className="print-sig-role block mb-6 text-ink">مدير إدارة المخازن</strong>
+                  <div className="print-sig-field text-muted">الاسم: ....................</div>
+                  <div className="print-sig-field text-muted mt-1">التوقيع: ..................</div>
                 </div>
 
-                <div className="p-3 border border-line rounded-lg bg-slate-50">
-                  <strong className="block mb-4 text-ink">يعتمد: رئيس الجهة</strong>
-                  <div className="text-muted">الاعتماد: ..................</div>
-                  <div className="text-muted mt-2 text-xs font-semibold">(خاتم شعار المؤسسة)</div>
+                <div className="print-signature-box print-seal-box p-3 border border-line rounded-lg bg-slate-50">
+                  <strong className="print-sig-role block mb-4 text-ink">يعتمد: رئيس الجهة</strong>
+                  <div className="print-sig-field text-muted">الاعتماد: ..................</div>
+                  <div className="print-seal-area mt-2">
+                    <span className="print-seal-hint text-xs font-semibold">(خاتم شعار المؤسسة)</span>
+                  </div>
                 </div>
               </div>
             </div>

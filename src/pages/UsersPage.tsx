@@ -84,11 +84,11 @@ export default function UsersPage({ session }: UsersPageProps) {
     const isSystemAdmin = checkIsSystemAdmin(session)
     const localSess = getLocalSession()
     const activeUserEmail = (
-        localSess?.user?.user_metadata?.username ||
-        localSess?.user?.email ||
-        session?.user?.user_metadata?.username ||
+        (session?.user?.app_metadata as any)?.username ||
         session?.user?.email ||
-        'marwan-desouky'
+        (localSess?.user?.app_metadata as any)?.username ||
+        localSess?.user?.email ||
+        ''
     )
     const currentSession = localSess || session
 
