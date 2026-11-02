@@ -466,9 +466,6 @@ export function startAutoBackupWatcher(session?: Session | null): () => void {
       // ignore
     }
   }
-      // ignore
-    }
-  }
 
   // Check every 30 seconds
   scheduleInterval = setInterval(checkScheduledBackup, 30000)
