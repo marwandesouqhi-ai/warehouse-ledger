@@ -15,6 +15,7 @@ export type FixtureMovement = {
     notes: string
     custodyApplied?: boolean
     createdBy?: string
+    sourceItemId?: string
     sourceWarehouseId?: string
     destType?: 'warehouse' | 'custodian'
     destWarehouseId?: string

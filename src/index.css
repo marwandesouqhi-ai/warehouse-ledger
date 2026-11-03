@@ -7,6 +7,7 @@
   --muted: #667570;
   --line: #dce6e2;
   --accent: #087f68;
+  --accent-foreground: #ffffff;
   --accent-wash: #e9f5f1;
   --warn-bg: #fff3de;
   --warn: #b86e00;
@@ -34,6 +35,7 @@
   --muted: #a0b0aa;
   --line: #30403a;
   --accent: #56b99e;
+  --accent-foreground: #111a18;
   --accent-wash: #203a32;
   --warn-bg: rgba(240, 176, 74, 0.16);
   --warn: #f0b04a;

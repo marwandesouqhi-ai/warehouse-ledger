@@ -1,3 +1,4 @@
+import { localDate } from './localDate'
 import type { Session } from '@supabase/supabase-js'
 import { logAuditEvent, getLocalAuditLogs, type AuditLogEntry } from './auditLogger'
 import { fetchCustodyItemsFromCloud, loadCustodyItems, saveCustodyItems, saveCustodyItemsToCloud, type CustodyItem } from './custody'
@@ -152,7 +153,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
 
   const jsonString = JSON.stringify(payload, null, 2)
   const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' })
-  const dateStr = timestamp.slice(0, 10)
+  const dateStr = localDate(timestamp)
   const timeStr = timestamp.slice(11, 16).replace(':', '-')
   const fileName = `نسخة_احتياطية_شاملة_المخازن_${dateStr}_${timeStr}.json`
 

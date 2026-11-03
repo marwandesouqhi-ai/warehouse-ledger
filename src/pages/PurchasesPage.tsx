@@ -1,3 +1,4 @@
+import { localDate } from '../lib/localDate'
 import { useMemo, useState, useEffect } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -15,7 +16,6 @@ import {
   Receipt,
   Search,
   ShoppingCart,
-  Sparkles,
   Trash2,
   UserCheck,
   X,
@@ -32,7 +32,6 @@ type PurchasesPageProps = {
   onSaveMovement: (movement: FixtureMovement) => Promise<void>
   onEdit: (movement: FixtureMovement) => void
   onDelete: (movement: FixtureMovement) => void
-  onLoadDemoData: () => void
   canEdit?: boolean
   isSystemAdmin?: boolean
   session?: Session | null
@@ -58,7 +57,6 @@ export default function PurchasesPage({
   onSaveMovement,
   onEdit,
   onDelete,
-  onLoadDemoData,
   canEdit = true,
   isSystemAdmin = false,
   session,
@@ -81,7 +79,7 @@ export default function PurchasesPage({
 
   // New Purchase Form State
   const [formItem, setFormItem] = useState('')
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formDate, setFormDate] = useState(() => localDate())
   const [formInv, setFormInv] = useState('')
   const [formFrom, setFormFrom] = useState('')
   const [formQin, setFormQin] = useState('')
@@ -229,7 +227,7 @@ export default function PurchasesPage({
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'سجل المشتريات والتوريدات')
-    XLSX.writeFile(workbook, `سجل-المشتريات-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(workbook, `سجل-المشتريات-${localDate()}.xlsx`)
   }
 
   async function handleAddPurchaseSubmit(e: React.FormEvent) {
@@ -369,8 +367,8 @@ export default function PurchasesPage({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: 'span 2' }}>
+            <div className="purchase-form-grid">
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: '1 / -1' }}>
                 اسم الصنف / الجهاز / الأصل <span style={{ color: 'var(--accent)' }}>*</span>
                 <input
                   type="text"
@@ -451,7 +449,7 @@ export default function PurchasesPage({
                 </strong>
               </div>
 
-              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: 'span 2' }}>
+              <label style={{ display: 'grid', gap: '6px', fontSize: '0.88rem', gridColumn: '1 / -1' }}>
                 ملاحظات الفاتورة أو شروط التسليم
                 <textarea
                   value={formNotes}
@@ -656,9 +654,6 @@ export default function PurchasesPage({
                           <div className="empty-quick-actions">
                             <button type="button" className="primary-btn" onClick={() => setActiveTab('add')}>
                               <Plus size={16} /> إضافة فاتورة شراء جديدة
-                            </button>
-                            <button type="button" className="secondary-btn" onClick={onLoadDemoData}>
-                              <Sparkles size={16} /> تحميل بيانات تجريبية
                             </button>
                           </div>
                         )}

@@ -93,11 +93,10 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(stats.healthyRatio).toBe(50) // 1 out of 2 is excellent/good
   })
 
-  it('seeds main warehouse custody with purchases items when no user records are present', () => {
+  it('keeps a new warehouse empty unless demo mode is explicitly enabled', () => {
     expect(fixtureCustodyItems.length).toBe(32)
     const items = loadCustodyItems()
-    expect(items).toHaveLength(32)
-    expect(items.every((i) => i.warehouseId === 'main')).toBe(true)
+    expect(items).toEqual([])
   })
 
   it('persists and retrieves custody items to and from localStorage', () => {
@@ -166,7 +165,7 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(res2.item.quantity).toBe(15)
 
     const allMain = loadCustodyItems().filter((i) => i.warehouseId === 'main')
-    expect(allMain).toHaveLength(fixtureCustodyItems.length + 1)
+    expect(allMain).toHaveLength(1)
     const microscope = allMain.find((i) => i.name === 'ميكروسكوب ضوئي رقمي')
     expect(microscope).toBeDefined()
     expect(microscope?.quantity).toBe(15)
@@ -206,7 +205,7 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(fciItem?.notes).toContain('PERM-99')
   })
 
-  it('automatically calculates total value from quantity and unitPrice when user entered unit price into value field', () => {
+  it('preserves legacy values without guessing that they represent unit prices', () => {
     // Simulate user entering quantity=450 and unitPrice=6930 into the legacy value field
     const legacyItems: CustodyItem[] = [
       {
@@ -249,17 +248,17 @@ describe('Custody Module & Warehouse Definitions', () => {
     const tableItem = loaded.find((i) => i.code === 'CUS-8832')
     expect(tableItem).toBeDefined()
     expect(tableItem?.quantity).toBe(450)
-    expect(tableItem?.unitPrice).toBe(6930)
-    expect(tableItem?.value).toBe(450 * 6930) // 3,118,500
+    expect(tableItem?.unitPrice).toBeUndefined()
+    expect(tableItem?.value).toBe(6930)
 
     const deskItem = loaded.find((i) => i.code === 'CUS-0026')
     expect(deskItem).toBeDefined()
     expect(deskItem?.quantity).toBe(13)
-    expect(deskItem?.unitPrice).toBe(8847)
-    expect(deskItem?.value).toBe(13 * 8847) // 115,011
+    expect(deskItem?.unitPrice).toBeUndefined()
+    expect(deskItem?.value).toBe(8847)
   })
 
-  it('automatically repairs items where value was erroneously saved equal to unitPrice for quantity > 1', () => {
+  it('does not rewrite totals that happen to equal unit price', () => {
     const itemsWithValueEqualsUnitPrice: CustodyItem[] = [
       {
         id: 'c-test-28',
@@ -285,7 +284,7 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(loaded).toHaveLength(1)
     expect(loaded[0].quantity).toBe(28)
     expect(loaded[0].unitPrice).toBe(14611)
-    expect(loaded[0].value).toBe(28 * 14611) // 409,108
+    expect(loaded[0].value).toBe(14611)
   })
 })
 

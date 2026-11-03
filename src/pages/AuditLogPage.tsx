@@ -1,3 +1,4 @@
+import { localDate } from '../lib/localDate'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
@@ -78,8 +79,8 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         )
     })
 
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const todayCount = logs.filter((l) => l.created_at?.slice(0, 10) === todayStr).length
+    const todayStr = localDate()
+    const todayCount = logs.filter((l) => Boolean(l.created_at) && localDate(l.created_at) === todayStr).length
     const movementsCount = logs.filter((l) => l.entity_type === 'movement' || l.action.includes('حركة')).length
     const invitesCount = logs.filter((l) => l.entity_type === 'invitation' || l.action.includes('دعوة')).length
 

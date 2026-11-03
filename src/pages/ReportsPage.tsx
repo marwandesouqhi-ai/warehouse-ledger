@@ -1,3 +1,4 @@
+import { localDate } from '../lib/localDate'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
@@ -163,7 +164,7 @@ export default function ReportsPage({
       </div>
 
       {/* 2. Primary 4 Report Category Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '16px', marginBottom: '24px' }}>
         {/* Card 1: Official Permit */}
         <div className="card-surface" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
@@ -289,7 +290,7 @@ export default function ReportsPage({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: '14px' }}>
           {filteredWarehouseReports.map(({ warehouse, items: whItems, stats }) => (
             <div
               key={warehouse.id}
@@ -400,7 +401,7 @@ export default function ReportsPage({
       </div>
 
       {/* 4. Technical Condition & Maintenance Reports */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Maintenance Items Card */}
         <div className="card-surface" style={{ padding: '20px', borderRadius: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -572,7 +573,7 @@ export default function ReportsPage({
             </div>
             <div className="print-meta-field">
               <span className="print-meta-label">تاريخ الجرد:</span>
-              <span className="print-meta-val">{new Date().toISOString().slice(0, 10)}</span>
+              <span className="print-meta-val">{localDate()}</span>
             </div>
             <div className="print-meta-field">
               <span className="print-meta-label">الرقم المرجعي:</span>

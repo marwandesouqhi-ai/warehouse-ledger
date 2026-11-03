@@ -175,7 +175,7 @@
 
 .primary-btn {
   background: var(--accent);
-  color: white;
+  color: var(--accent-foreground);
 }
 
 .primary-btn.small {
@@ -2301,6 +2301,7 @@
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    animation: none !important;
   }
 }
 
@@ -2945,6 +2946,8 @@
 .auth-panel {
   display: grid;
   width: min(100%, 440px);
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding: 30px;
   border: 1px solid var(--line);
@@ -2954,6 +2957,8 @@
 }
 
 .auth-brand {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2976,11 +2981,14 @@
 }
 
 .auth-form {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 14px;
 }
 
 .auth-form label {
+  min-width: 0;
   display: grid;
   gap: 6px;
   color: var(--ink);
@@ -2988,6 +2996,8 @@
 }
 
 .auth-form input {
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -4281,7 +4291,7 @@
   align-items: center;
   gap: 9px;
   flex: 1;
-  min-width: 260px;
+  min-width: 0;
   background: var(--bg);
   border: 1px solid var(--line);
   padding: 8px 14px;
@@ -5458,7 +5468,7 @@
 
 .backup-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -5769,4 +5779,28 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
   border: 1px solid var(--line);
   overflow: hidden;
+}
+/* Phase 1: keep form and filter controls inside narrow RTL viewports. */
+.purchase-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.purchase-form-grid > label,
+.purchase-form-grid input,
+.purchase-form-grid textarea,
+.backup-card,
+.custody-filter-selects,
+.filter-select-group,
+.filter-select-group select {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 640px) {
+  .purchase-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .custody-toolbar, .custody-filters-bar { flex-direction: column; align-items: stretch; }
+  .custody-search-wrap { flex: auto; width: 100%; }
+  .custody-filter-selects { flex-direction: column; align-items: stretch; width: 100%; }
+  .filter-select-group select { flex: 1; }
+  .backup-card-actions { flex-wrap: wrap; }
 }

@@ -1,3 +1,5 @@
+import { localDate } from './localDate'
+import { loadInitialRecords } from './initialRecords'
 export type WarehouseDefinition = {
   id: string
   name: string
@@ -697,87 +699,7 @@ export const fixtureCustodyItems: CustodyItem[] = [
 ]
 
 export function loadCustodyItems(): CustodyItem[] {
-  try {
-    const raw = localStorage.getItem(CUSTODY_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        const validWarehouseIds = new Set(WAREHOUSES.map((w) => w.id))
-        let needsResave = false
-        // Filter out old demo/fixture mock items and any deleted warehouses
-        let items = (parsed as CustodyItem[])
-          .filter(
-            (item) =>
-              validWarehouseIds.has(item.warehouseId) &&
-              !item.id.startsWith('c-main-') &&
-              !item.id.startsWith('c-med-') &&
-              !item.id.startsWith('c-den-') &&
-              !item.id.startsWith('c-pha-') &&
-              !item.id.startsWith('c-nur-') &&
-              !item.id.startsWith('c-lab-') &&
-              !item.id.startsWith('c-eng-') &&
-              !item.id.startsWith('c-fci-') &&
-              !item.id.startsWith('c-com-') &&
-              !item.id.startsWith('mock-') &&
-              !item.id.startsWith('demo-') &&
-              !item.code?.startsWith('COM-')
-          )
-          .map((item) => {
-            const qty = Number(item.quantity) || 1
-            const val = Number(item.value) || 0
-            const up = item.unitPrice != null ? Number(item.unitPrice) : null
-
-            // Auto-repair legacy items where the user entered the unit price into the value field
-            if (up == null && qty > 1 && !item.id.startsWith('c-in-') && val > 0) {
-              needsResave = true
-              const unitPrice = val
-              return {
-                ...item,
-                unitPrice,
-                value: Math.round(qty * unitPrice),
-              }
-            }
-
-            // Auto-repair items where unitPrice was set but total value was mistakenly saved equal to unitPrice for multiple items
-            if (up != null && up > 0 && qty > 1 && Math.abs(val - up) < 0.01) {
-              needsResave = true
-              return {
-                ...item,
-                unitPrice: up,
-                value: Math.round(qty * up),
-              }
-            }
-
-            if (up == null && qty === 1 && val > 0) {
-              return {
-                ...item,
-                unitPrice: val,
-              }
-            }
-            return item
-          })
-
-        if (needsResave) {
-          saveCustodyItems(items)
-        }
-        return items
-      }
-    }
-  } catch (err) {
-    console.warn('Could not load custody items from storage:', err)
-  }
-
-  // Default to fixture items for main warehouse if storage is empty
-  if (fixtureCustodyItems.length > 0) {
-    try {
-      localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(fixtureCustodyItems))
-    } catch {
-      // ignore
-    }
-    return fixtureCustodyItems.map((item) => ({ ...item }))
-  }
-
-  return []
+  return loadInitialRecords(CUSTODY_STORAGE_KEY, fixtureCustodyItems)
 }
 
 import { supabase } from './supabase'
@@ -803,7 +725,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
       serialNumber: row.serial_number || '',
       notes: row.notes || '',
       custodyType: (row.custody_type || 'مستديمة') as CustodyType,
-      acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : localDate(),
     }))
   } catch (err) {
     console.warn('Could not fetch custody items from cloud:', err)
@@ -967,7 +889,7 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
       'نوع العهدة': '',
       'الحالة الفنية': '',
       'المكان / القاعة': '',
-      'تاريخ القيد': new Date().toISOString().slice(0, 10),
+      'تاريخ القيد': localDate(),
       'الرقم التسلسلي': '',
       'ملاحظات': `تم استخراج الكشف إلكترونياً من منظومة إدارة العهد والمخازن`,
     })
@@ -994,7 +916,7 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
 
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, `عهدة ${warehouseName.slice(0, 22)}`)
-  const dateStr = new Date().toISOString().slice(0, 10)
+  const dateStr = localDate()
   XLSX.writeFile(workbook, `كشف-عهدة-${warehouseName.replace(/\s+/g, '-')}-${dateStr}.xlsx`)
 }
 
@@ -1111,7 +1033,7 @@ export async function exportComprehensiveCustodyWorkbook(
     XLSX.utils.book_append_sheet(workbook, whSheet, tabName)
   }
 
-  const dateStr = new Date().toISOString().slice(0, 10)
+  const dateStr = localDate()
   XLSX.writeFile(workbook, `سجل-جرد-العهد-الموحد-${dateStr}.xlsx`)
 }
 
@@ -1282,7 +1204,7 @@ export function syncInwardMovementToCustody(movement: {
   if (!cleanItemName) {
     throw new Error('اسم الصنف مطلوب لإضافة العهدة.')
   }
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDate()
   const acquisitionDate = movement.date?.trim() || today
   const qty = Math.max(0, Number(movement.qin) || 0)
   const price = Math.max(0, Number(movement.price) || 0)
@@ -1362,6 +1284,37 @@ export function syncInwardMovementToCustody(movement: {
   }
 }
 
+export function requireDisbursementSource(items: CustodyItem[], movement: {
+  sourceItemId?: string; sourceWarehouseId?: string; item: string; qout: string | number
+}): CustodyItem {
+  const sourceWarehouseId = movement.sourceWarehouseId || 'main'
+  const quantity = Number(movement.qout)
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('كمية الصرف يجب أن تكون رقماً أكبر من صفر.')
+  // Legacy records lack an ID: resolve only an unambiguous existing source, never invent stock.
+  const matches = items.filter((item) => item.warehouseId === sourceWarehouseId && (
+    movement.sourceItemId ? item.id === movement.sourceItemId : item.name.trim().toLowerCase() === movement.item.trim().toLowerCase()
+  ))
+  if (matches.length !== 1) throw new Error('يرجى اختيار صنف موجود ومحدد من المخزن المصدر.')
+  const source = matches[0]
+  if (!Number.isFinite(Number(source.quantity)) || Number(source.quantity) < quantity) {
+    throw new Error(`الرصيد المتاح من «${source.name}» في المخزن المصدر (${source.quantity}) غير كافٍ لصرف كمية ${quantity}.`)
+  }
+  return { ...source, quantity: Number(source.quantity) }
+}
+
+/** Resolve legacy names once and reserve stock across a batch before persisting any ledger rows. */
+export function resolveDisbursementSources<T extends {
+  item: string; qout: string | number; sourceWarehouseId?: string; sourceItemId?: string
+}>(items: CustodyItem[], movements: T[]): T[] {
+  const available = items.map((item) => ({ ...item }))
+  return movements.map((movement) => {
+    if (!(Number(movement.qout) > 0)) return movement
+    const source = requireDisbursementSource(available, movement)
+    available.find((item) => item.id === source.id)!.quantity -= Number(movement.qout)
+    return { ...movement, sourceItemId: source.id, item: source.name }
+  })
+}
+
 export function syncOutwardMovementToCustody(movement: {
   item: string
   date?: string
@@ -1371,6 +1324,7 @@ export function syncOutwardMovementToCustody(movement: {
   to?: string
   permit?: string | number
   notes?: string
+  sourceItemId?: string
   sourceWarehouseId?: string
   destType?: 'warehouse' | 'custodian'
   destWarehouseId?: string
@@ -1393,9 +1347,9 @@ export function syncOutwardMovementToCustody(movement: {
   }
 
   const items = loadCustodyItems()
-  const cleanItemName = (movement.item || '').trim()
+  let cleanItemName = (movement.item || '').trim()
   const qty = Math.max(0, Number(movement.qout) || 0)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDate()
   const actionDate = movement.issue?.trim() || movement.date?.trim() || today
   const sourceWhId = movement.sourceWarehouseId || 'main'
 
@@ -1406,15 +1360,15 @@ export function syncOutwardMovementToCustody(movement: {
   }
 
   // 1. Find item in source warehouse and deduct quantity
-  const sourceIdx = items.findIndex(
-    (i) => i.warehouseId === sourceWhId && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
-  )
+  const validatedSource = requireDisbursementSource(items, movement)
+  cleanItemName = validatedSource.name
+  const sourceIdx = items.findIndex((item) => item.id === validatedSource.id)
 
   let sourceItem: CustodyItem | undefined
   let deductedFromSource = false
 
   if (sourceIdx !== -1) {
-    sourceItem = items[sourceIdx]
+    sourceItem = validatedSource
     if (sourceItem.quantity < qty) {
       throw new Error(`الرصيد المتاح من «${cleanItemName}» في المخزن المصدر (${sourceItem.quantity}) غير كافٍ لصرف كمية ${qty}.`)
     }

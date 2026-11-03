@@ -1,3 +1,4 @@
+import { localDate } from '../lib/localDate'
 import React, { useState } from 'react'
 import {
   X,
@@ -26,7 +27,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
     return `DSP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
   })
   const [permitDate, setPermitDate] = useState<string>(() => {
-    return new Date().toISOString().slice(0, 10)
+    return localDate()
   })
   const [sourceWarehouseId, setSourceWarehouseId] = useState<string>('main')
   const [targetWarehouseId, setTargetWarehouseId] = useState<string>(

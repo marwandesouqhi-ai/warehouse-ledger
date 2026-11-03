@@ -23,3 +23,11 @@ This repository is a Vite + React + TypeScript foundation for an Arabic RTL stoc
 ## Important note
 
 The full Supabase/Postgres/Edge Function stack in the original requirement is scaffolded in the repo structure, but it cannot be executed against a live remote project in this environment because no Supabase project credentials or deployment secrets are configured here.
+
+## Optional demo initialization
+
+Production and new browser stores start empty. For an isolated demo installation only,
+set `VITE_DEMO_MODE=true` before starting/building Vite. Fixtures initialize a missing
+movement/custody store once, with a durable `<storage-key>:demo-initialized:v1` marker.
+Existing stores (including empty arrays) are preserved; removing records does not
+reinitialize a previously seeded store. Leave this flag unset for production.
