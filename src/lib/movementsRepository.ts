@@ -1,6 +1,7 @@
+import { executeInventoryOperation } from './inventoryRepository'
 import { supabase } from './supabase'
 import type { FixtureMovement } from './fixture'
-import { movementFingerprint } from './importRows'
+import { readInventoryState } from './inventoryStorage'
 
 type MovementRow = {
     id: string
@@ -15,6 +16,13 @@ type MovementRow = {
     qty_in: string
     qty_out: string
     notes: string
+    request_fingerprint?: string
+    version?: number
+    deleted_at?: string
+    source_quantity_before?: number
+    source_value_before?: number
+    source_item_id?: string
+    inventory_effects?: FixtureMovement["inventoryEffects"]
     custody_applied?: boolean
     created_by?: string
     source_warehouse_id?: string
@@ -38,48 +46,13 @@ function fromRow(row: MovementRow): FixtureMovement {
         qout: row.qty_out,
         notes: row.notes,
         custodyApplied: row.custody_applied,
+        requestFingerprint: row.request_fingerprint || undefined, version: row.version ?? 0, deletedAt: row.deleted_at || undefined, sourceItemId: row.source_item_id || undefined, sourceQuantityBefore: row.source_quantity_before == null ? undefined : Number(row.source_quantity_before), sourceValueBefore: row.source_value_before == null ? undefined : Number(row.source_value_before), inventoryEffects: row.inventory_effects || undefined,
         createdBy: row.created_by,
         sourceWarehouseId: row.source_warehouse_id,
         destWarehouseId: row.dest_warehouse_id,
         destType: row.dest_type,
         custodianName: row.custodian_name,
     }
-}
-
-function toRow(movement: FixtureMovement, ownerId?: string) {
-    const isUuid = ownerId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
-    const validOwnerId = isUuid ? ownerId : '5b7feb88-f6e9-47e3-a4cf-bb7b614661ca'
-
-    const idStr = String(movement.id ?? '')
-    const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
-
-    const row: Record<string, unknown> = {
-        owner_id: validOwnerId,
-        received_on: String(movement.date ?? ''),
-        invoice_number: String(movement.inv ?? ''),
-        supplier: String(movement.from ?? ''),
-        recipient: String(movement.to ?? ''),
-        permit: String(movement.permit ?? ''),
-        issued_on: String(movement.issue ?? ''),
-        item: movement.item,
-        unit_price: String(movement.price ?? ''),
-        qty_in: String(movement.qin ?? ''),
-        qty_out: String(movement.qout ?? ''),
-        notes: movement.notes ?? '',
-        fingerprint: movementFingerprint(movement),
-        ...(movement.custodyApplied !== undefined ? { custody_applied: movement.custodyApplied } : {}),
-        ...(movement.createdBy ? { created_by: movement.createdBy } : {}),
-        ...(movement.sourceWarehouseId ? { source_warehouse_id: movement.sourceWarehouseId } : {}),
-        ...(movement.destWarehouseId ? { dest_warehouse_id: movement.destWarehouseId } : {}),
-        ...(movement.destType ? { dest_type: movement.destType } : {}),
-        ...(movement.custodianName ? { custodian_name: movement.custodianName } : {}),
-    }
-
-    if (isIdUuid) {
-        row.id = idStr
-    }
-
-    return row
 }
 
 function getClient() {
@@ -97,75 +70,22 @@ export async function fetchMovements(_ownerId?: string): Promise<FixtureMovement
     return (data as MovementRow[]).map(fromRow)
 }
 
-export async function saveMovements(movements: FixtureMovement[], ownerId?: string): Promise<FixtureMovement[]> {
-    if (movements.length === 0) return []
-
-    const rows = movements.map((movement) => toRow(movement, ownerId))
-    const { data, error } = await getClient()
-        .from('movements')
-        .upsert(rows, {
-            onConflict: 'fingerprint',
-            ignoreDuplicates: true,
-        })
-        .select('*')
-
-    if (error) throw error
-    return (data as MovementRow[]).map(fromRow)
+export async function saveMovements(movements: FixtureMovement[], _ownerId?: string): Promise<FixtureMovement[]> {
+    const result: FixtureMovement[] = []
+    for (const movement of movements) {
+        const existing = readInventoryState().movements.find((entry) => String(entry.id) === String(movement.id))
+        if (existing) { result.push({ ...existing }); continue }
+        const row = { ...movement, id: /^[0-9a-f-]{36}$/i.test(String(movement.id)) ? movement.id : crypto.randomUUID() }
+        const state = await executeInventoryOperation({ kind: Number(row.qin) > 0 ? 'purchase' : 'disbursement', movement: row })
+        result.push(state.movements.find((entry) => String(entry.id) === String(row.id))!)
+    }
+    return result
 }
 
 export async function updateMovement(movement: FixtureMovement, _ownerId?: string): Promise<FixtureMovement> {
-    if (!supabase) return movement
-
-    const client = getClient()
-    const idStr = String(movement.id)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
-
-    if (isUuid) {
-        const { data, error } = await client
-            .from('movements')
-            .update({
-                received_on: String(movement.date ?? ''),
-                invoice_number: String(movement.inv ?? ''),
-                supplier: String(movement.from ?? ''),
-                recipient: String(movement.to ?? ''),
-                permit: String(movement.permit ?? ''),
-                issued_on: String(movement.issue ?? ''),
-                item: movement.item,
-                unit_price: String(movement.price ?? ''),
-                qty_in: String(movement.qin ?? ''),
-                qty_out: String(movement.qout ?? ''),
-                notes: movement.notes,
-                fingerprint: movementFingerprint(movement),
-            })
-            .eq('id', movement.id)
-            .select('*')
-            .single()
-
-        if (error) {
-            if (error.code === '23505') {
-                throw new Error('توجد حركة أخرى بنفس هذه البيانات بالضبط.')
-            }
-            throw error
-        }
-        return fromRow(data as MovementRow)
-    }
-
-    return movement
+    const result = await executeInventoryOperation({ kind: 'edit', movementId: movement.id, movement })
+    return result.movements.find((entry) => String(entry.id) === String(movement.id))!
 }
-
 export async function deleteMovement(movementId: string | number, _ownerId?: string): Promise<void> {
-    if (!supabase) return
-
-    const client = getClient()
-    const idStr = String(movementId)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
-
-    if (isUuid) {
-        const { error } = await client
-            .from('movements')
-            .delete()
-            .eq('id', movementId)
-
-        if (error) throw error
-    }
-}
+    await executeInventoryOperation({ kind: 'delete', movementId })
+}

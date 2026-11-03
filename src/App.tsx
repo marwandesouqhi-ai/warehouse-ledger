@@ -1,3 +1,6 @@
+import { executeInventoryOperation } from './lib/inventoryRepository'
+import { cacheCloudInventory } from './lib/inventoryStorage'
+import type { InventoryCommand } from './lib/inventoryTypes'
 import { localDate } from './lib/localDate'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
@@ -44,10 +47,10 @@ import {
 } from 'lucide-react'
 
 
-import { deriveMovement, deriveSummary } from './lib/derive'
+import { deriveLedger, deriveMovement, deriveSummary } from './lib/derive'
 import { type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
-import { deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
+import { fetchMovements } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
 import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, type AppSettings } from './lib/settings'
 import { supabase } from './lib/supabase'
@@ -62,12 +65,7 @@ import {
 import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
 import {
   loadCustodyItems,
-  saveCustodyItems,
   fetchCustodyItemsFromCloud,
-  syncInwardMovementToCustody,
-  syncOutwardMovementToCustody,
-  requireDisbursementSource,
-  resolveDisbursementSources,
   WAREHOUSES,
 } from './lib/custody'
 import {
@@ -285,14 +283,22 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const update = () => { setMovements(loadMovements()); setCustodyItems(loadCustodyItems()) }
+    window.addEventListener('inventory-changed', update)
+    window.addEventListener('storage', update)
+    return () => { window.removeEventListener('inventory-changed', update); window.removeEventListener('storage', update) }
+  }, [])
+
   // Edit & Delete Interactive States
   const [editingMovement, setEditingMovement] = useState<FixtureMovement | null>(null)
   const [deletingMovement, setDeletingMovement] = useState<FixtureMovement | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  const summary = deriveSummary(movements as Array<Record<string, unknown>>)
-  const netStockUnits = Math.max(0, summary.qty_in - summary.qty_out)
+  const ledgerById = useMemo(() => new Map(deriveLedger(movements).rows.map((row) => [String(row.id), row])), [movements])
+  const summary = deriveSummary(movements as Array<Record<string, unknown>>, custodyItems)
+  const netStockUnits = Math.max(0, summary.stock_units)
   const turnoverRateNum = summary.qty_in > 0 ? (summary.qty_out / summary.qty_in) * 100 : 0
   const turnoverRate = turnoverRateNum.toFixed(1)
   const issuedValuePctNum = summary.total_value > 0 ? (summary.issued_value / summary.total_value) * 100 : 0
@@ -573,34 +579,10 @@ function App() {
 
     void (async () => {
       // 1. Fetch warehouse movements from Supabase
-      let remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
-      if (remoteMovements.length === 0) {
-        let initialMovements: FixtureMovement[] = []
-        try {
-          const cached = localStorage.getItem(storageKey)
-          if (cached) {
-            const parsed = JSON.parse(cached) as unknown
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              initialMovements = parsed as FixtureMovement[]
-            }
-          }
-        } catch {
-          // ignore
-        }
-
-        if (initialMovements.length > 0) {
-          await Promise.race([saveMovements(initialMovements, session?.user?.id), syncTimeout])
-          remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
-        }
-      }
-
+      const remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
       if (!active) return
-      setMovements(remoteMovements)
-      try {
-        persistMovementsLocally(remoteMovements)
-      } catch {
-        // ignore
-      }
+      cacheCloudInventory([], remoteMovements)
+      setMovements(loadMovements())
 
       // 2. Fetch app settings from Supabase
       try {
@@ -616,8 +598,8 @@ function App() {
       try {
         const cloudCustody = await fetchCustodyItemsFromCloud()
         if (cloudCustody.length > 0) {
-          setCustodyItems(cloudCustody)
-          saveCustodyItems(cloudCustody)
+          cacheCloudInventory(cloudCustody)
+          setCustodyItems(loadCustodyItems())
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('custody-changed'))
           }
@@ -705,301 +687,44 @@ function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
-    const isPurchase = Number(movement.qin) > 0
-    if (Number(movement.qout) > 0) {
-      const source = requireDisbursementSource(loadCustodyItems(), movement)
-      movement = { ...movement, sourceItemId: source.id, item: source.name }
-    }
-    let savedMovement = movement
-
-    if (supabase && session) {
-      if (isPurchase) {
-        // 1. فواتير الشراء: استدعاء دالة RPC الذرية record_purchase
-        try {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('record_purchase', {
-            p_fingerprint: movementFingerprint(movement),
-            p_item: movement.item,
-            p_qty: Number(movement.qin),
-            p_unit_price: Number(movement.price) || 0,
-            p_supplier: movement.from || '',
-            p_notes: movement.notes || '',
-            p_created_by: session.user.email || '',
-            p_received_on: movement.date || null,
-            p_invoice_number: movement.inv || '',
-          })
-          if (rpcError) throw rpcError
-
-          savedMovement = {
-            ...movement,
-            id: rpcData?.movement_id || movement.id,
-            custodyApplied: true,
-          }
-          setMovements((current) => [...current, savedMovement])
-          setSyncStatus('synced')
-
-          // إعادة تحميل عهدة المخازن من السحابة لضمان مطابقة رصيد المخزن الرئيسي المتزايد ذرياً
-          try {
-            const cloudCustody = await fetchCustodyItemsFromCloud()
-            if (cloudCustody.length > 0) {
-              setCustodyItems(cloudCustody)
-              saveCustodyItems(cloudCustody)
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('custody-changed'))
-              }
-            }
-          } catch (custodyReloadErr) {
-            console.warn('Could not reload custody after record_purchase:', custodyReloadErr)
-          }
-        } catch (error) {
-          setSyncStatus('error')
-          setSyncError(error instanceof Error ? error.message : 'تعذر تسجيل فاتورة الشراء على الخادم.')
-          throw error
-        }
-      } else {
-        // 2. حركات المنصرف والتحويل: الحفظ والخصم المحلي
-        try {
-          const [saved] = await saveMovements([movement], session.user.id)
-          if (!saved) throw new Error('الحركة موجودة بالفعل في السجل.')
-          savedMovement = { ...saved, sourceItemId: movement.sourceItemId }
-          setMovements((current) => [...current, savedMovement])
-          setSyncStatus('synced')
-
-          try {
-            syncOutwardMovementToCustody(savedMovement)
-          } catch (custodyErr) {
-            console.warn('Custody synchronization warning:', custodyErr)
-          }
-        } catch (error) {
-          setSyncStatus('error')
-          setSyncError(error instanceof Error ? error.message : 'تعذر حفظ الحركة على الخادم.')
-          throw error
-        }
-      }
-    } else {
-      // 3. وضع عدم الاتصال (Offline Fallback): حفظ محلي فقط دون كسر
-      setMovements((current) => [...current, movement])
-      try {
-        if (isPurchase) {
-          syncInwardMovementToCustody(movement)
-        } else if (Number(movement.qout) > 0) {
-          syncOutwardMovementToCustody(movement)
-        }
-      } catch (custodyErr) {
-        console.warn('Custody synchronization warning:', custodyErr)
-      }
-    }
-
-    void logAuditEvent({
-      action: isPurchase ? `إضافة حركة وارد: ${movement.item}` : `إضافة حركة صرف: ${movement.item}`,
-      entity_type: 'movement',
-      details: {
-        item: movement.item,
-        price: movement.price,
-        qty_in: movement.qin,
-        qty_out: movement.qout,
-        supplier: movement.from,
-        recipient: movement.to,
-        inv: movement.inv,
-        date: movement.date,
-      },
-      user: session?.user,
-    })
-    if (redirectPath !== null) {
-      navigate(redirectPath || '/purchases')
-    }
-  }
-
-  async function updateExistingMovement(updated: FixtureMovement) {
-    if (!isSystemAdmin) {
-      throw new Error('تعديل الحركات والبيانات في النظام مقتصر حصرياً على مدير النظام (System Admin).')
-    }
-
-    if (supabase && session) {
-      try {
-        const saved = await updateMovement(updated, session.user.id)
-        setMovements((current) => current.map((m) => (m.id === updated.id ? saved : m)))
-        setSyncStatus('synced')
-      } catch (error) {
-        setSyncStatus('error')
-        setSyncError(error instanceof Error ? error.message : 'تعذر تحديث الحركة على الخادم.')
-        throw error
-      }
-    } else {
-      setMovements((current) => current.map((m) => (m.id === updated.id ? updated : m)))
-    }
-
-    // مزامنة العهدة عند التعديل أيضاً
+  async function runInventoryCommand(command: InventoryCommand) {
     try {
-      if (Number(updated.qin) > 0) {
-        syncInwardMovementToCustody(updated)
-      } else if (Number(updated.qout) > 0) {
-        syncOutwardMovementToCustody(updated)
-      }
-    } catch (custodyErr) {
-      console.warn('Custody synchronization warning on update:', custodyErr)
+      const result = await executeInventoryOperation(command)
+      setMovements(result.movements.filter((movement) => !movement.deletedAt))
+      setCustodyItems(result.items.filter((item) => !item.deletedAt))
+      setSyncStatus(supabase ? 'synced' : 'local')
+      setSyncError('')
+      return result
+    } catch (error) {
+      setSyncStatus('error')
+      setSyncError(error instanceof Error ? error.message : 'تعذر حفظ عملية المخزون.')
+      throw error
     }
-
-    void logAuditEvent({
-      action: `تعديل حركة: ${updated.item}`,
-      entity_type: 'movement',
-      details: {
-        id: updated.id,
-        item: updated.item,
-        price: updated.price,
-        qty_in: updated.qin,
-        qty_out: updated.qout,
-        supplier: updated.from,
-        recipient: updated.to,
-        inv: updated.inv,
-        date: updated.date,
-      },
-      user: session?.user,
-    })
   }
 
+  async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
+    await runInventoryCommand({ kind: Number(movement.qin) > 0 ? 'purchase' : 'disbursement', movement: { ...movement, id: crypto.randomUUID() } })
+    if (redirectPath !== null) navigate(redirectPath || '/purchases')
+  }
+  async function updateExistingMovement(updated: FixtureMovement) {
+    if (!isSystemAdmin) throw new Error('تعديل الحركات مقتصر على مدير النظام.')
+    await runInventoryCommand({ kind: 'edit', movementId: updated.id, movement: updated })
+  }
   async function deleteExistingMovement(movement: FixtureMovement) {
-    if (!isSystemAdmin) {
-      throw new Error('حذف الحركات والبيانات في النظام مقتصر حصرياً على مدير النظام (System Admin).')
-    }
-    if (supabase && session) {
-      try {
-        await deleteMovement(movement.id, session.user.id)
-        setMovements((current) => current.filter((m) => m.id !== movement.id))
-        setSyncStatus('synced')
-      } catch (error) {
-        setSyncStatus('error')
-        setSyncError(error instanceof Error ? error.message : 'تعذر حذف الحركة من الخادم.')
-        throw error
-      }
-    } else {
-      setMovements((current) => current.filter((m) => m.id !== movement.id))
-    }
-    void logAuditEvent({
-      action: `حذف حركة: ${movement.item}`,
-      entity_type: 'movement',
-      details: {
-        id: movement.id,
-        item: movement.item,
-        price: movement.price,
-        qty_in: movement.qin,
-        qty_out: movement.qout,
-        supplier: movement.from,
-        recipient: movement.to,
-        inv: movement.inv,
-        date: movement.date,
-      },
-      user: session?.user,
-    })
+    if (!isSystemAdmin) throw new Error('إلغاء الحركات مقتصر على مدير النظام.')
+    await runInventoryCommand({ kind: 'delete', movementId: movement.id, expectedVersion: movement.version ?? 0 })
   }
-
   async function mergeImportedMovements(imported: FixtureMovement[]) {
-    const knownMovements = new Set(movements.map(movementFingerprint))
-    const uniqueMovements: FixtureMovement[] = []
+    const known = new Set(movements.map(movementFingerprint))
+    let added = 0
     let skipped = 0
-
     for (const movement of imported) {
       const fingerprint = movementFingerprint(movement)
-      if (knownMovements.has(fingerprint)) {
-        skipped += 1
-        continue
-      }
-      knownMovements.add(fingerprint)
-      uniqueMovements.push(movement)
+      if (known.has(fingerprint)) { skipped++; continue }
+      await addMovement(movement, null)
+      known.add(fingerprint)
+      added++
     }
-
-    const validated = resolveDisbursementSources(loadCustodyItems(), uniqueMovements)
-    uniqueMovements.splice(0, uniqueMovements.length, ...validated)
-
-    let added = 0
-    if (supabase && session) {
-      try {
-        const purchases = uniqueMovements.filter((m) => Number(m.qin) > 0)
-        const others = uniqueMovements.filter((m) => !(Number(m.qin) > 0))
-
-        // 1. تسجيل فواتير الشراء المستوردة عبر دالة RPC الذرية لزيادة عهدة المخزن الرئيسي بأمان
-        for (const p of purchases) {
-          try {
-            const { data: rpcData, error: rpcErr } = await supabase.rpc('record_purchase', {
-              p_fingerprint: movementFingerprint(p),
-              p_item: p.item,
-              p_qty: Number(p.qin),
-              p_unit_price: Number(p.price) || 0,
-              p_supplier: p.from || '',
-              p_notes: p.notes || '',
-              p_created_by: session.user.email || '',
-              p_received_on: p.date || null,
-              p_invoice_number: p.inv || '',
-            })
-            if (!rpcErr) {
-              p.id = rpcData?.movement_id || p.id
-              p.custodyApplied = true
-              added += 1
-            }
-          } catch (pErr) {
-            console.warn('Import purchase RPC error:', pErr)
-          }
-        }
-
-        // 2. تسجيل حركات الصرف والتحويل الأخرى
-        if (others.length > 0) {
-          const savedOthers = await saveMovements(others, session.user.id)
-          added += savedOthers.length
-          for (const m of others) {
-            try {
-              syncOutwardMovementToCustody(m)
-            } catch (custodyErr) {
-              console.warn('Custody synchronization on import warning:', custodyErr)
-            }
-          }
-        }
-
-        setMovements((current) => [...current, ...uniqueMovements])
-        setSyncStatus('synced')
-
-        // 3. تحديث عهدة المخازن من السحابة لضمان مطابقة التعديلات الذرية
-        if (purchases.length > 0) {
-          try {
-            const cloudCustody = await fetchCustodyItemsFromCloud()
-            if (cloudCustody.length > 0) {
-              setCustodyItems(cloudCustody)
-              saveCustodyItems(cloudCustody)
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('custody-changed'))
-              }
-            }
-          } catch (custodyReloadErr) {
-            console.warn('Could not reload custody after import purchases:', custodyReloadErr)
-          }
-        }
-      } catch (error) {
-        setSyncStatus('error')
-        setSyncError(error instanceof Error ? error.message : 'تعذر استيراد الحركات إلى Supabase.')
-        throw error
-      }
-    } else {
-      setMovements((current) => [...current, ...uniqueMovements])
-      added = uniqueMovements.length
-      // مزامنة الحركات المستوردة تلقائياً مع عهدة المخازن محلياً (وضع عدم الاتصال)
-      try {
-        for (const m of uniqueMovements) {
-          if (Number(m.qin) > 0) {
-            syncInwardMovementToCustody(m)
-          } else if (Number(m.qout) > 0) {
-            syncOutwardMovementToCustody(m)
-          }
-        }
-      } catch (custodyErr) {
-        console.warn('Custody synchronization on import warning:', custodyErr)
-      }
-    }
-
-    void logAuditEvent({
-      action: `استيراد حركات من ملف (${added} حركة)`,
-      entity_type: 'import',
-      details: { added, skipped },
-      user: session?.user,
-    })
     return { added, skipped }
   }
 
@@ -1039,7 +764,7 @@ function App() {
 
     for (let i = 0; i < movements.length; i++) {
       const m = movements[i]
-      const derived = deriveMovement(m, i)
+      const derived = ledgerById.get(String(m.id)) || deriveMovement(m, i)
       const dateObj = derived.received_on || derived.issued_on
       let year = 2024
       let month = 0
@@ -1098,7 +823,7 @@ function App() {
       ]
     }
     return sorted
-  }, [movements])
+  }, [movements, ledgerById])
 
   const maxChartVal = useMemo(() => {
     if (chartMetric === 'value') {
@@ -1110,14 +835,14 @@ function App() {
   const filteredRecentMovements = useMemo(() => {
     let list = visibleMovements
     if (tableFilter === 'full') {
-      list = list.filter((m, idx) => deriveMovement(m, idx).status === 'full')
+      list = list.filter((m, idx) => (ledgerById.get(String(m.id)) || deriveMovement(m, idx)).status === 'full')
     } else if (tableFilter === 'part') {
-      list = list.filter((m, idx) => deriveMovement(m, idx).status === 'part')
+      list = list.filter((m, idx) => (ledgerById.get(String(m.id)) || deriveMovement(m, idx)).status === 'part')
     } else if (tableFilter === 'pending') {
-      list = list.filter((m, idx) => deriveMovement(m, idx).status === 'pending')
+      list = list.filter((m, idx) => (ledgerById.get(String(m.id)) || deriveMovement(m, idx)).status === 'pending')
     }
     return list.slice(-6).reverse()
-  }, [visibleMovements, tableFilter])
+  }, [visibleMovements, tableFilter, ledgerById])
 
   function signOut() {
     if (session?.user) {
@@ -1681,7 +1406,7 @@ function App() {
                             </tr>
                           ) : (
                             filteredRecentMovements.map((movement, idx) => {
-                              const derived = deriveMovement(movement, idx)
+                              const derived = ledgerById.get(String(movement.id)) || deriveMovement(movement, idx)
                               const value = derived.total ?? 0
                               const status = derived.status === 'full' ? 'مكتمل'
                                 : derived.status === 'part' ? 'جزئي'
@@ -1727,7 +1452,7 @@ function App() {
                                           type="button"
                                           className="table-action-btn delete-action-btn"
                                           onClick={() => setDeletingMovement(movement)}
-                                          title="حذف الحركة"
+                                          title="إلغاء الحركة وتسوية الرصيد"
                                           aria-label={`حذف حركة ${movement.item}`}
                                         >
                                           <Trash2 size={14} />
@@ -1980,8 +1705,8 @@ function App() {
                     <Trash2 size={18} />
                   </div>
                   <div>
-                    <h3>تأكيد حذف الحركة</h3>
-                    <span className="modal-subtitle">سيتم حذف الحركة نهائياً من السجل</span>
+                    <h3>تأكيد إلغاء الحركة</h3>
+                    <span className="modal-subtitle">سيتم عكس الأثر المخزني مع الاحتفاظ بالسجل</span>
                   </div>
                 </div>
                 <button type="button" className="modal-close-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)} aria-label="إغلاق">
@@ -1993,8 +1718,8 @@ function App() {
                 <div className="confirm-icon-wrap delete-tone">
                   <Trash2 size={26} />
                 </div>
-                <h3>هل أنت متأكد من الحذف؟</h3>
-                <p>أنت على وشك حذف هذا السجل بشكل نهائي من قاعدة البيانات والسجلات المخزنية.</p>
+                <h3>هل أنت متأكد من إلغاء الحركة؟</h3>
+                <p>سيتم إلغاء الحركة وتسوية رصيدها في عملية واحدة، مع الاحتفاظ بالسجل وتاريخه للمراجعة.</p>
 
                 <div className="confirm-details-card">
                   <div className="confirm-detail-row">
@@ -2024,7 +1749,7 @@ function App() {
                 </div>
 
                 <div className="confirm-warning">
-                  ⚠️ تنبيه: لا يمكن استرجاع هذا السجل بعد إتمام عملية الحذف.
+                  ستُرفض العملية إذا تعذر عكس أثرها دون رصيد سالب أو دون أثر مخزني موثق.
                 </div>
 
                 {deleteError && <div className="inline-message error w-full mb-3">{deleteError}</div>}
@@ -2044,14 +1769,14 @@ function App() {
                         await deleteExistingMovement(deletingMovement)
                         setDeletingMovement(null)
                       } catch (err) {
-                        setDeleteError(err instanceof Error ? err.message : 'تعذر حذف الحركة.')
+                        setDeleteError(err instanceof Error ? err.message : 'تعذر إلغاء الحركة.')
                       } finally {
                         setIsDeleting(false)
                       }
                     }}
                   >
                     <Trash2 size={16} />
-                    {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الحركة'}
+                    {isDeleting ? 'جارٍ الإلغاء...' : 'نعم، إلغاء الحركة'}
                   </button>
                 </div>
               </div>
@@ -2217,6 +1942,7 @@ function MovementForm({
         }
 
         const movement: FixtureMovement = {
+          ...initialMovement,
           id: initialMovement ? initialMovement.id : Date.now(),
           date: String(inwardDate || today),
           inv: String(inwardInv).trim(),
@@ -2248,6 +1974,7 @@ function MovementForm({
         const priceNum = Number(outwardPrice) || 0
 
         const movement: FixtureMovement = {
+          ...initialMovement,
           id: initialMovement ? initialMovement.id : Date.now(),
           date: String(outwardDate || today),
           inv: '',

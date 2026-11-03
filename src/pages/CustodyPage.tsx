@@ -1,3 +1,7 @@
+import { executeInventoryOperation } from '../lib/inventoryRepository'
+import { cacheCloudInventory } from '../lib/inventoryStorage'
+import { useInventory } from '../lib/useInventory'
+import type { InventoryCommand } from '../lib/inventoryTypes'
 import { localDate } from '../lib/localDate'
 import { useEffect, useMemo, useState, useRef, type FormEvent } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
@@ -37,14 +41,10 @@ import {
 } from 'lucide-react'
 
 import {
-  deleteCustodyItemFromCloud,
   exportComprehensiveCustodyWorkbook,
   exportCustodyToExcel,
   fetchCustodyItemsFromCloud,
   getWarehouseStats,
-  loadCustodyItems,
-  saveCustodyItems,
-  syncOutwardMovementToCustody,
   WAREHOUSES,
   type CustodyCategory,
   type CustodyCondition,
@@ -105,7 +105,9 @@ export default function CustodyPage({
   const isSystemAdmin = checkIsSystemAdmin(session)
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
-  const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
+  const inventory = useInventory()
+  const items = useMemo(() => inventory.items.filter((item) => !item.deletedAt), [inventory.items])
+  const [inventoryError, setInventoryError] = useState('')
 
   const [searchParams] = useSearchParams()
   const [mainTab, setMainTab] = useState<'items' | 'disbursements'>(() => {
@@ -158,26 +160,17 @@ export default function CustodyPage({
   }, [globalSearchTerm])
 
   useEffect(() => {
-    function handleSyncUpdate() {
-      setItems(loadCustodyItems())
-    }
-    window.addEventListener('custody-changed', handleSyncUpdate)
-    window.addEventListener('storage', handleSyncUpdate)
-
     // Direct cloud sync on mount to ensure complete and up-to-date records
     let isMounted = true
     void fetchCustodyItemsFromCloud().then((cloudItems) => {
       if (!isMounted) return
       if (cloudItems && cloudItems.length > 0) {
-        setItems(cloudItems)
-        saveCustodyItems(cloudItems)
+        cacheCloudInventory(cloudItems)
       }
     })
 
     return () => {
       isMounted = false
-      window.removeEventListener('custody-changed', handleSyncUpdate)
-      window.removeEventListener('storage', handleSyncUpdate)
     }
   }, [])
 
@@ -303,190 +296,24 @@ export default function CustodyPage({
     }
   }, [outwardMovements])
 
-  function handleSaveItem(item: CustodyItem) {
-    const exists = items.some((i) => i.id === item.id)
-    if (exists && !isSystemAdmin) {
-      alert('تعديل الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
-      return
-    }
-
-    let next: CustodyItem[]
-    if (exists) {
-      next = items.map((i) => (i.id === item.id ? item : i))
-    } else {
-      next = [item, ...items]
-    }
-    setItems(next)
-    saveCustodyItems(next)
-
-    void logAuditEvent({
-      action: exists ? `تعديل عهدة: ${item.name} (${activeWarehouse.name})` : `إضافة عهدة جديدة: ${item.name} (${activeWarehouse.name})`,
-      entity_type: 'custody',
-      details: {
-        warehouseId: item.warehouseId,
-        code: item.code,
-        name: item.name,
-        quantity: item.quantity,
-        custodian: item.custodian,
-      },
-      user: session?.user,
-    })
-
-    setIsAddingNew(false)
-    setEditingItem(null)
+  async function performInventoryCommand(command: InventoryCommand) {
+    setInventoryError('')
+    try { await executeInventoryOperation(command); return true }
+    catch (error) { setInventoryError(error instanceof Error ? error.message : 'تعذر حفظ عملية المخزون.'); return false }
   }
-
-  function handleDeleteItem(item: CustodyItem) {
-    if (!isSystemAdmin) {
-      alert('حذف الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
-      return
-    }
-
-    const next = items.filter((i) => i.id !== item.id)
-    setItems(next)
-    saveCustodyItems(next)
-    void deleteCustodyItemFromCloud(item.id)
-
-    void logAuditEvent({
-      action: `حذف عهدة: ${item.name} من ${activeWarehouse.name}`,
-      entity_type: 'custody',
-      details: { id: item.id, code: item.code, name: item.name },
-      user: session?.user,
-    })
-
-    setDeletingItem(null)
+  async function handleSaveItem(item: CustodyItem, note?: string) {
+    if (items.some((entry) => entry.id === item.id) && !isSystemAdmin) return
+    if (await performInventoryCommand({ kind: 'item_save', item, note })) { setIsAddingNew(false); setEditingItem(null) }
   }
-
-  function handleTransfer(
-    item: CustodyItem,
-    targetWarehouseId: string,
-    transferQty: number,
-    newCustodian: string,
-    newLocation: string,
-    transferReason: string
-  ) {
-    const targetWarehouse = WAREHOUSES.find((w) => w.id === targetWarehouseId)
-    if (!targetWarehouse) return
-
-    let next = [...items]
-    if (transferQty >= item.quantity) {
-      // Transfer entire record
-      next = next.map((i) => {
-        if (i.id === item.id) {
-          return {
-            ...i,
-            warehouseId: targetWarehouseId,
-            custodian: newCustodian || i.custodian,
-            roomLocation: newLocation || i.roomLocation,
-            notes: transferReason ? `${i.notes ? `${i.notes} • ` : ''}تم النقل من ${activeWarehouse.name} (${transferReason})` : i.notes,
-          }
-        }
-        return i
-      })
-    } else {
-      // Split record: reduce source qty and add new item to destination
-      next = next.map((i) => {
-        if (i.id === item.id) {
-          return { ...i, quantity: i.quantity - transferQty }
-        }
-        return i
-      })
-      const newItem: CustodyItem = {
-        ...item,
-        id: `c-tr-${Date.now()}`,
-        warehouseId: targetWarehouseId,
-        quantity: transferQty,
-        custodian: newCustodian || item.custodian,
-        roomLocation: newLocation || item.roomLocation,
-        notes: transferReason ? `منقول من ${activeWarehouse.name}: ${transferReason}` : `منقول من ${activeWarehouse.name}`,
-      }
-      next.push(newItem)
-    }
-
-    setItems(next)
-    saveCustodyItems(next)
-
-    void logAuditEvent({
-      action: `نقل عهدة: ${item.name} (${transferQty} ${item.unit}) من ${activeWarehouse.name} إلى ${targetWarehouse.name}`,
-      entity_type: 'custody',
-      details: {
-        code: item.code,
-        fromWarehouse: activeWarehouse.name,
-        toWarehouse: targetWarehouse.name,
-        quantity: transferQty,
-        newCustodian,
-        reason: transferReason,
-      },
-      user: session?.user,
-    })
-
-    setTransferringItem(null)
+  async function handleDeleteItem(item: CustodyItem) {
+    if (!isSystemAdmin) return
+    if (await performInventoryCommand({ kind: 'item_delete', itemId: item.id, expectedVersion: item.version ?? 0 })) setDeletingItem(null)
   }
-
-  // Central supply disbursement handler (from main to any branch)
-  function handleDisburseFromMain(
-    sourceItem: CustodyItem,
-    targetWarehouseId: string,
-    quantity: number,
-    recipientCustodian: string,
-    newLocation: string,
-    permitNo: string
-  ) {
-    const targetWh = WAREHOUSES.find((w) => w.id === targetWarehouseId)
-    if (!targetWh) return
-
-    let next = [...items]
-    if (quantity >= sourceItem.quantity) {
-      next = next.map((i) => {
-        if (i.id === sourceItem.id) {
-          return {
-            ...i,
-            warehouseId: targetWarehouseId,
-            custodian: recipientCustodian || i.custodian,
-            roomLocation: newLocation || i.roomLocation,
-            notes: `مصروف من المخزن الرئيسي ${permitNo ? `(إذن صرف رقم ${permitNo})` : ''}`,
-          }
-        }
-        return i
-      })
-    } else {
-      next = next.map((i) => {
-        if (i.id === sourceItem.id) {
-          return { ...i, quantity: i.quantity - quantity }
-        }
-        return i
-      })
-      const newItem: CustodyItem = {
-        ...sourceItem,
-        id: `c-sup-${Date.now()}`,
-        warehouseId: targetWarehouseId,
-        quantity,
-        custodian: recipientCustodian,
-        roomLocation: newLocation,
-        notes: `مصروف من المخزن الرئيسي ${permitNo ? `(إذن صرف رقم ${permitNo})` : ''}`,
-      }
-      next.push(newItem)
-    }
-
-    setItems(next)
-    saveCustodyItems(next)
-
-    void logAuditEvent({
-      action: `صرف وتغذية عهدة: ${sourceItem.name} (${quantity} ${sourceItem.unit}) من المخزن الرئيسي إلى ${targetWh.name}`,
-      entity_type: 'custody',
-      details: {
-        item: sourceItem.name,
-        from: 'مخزن رئيسي',
-        to: targetWh.name,
-        quantity,
-        permit: permitNo,
-        recipient: recipientCustodian,
-      },
-      user: session?.user,
-    })
-
-    setIsSupplyingFromMain(false)
-    setSupplyingRowItem(null)
+  async function handleTransfer(item: CustodyItem, targetWarehouseId: string, quantity: number, custodian: string, location: string, note: string) {
+    if (await performInventoryCommand({ kind: 'transfer', sourceItemId: item.id, targetWarehouseId, quantity, custodian, location, note })) setTransferringItem(null)
+  }
+  async function handleDisburseFromMain(sourceItem: CustodyItem, targetWarehouseId: string, quantity: number, custodian: string, location: string, permit: string) {
+    if (await performInventoryCommand({ kind: 'transfer', sourceItemId: sourceItem.id, targetWarehouseId, quantity, custodian, location, permit })) { setIsSupplyingFromMain(false); setSupplyingRowItem(null) }
   }
 
   function handlePrint() {
@@ -501,9 +328,11 @@ export default function CustodyPage({
     }
   }
 
-  function handleImportCustody(newItems: CustodyItem[], targetWarehouseId: string, mode: 'append' | 'replace') {
-    const result = mergeImportedCustody(items, newItems, targetWarehouseId, mode)
-    setItems(result.updatedItems)
+  async function handleImportCustody(newItems: CustodyItem[], targetWarehouseId: string, mode: 'append' | 'replace') {
+    let result: ReturnType<typeof mergeImportedCustody>
+    try { result = mergeImportedCustody(items, newItems, targetWarehouseId, mode) }
+    catch (error) { setInventoryError(error instanceof Error ? error.message : 'تعذر الاستيراد.'); return }
+    if (!await performInventoryCommand({ kind: 'import', items: result.updatedItems.filter((item) => JSON.stringify(item) !== JSON.stringify(items.find((entry) => entry.id === item.id))) })) return
     setIsImportModalOpen(false)
 
     const targetWh = WAREHOUSES.find((w) => w.id === targetWarehouseId) || activeWarehouse
@@ -554,7 +383,7 @@ export default function CustodyPage({
     if (onSaveMovement) {
       await onSaveMovement(mv, null)
     } else {
-      syncOutwardMovementToCustody(mv)
+      await executeInventoryOperation({ kind: 'disbursement', movement: { ...mv, id: crypto.randomUUID() } })
     }
     void logAuditEvent({
       action: `إذن صرف وتحويل عهدة: ${mv.item} (${mv.qout} وحدة) من ${mv.from} إلى ${mv.to}`,
@@ -573,7 +402,6 @@ export default function CustodyPage({
       },
       user: session?.user,
     })
-    setItems(loadCustodyItems())
     setIsNewDisbursementOpen(false)
     setImportNotice(`تم تسجيل إذن الصرف وحفظ الحركة بنجاح (${mv.item} - ${mv.qout} وحدة)!`)
     setTimeout(() => setImportNotice(''), 6000)
@@ -991,6 +819,7 @@ export default function CustodyPage({
         </div>
       </div>
 
+      {inventoryError && <div className="inline-message error" role="alert">{inventoryError}</div>}
       {/* 4. Filter and Search Toolbar */}
       <div className="custody-toolbar card-surface">
         <div className="custody-search-wrap">
@@ -1237,7 +1066,7 @@ export default function CustodyPage({
                                   type="button"
                                   className="table-action-btn delete-action-btn"
                                   onClick={() => setDeletingItem(item)}
-                                  title="حذف الصنف من العهدة"
+                                  title="أرشفة الصنف مع الاحتفاظ بالسجل"
                                   aria-label={`حذف ${item.name}`}
                                 >
                                   <Trash2 size={14} />
@@ -1537,7 +1366,7 @@ export default function CustodyPage({
                   <Trash2 size={18} />
                 </div>
                 <div>
-                  <h3>تأكيد إسقاط / حذف العهدة</h3>
+                  <h3>تأكيد أرشفة العهدة</h3>
                   <span className="modal-subtitle">{activeWarehouse.name}</span>
                 </div>
               </div>
@@ -1551,7 +1380,7 @@ export default function CustodyPage({
                 <Trash2 size={26} />
               </div>
               <h3>هل أنت متأكد من حذف هذا الصنف من العهدة؟</h3>
-              <p>سيتم إزالة هذا القيد نهائياً من سجلات عهدة {activeWarehouse.name}.</p>
+              <p>سيتم إخفاء هذا القيد من عهدة {activeWarehouse.name} النشطة مع الاحتفاظ ببياناته وسجله للمراجعة.</p>
 
               <div className="confirm-details-card">
                 <div className="confirm-detail-row">
@@ -1581,7 +1410,7 @@ export default function CustodyPage({
                   إلغاء
                 </button>
                 <button type="button" className="danger-btn" onClick={() => handleDeleteItem(deletingItem)}>
-                  <Trash2 size={16} /> تأكيد الحذف
+                  <Trash2 size={16} /> تأكيد الأرشفة
                 </button>
               </div>
             </div>
@@ -1603,10 +1432,13 @@ export default function CustodyPage({
       {/* 8. Item Lifecycle & History Modal */}
       {historyItem && (
         <CustodyItemHistoryModal
-          item={historyItem}
+          item={items.find((item) => item.id === historyItem.id) || historyItem}
           currency={currency}
           onClose={() => setHistoryItem(null)}
-          onUpdateItem={handleSaveItem}
+          onUpdateItem={async (item, note) => {
+            if (!isSystemAdmin) throw new Error('تحديث السجل مقتصر على مدير النظام.')
+            await executeInventoryOperation({ kind: 'item_save', item, note })
+          }}
         />
       )}
 
@@ -1913,6 +1745,7 @@ function CustodyItemModal({
     const numTotalValue = Number(totalValue) || Math.round(numQty * numUnitPrice)
 
     const item: CustodyItem = {
+      ...initialItem,
       id: initialItem ? initialItem.id : `c-${Date.now()}`,
       warehouseId: String(fd.get('warehouseId') || defaultWarehouseId),
       code: String(fd.get('code')).trim(),

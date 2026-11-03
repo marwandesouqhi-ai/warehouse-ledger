@@ -1,6 +1,6 @@
 import { localDate } from './localDate'
 import type { CustodyCategory, CustodyCondition, CustodyItem, CustodyType } from './custody'
-import { findWarehouseByRecipient, guessCategory, saveCustodyItems, saveCustodyItemsToCloud, WAREHOUSES } from './custody'
+import { findWarehouseByRecipient, guessCategory, WAREHOUSES } from './custody'
 
 export type CustodyImportRow = {
   code?: string
@@ -375,11 +375,13 @@ export function mergeImportedCustody(
   targetWarehouseId: string,
   mode: 'append' | 'replace'
 ): { updatedItems: CustodyItem[]; added: number; replaced: number } {
+  if (mode === 'replace' && currentItems.some((item) => item.warehouseId === targetWarehouseId)) {
+    throw new Error('الاستبدال قد يمسح سجلات موجودة. استخدم الإضافة والتحديث للحفاظ على البيانات.')
+  }
   if (mode === 'replace') {
     // Keep items from other warehouses, replace items of targetWarehouseId
     const otherWarehouseItems = currentItems.filter((i) => i.warehouseId !== targetWarehouseId)
     const updatedItems = [...otherWarehouseItems, ...newItems]
-    saveCustodyItems(updatedItems)
     return {
       updatedItems,
       added: newItems.length,
@@ -442,8 +444,6 @@ export function mergeImportedCustody(
     }
   }
 
-  saveCustodyItems(updatedItems)
-  void saveCustodyItemsToCloud(updatedItems)
 
   return {
     updatedItems,

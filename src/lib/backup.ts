@@ -1,10 +1,12 @@
+import { readInventorySnapshot, readInventoryState, writeInventoryState, cacheCloudInventory } from './inventoryStorage'
+import type { InventorySnapshot } from './inventoryTypes'
 import { localDate } from './localDate'
 import type { Session } from '@supabase/supabase-js'
 import { logAuditEvent, getLocalAuditLogs, type AuditLogEntry } from './auditLogger'
-import { fetchCustodyItemsFromCloud, loadCustodyItems, saveCustodyItems, saveCustodyItemsToCloud, type CustodyItem } from './custody'
+import { fetchCustodyItemsFromCloud, loadCustodyItems, type CustodyItem } from './custody'
 import type { FixtureMovement } from './fixture'
 import { fetchUsersFromCloud, loadLocalUsers, saveLocalUsers, syncUsersWithCloud, type LocalUser } from './localUsers'
-import { fetchMovements, saveMovements } from './movementsRepository'
+import { fetchMovements } from './movementsRepository'
 import { fetchAppSettingsFromCloud, loadAppSettings, saveAppSettingsToCloud, type AppSettings } from './settings'
 import { checkIsSystemAdmin, supabase } from './supabase'
 
@@ -32,6 +34,7 @@ export type SystemBackupPayload = {
     }
   }
   data: {
+    inventoryState?: InventorySnapshot
     settings: AppSettings
     movements: FixtureMovement[]
     custody: CustodyItem[]
@@ -54,26 +57,8 @@ export type BackupResult = {
 }
 
 export function getStoredMovements(): FixtureMovement[] {
-  try {
-    const raw = localStorage.getItem('warehouse-ledger-movements')
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        return (parsed as FixtureMovement[])
-          .filter((m) => (Number(m.qin) || 0) > 0)
-          .map((m) => ({
-            ...m,
-            to: '',
-            permit: '',
-            issue: '',
-            qout: '',
-          }))
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return []
+  try { return readInventoryState().movements.filter((movement) => !movement.deletedAt) }
+  catch { return [] }
 }
 
 export function getLastCloudBackupTime(): string | null {
@@ -143,6 +128,7 @@ export async function exportLocalBackup(session?: Session | null): Promise<Backu
       },
     },
     data: {
+      inventoryState: readInventorySnapshot() || undefined,
       settings,
       movements,
       custody,
@@ -218,18 +204,19 @@ export async function backupToSupabaseCloud(session?: Session | null): Promise<B
   const users = loadLocalUsers()
   const timestamp = new Date().toISOString()
 
-  // 1. Settings Backup to Cloud
+  // A cloud backup verifies committed records; it must never replay old ledger/stock snapshots.
+  const [cloudItems, cloudMovements] = await Promise.all([fetchCustodyItemsFromCloud(), fetchMovements()])
+  for (const item of custody) {
+    const remote = cloudItems.find((entry) => entry.id === item.id)
+    if (!remote || (remote.version ?? 0) !== (item.version ?? 0) || remote.quantity !== item.quantity || remote.value !== item.value || remote.acquisitionDate !== item.acquisitionDate) {
+      throw new Error('السحابة لا تطابق الرصيد المحلي. صدّر نسخة محلية وراجع العمليات المعلقة؛ لم تتم إعادة كتابة المخزون.')
+    }
+  }
+  for (const movement of movements) {
+    const remote = cloudMovements.find((entry) => String(entry.id) === String(movement.id))
+    if (!remote || (remote.version ?? 0) !== (movement.version ?? 0)) throw new Error('توجد حركات محلية غير مؤكدة في السحابة. لم تتم إعادة تشغيل أثرها المخزني.')
+  }
   await saveAppSettingsToCloud(settings)
-
-  // 2. Custody Items Backup to Cloud
-  if (custody.length > 0) {
-    await saveCustodyItemsToCloud(custody)
-  }
-
-  // 3. Ledger Movements Backup to Cloud
-  if (movements.length > 0) {
-    await saveMovements(movements, session?.user?.id)
-  }
 
   // 4. Users Backup to Cloud
   if (users.length > 0) {
@@ -312,6 +299,11 @@ export function validateBackupPayload(jsonString: string): {
       return { valid: false, error: 'النسخة الاحتياطية لا تحتوي على حزمة بيانات صالحة (حقل data مفقود).' }
     }
 
+    const inventoryState = candidate.data.inventoryState
+    if (inventoryState && (inventoryState.schemaVersion !== 2 || !Array.isArray(inventoryState.items) || !Array.isArray(inventoryState.movements) || !Array.isArray(inventoryState.appliedOperations))) {
+      return { valid: false, error: 'سجل المخزون الموحد في النسخة الاحتياطية غير صالح؛ لم يتم تغيير أي بيانات.' }
+    }
+
     const payload: SystemBackupPayload = {
       app: 'warehouse-ledger',
       version: candidate.version || '1.0.0',
@@ -329,6 +321,7 @@ export function validateBackupPayload(jsonString: string): {
         },
       },
       data: {
+        inventoryState: candidate.data.inventoryState,
         settings: candidate.data.settings || loadAppSettings(),
         movements: Array.isArray(candidate.data.movements) ? candidate.data.movements : [],
         custody: Array.isArray(candidate.data.custody) ? candidate.data.custody : [],
@@ -367,6 +360,21 @@ export async function restoreLocalBackup(
     ...options,
   }
 
+  const currentInventory = readInventoryState()
+  const incomingInventory = payload.data.inventoryState
+  if (incomingInventory && opts.restoreCustody !== opts.restoreMovements) throw new Error('يجب استعادة سجل المخزون الموحد والعهدة معاً للحفاظ على تكامل الأرصدة.')
+  const incomingItems = opts.restoreCustody ? incomingInventory?.items || payload.data.custody : []
+  const incomingMovements = opts.restoreMovements ? incomingInventory?.movements || payload.data.movements : []
+  // Restoration may add records, but conflicting existing data requires a reviewed reconciliation.
+  for (const item of incomingItems) {
+    const existing = currentInventory.items.find((entry) => entry.id === item.id)
+    if (existing && JSON.stringify(existing) !== JSON.stringify(item)) throw new Error('النسخة تحتوي على عهدة تتعارض مع بيانات موجودة؛ لم تتم الكتابة فوقها.')
+  }
+  for (const movement of incomingMovements) {
+    const existing = currentInventory.movements.find((entry) => String(entry.id) === String(movement.id))
+    if (existing && JSON.stringify(existing) !== JSON.stringify(movement)) throw new Error('النسخة تحتوي على حركات تتعارض مع بيانات موجودة؛ لم تتم الكتابة فوقها.')
+  }
+
   let movementsCount = 0
   let custodyCount = 0
   let usersCount = 0
@@ -378,23 +386,16 @@ export async function restoreLocalBackup(
     settingsRestored = true
   }
 
-  // 2. Custody items restoration
-  if (opts.restoreCustody && Array.isArray(payload.data.custody)) {
-    saveCustodyItems(payload.data.custody)
-    custodyCount = payload.data.custody.length
-  }
-
-  // 3. Movements restoration
-  if (opts.restoreMovements && Array.isArray(payload.data.movements)) {
-    try {
-      localStorage.setItem('warehouse-ledger-movements', JSON.stringify(payload.data.movements))
-      if (supabase && payload.data.movements.length > 0) {
-        await saveMovements(payload.data.movements, session?.user?.id)
-      }
-    } catch (err) {
-      console.warn('Error syncing movements during restore:', err)
-    }
-    movementsCount = payload.data.movements.length
+  // Restore ledger and inventory together locally, never replaying their stock effects to the cloud.
+  if (opts.restoreCustody || opts.restoreMovements) {
+    const items = new Map(currentInventory.items.map((item) => [item.id, item]))
+    for (const item of incomingItems) items.set(item.id, item)
+    const movements = new Map(currentInventory.movements.map((movement) => [String(movement.id), movement]))
+    for (const movement of incomingMovements) movements.set(String(movement.id), movement)
+    writeInventoryState({ ...currentInventory, revision: currentInventory.revision + 1, items: [...items.values()], movements: [...movements.values()],
+      appliedOperations: [...new Set([...currentInventory.appliedOperations, ...(incomingInventory?.appliedOperations || [])])] }, currentInventory.revision)
+    custodyCount = incomingItems.length
+    movementsCount = incomingMovements.length
   }
 
   // 4. Users restoration
@@ -466,7 +467,7 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
   try {
     const cloudCustody = await fetchCustodyItemsFromCloud()
     if (cloudCustody && cloudCustody.length > 0) {
-      saveCustodyItems(cloudCustody)
+      cacheCloudInventory(cloudCustody)
       custodyCount = cloudCustody.length
     }
   } catch (err) {
@@ -477,7 +478,7 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
   try {
     const cloudMovements = await fetchMovements()
     if (cloudMovements && Array.isArray(cloudMovements)) {
-      localStorage.setItem('warehouse-ledger-movements', JSON.stringify(cloudMovements))
+      cacheCloudInventory([], cloudMovements)
       movementsCount = cloudMovements.length
     }
   } catch (err) {

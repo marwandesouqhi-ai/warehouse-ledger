@@ -173,10 +173,10 @@ describe('Custody Excel Import Suite', () => {
     expect(updatedMain1?.quantity).toBe(3)
     expect(updatedMain1?.name).toBe('طابعة ليزر محدثة')
 
-    // 2. Replace mode for 'main': replaces main's items with newItems, preserves medicine's items
-    const replaceResult = mergeImportedCustody(existing, newItems, 'main', 'replace')
-    expect(replaceResult.updatedItems.length).toBe(3) // 2 new for main + 1 existing for medicine
-    expect(replaceResult.updatedItems.some((i) => i.warehouseId === 'medicine')).toBe(true)
+    // Existing inventory must never be removed by replacement imports.
+    expect(() => mergeImportedCustody(existing, newItems, 'main', 'replace')).toThrow(/الاستبدال/)
+    expect(existing).toHaveLength(2)
+
   })
 
   it('never collapses or loses existing items that share the same code or number', () => {

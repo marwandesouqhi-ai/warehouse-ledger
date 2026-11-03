@@ -60,11 +60,12 @@ describe('Purchases Model and Idempotency Suite', () => {
     expect(res1).toBeDefined()
     expect(res1.item?.quantity).toBeGreaterThanOrEqual(4)
 
-    // Mark applied
-    testMovement.custodyApplied = true
-
-    // Second application with custodyApplied = true: verify it handles already applied flag
+    // Actually apply the same receipt again; the stored quantity/value must not increase.
+    const second = syncInwardMovementToCustody({ ...testMovement, custodyApplied: false })
     expect(testMovement.custodyApplied).toBe(true)
+    expect(second.item.quantity).toBe(res1.item.quantity)
+    expect(second.item.value).toBe(res1.item.value)
+
   })
 
   it('calculates totals correctly from fixture inward rows', () => {

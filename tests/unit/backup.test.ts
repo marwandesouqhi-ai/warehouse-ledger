@@ -1,3 +1,4 @@
+import { readInventoryState } from '../../src/lib/inventoryStorage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/settings', async (importOriginal) => {
@@ -167,9 +168,18 @@ describe('System Backup Suite', () => {
     expect(result.counts.settings).toBe(true)
 
     // Verify localStorage has the restored data
-    const storedMovements = JSON.parse(localStorage.getItem('warehouse-ledger-movements') || '[]')
+    const storedMovements = readInventoryState().movements
     expect(storedMovements.length).toBe(1)
     expect(storedMovements[0].item).toBe('كابلات شبكة')
   })
+
+  it('rejects a conflicting inventory restore before changing existing saved data', async () => {
+    localStorage.setItem('warehouse-ledger-movements', JSON.stringify([{ id: 'existing', item: 'حالي', qin: 5 }]))
+    const payload = { data: { settings: {}, movements: [{ id: 'existing', item: 'قديم', qin: 1 }], custody: [], users: [], auditLogs: [] } } as unknown as Parameters<typeof restoreLocalBackup>[0]
+    const before = localStorage.getItem('warehouse-ledger-movements')
+    await expect(restoreLocalBackup(payload, adminSession)).rejects.toThrow(/تتعارض/)
+    expect(localStorage.getItem('warehouse-ledger-movements')).toBe(before)
+  })
+
 })
 

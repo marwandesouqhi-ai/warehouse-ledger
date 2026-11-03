@@ -1,6 +1,10 @@
 import originalData from '../../fixtures/original-data.json'
 
 export type FixtureMovement = {
+    requestFingerprint?: string
+    version?: number
+    deletedAt?: string
+    inventoryEffects?: import('./inventoryTypes').InventoryEffect[]
     id: number | string
     date: string
     inv: number | string
@@ -15,6 +19,8 @@ export type FixtureMovement = {
     notes: string
     custodyApplied?: boolean
     createdBy?: string
+    sourceQuantityBefore?: number
+    sourceValueBefore?: number
     sourceItemId?: string
     sourceWarehouseId?: string
     destType?: 'warehouse' | 'custodian'

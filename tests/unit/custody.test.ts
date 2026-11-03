@@ -119,7 +119,8 @@ describe('Custody Module & Warehouse Definitions', () => {
     ]
 
     saveCustodyItems(customItems)
-    expect(localStorage.getItem(CUSTODY_STORAGE_KEY)).toContain('ENG-99')
+    expect(localStorage.getItem('warehouse-ledger-inventory-v2')).toContain('ENG-99')
+    expect(localStorage.getItem(CUSTODY_STORAGE_KEY)).toBeNull()
 
     const loaded = loadCustodyItems()
     expect(loaded).toHaveLength(1)
@@ -202,7 +203,7 @@ describe('Custody Module & Warehouse Definitions', () => {
 
     expect(fciItem).toBeDefined()
     expect(fciItem?.quantity).toBe(6) // 6 transferred to FCI
-    expect(fciItem?.notes).toContain('PERM-99')
+    expect(fciItem?.history?.at(-1)?.description).toContain('PERM-99')
   })
 
   it('preserves legacy values without guessing that they represent unit prices', () => {

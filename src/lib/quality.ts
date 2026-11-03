@@ -1,3 +1,4 @@
+import { deriveLedger } from './derive'
 import { num, parseDate } from './parse'
 
 export type QualityFinding = {
@@ -7,7 +8,7 @@ export type QualityFinding = {
     message: string
 }
 
-export function evaluateQuality(row: Record<string, unknown>, currentDate = new Date()): QualityFinding[] {
+export function evaluateQuality(row: Record<string, unknown>, currentDate = new Date(), availableBefore?: number): QualityFinding[] {
     const findings: QualityFinding[] = []
     const receivedOn = parseDate(row.date)
     const issuedOn = parseDate(row.issue)
@@ -31,7 +32,7 @@ export function evaluateQuality(row: Record<string, unknown>, currentDate = new 
         findings.push({ id: `${row.id ?? 'row'}-noto`, level: 'warn', rule: 'noto', message: 'Issue quantity exists without a recipient or permit.' })
     }
 
-    if (qtyOut != null && qtyIn != null && qtyOut > qtyIn) {
+    if (qtyOut != null && (availableBefore != null || qtyIn != null) && qtyOut > (availableBefore ?? qtyIn ?? 0)) {
         findings.push({ id: `${row.id ?? 'row'}-over`, level: 'error', rule: 'over', message: 'Issued quantity exceeds received quantity.' })
     }
 
@@ -59,7 +60,7 @@ export function evaluateQuality(row: Record<string, unknown>, currentDate = new 
         findings.push({ id: `${row.id ?? 'row'}-ptext`, level: 'info', rule: 'ptext', message: 'Price was stored as text and converted.' })
     }
 
-    if (!row.inv || String(row.inv).trim() === '') {
+    if ((qtyIn ?? 0) > 0 && (!row.inv || String(row.inv).trim() === '')) {
         findings.push({ id: `${row.id ?? 'row'}-noinv`, level: 'info', rule: 'noinv', message: 'No invoice number was provided.' })
     }
 
@@ -79,8 +80,10 @@ export function summarizeQuality(rows: Array<Record<string, unknown>>, currentDa
         noinv: 0,
     }
 
-    for (const row of rows) {
-        const findings = evaluateQuality(row, currentDate)
+    const activeRows = rows.filter((row) => !row.deletedAt)
+    const ledger = deriveLedger(activeRows).rows
+    for (const [index, row] of activeRows.entries()) {
+        const findings = evaluateQuality(row, currentDate, ledger[index]?.available_before)
         for (const finding of findings) {
             if (finding.rule in counts) {
                 counts[finding.rule] += 1

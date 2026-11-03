@@ -1,3 +1,6 @@
+import { readInventorySnapshot, readInventoryState, writeInventoryState } from './inventoryStorage'
+import { planInventoryOperation } from './inventoryOperations'
+import { executeInventoryOperation } from './inventoryRepository'
 import { localDate } from './localDate'
 import { loadInitialRecords } from './initialRecords'
 export type WarehouseDefinition = {
@@ -99,6 +102,9 @@ export type CustodyCategory =
 export type CustodyType = 'مستديمة' | 'مستهلكة' | 'شخصية'
 
 export type CustodyItem = {
+  version?: number
+  deletedAt?: string
+  history?: import('./inventoryTypes').InventoryEvent[]
   id: string
   warehouseId: string
   code: string
@@ -699,7 +705,8 @@ export const fixtureCustodyItems: CustodyItem[] = [
 ]
 
 export function loadCustodyItems(): CustodyItem[] {
-  return loadInitialRecords(CUSTODY_STORAGE_KEY, fixtureCustodyItems)
+  const state = readInventorySnapshot()
+  return state ? state.items.filter((item) => !item.deletedAt) : loadInitialRecords(CUSTODY_STORAGE_KEY, fixtureCustodyItems)
 }
 
 import { supabase } from './supabase'
@@ -715,7 +722,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
       code: row.code,
       name: row.name,
       category: (row.category || guessCategory(row.name)) as CustodyCategory,
-      quantity: Number(row.quantity) || 1,
+      quantity: Number(row.quantity) || 0,
       unit: row.unit || 'قطعة',
       unitPrice: row.unit_price ? Number(row.unit_price) : undefined,
       value: Number(row.value) || 0,
@@ -725,7 +732,8 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
       serialNumber: row.serial_number || '',
       notes: row.notes || '',
       custodyType: (row.custody_type || 'مستديمة') as CustodyType,
-      acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : localDate(),
+      acquisitionDate: row.acquisition_date || '',
+      version: Number(row.version) || 0, deletedAt: row.deleted_at || undefined, history: row.history || [],
     }))
   } catch (err) {
     console.warn('Could not fetch custody items from cloud:', err)
@@ -733,111 +741,33 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
   }
 }
 
-export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<void> {
-  if (!supabase || items.length === 0) return
-  try {
-    // 1. Fetch current cloud state to detect external increments (e.g. from RPC record_purchase)
-    const { data: cloudRows, error: fetchErr } = await supabase
-      .from('custody_items')
-      .select('id, warehouse_id, name, quantity, value, updated_at')
-
-    const cloudMap = new Map<string, { quantity: number; value: number }>()
-    const cloudNameMap = new Map<string, { quantity: number; value: number }>()
-    if (!fetchErr && cloudRows) {
-      for (const r of cloudRows) {
-        const q = Number(r.quantity) || 0
-        const v = Number(r.value) || 0
-        cloudMap.set(r.id, { quantity: q, value: v })
-        if (r.warehouse_id === 'main' && r.name) {
-          cloudNameMap.set(r.name.trim().toLowerCase(), { quantity: q, value: v })
-        }
-      }
-    }
-
-    // 2. Prepare rows, preserving any cloud-side increments if local is stale
-    const rows = items.map((item) => {
-      let quantityToSave = item.quantity
-      let valueToSave = item.value
-
-      const cloudById = cloudMap.get(item.id)
-      const cloudByName = item.warehouseId === 'main' ? cloudNameMap.get(item.name.trim().toLowerCase()) : undefined
-      const cloudItem = cloudById || cloudByName
-
-      // If cloud has higher quantity in main warehouse (e.g. from record_purchase RPC),
-      // preserve the higher quantity to prevent accidental overwrite
-      if (cloudItem && item.warehouseId === 'main') {
-        if (cloudItem.quantity > item.quantity) {
-          quantityToSave = cloudItem.quantity
-          item.quantity = cloudItem.quantity
-          if (cloudItem.value > item.value) {
-            valueToSave = cloudItem.value
-            item.value = cloudItem.value
-          }
-        }
-      }
-
-      return {
-        id: item.id,
-        warehouse_id: item.warehouseId,
-        code: item.code || '',
-        name: item.name,
-        category: item.category || '',
-        quantity: quantityToSave,
-        unit: item.unit || 'قطعة',
-        unit_price: item.unitPrice ?? null,
-        value: valueToSave,
-        condition: item.condition || 'good',
-        custodian: item.custodian || '',
-        room_location: item.roomLocation || '',
-        serial_number: item.serialNumber || '',
-        notes: item.notes || '',
-        custody_type: item.custodyType || 'مستديمة',
-        updated_at: new Date().toISOString(),
-      }
-    })
-
-    await supabase.from('custody_items').upsert(rows, { onConflict: 'id' })
-  } catch (err) {
-    console.warn('Could not sync custody items to cloud:', err)
-  }
+/** Explicit changed-record operation; local persistence never invokes this implicitly. */
+export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<CustodyItem[]> {
+  const state = readInventoryState()
+  const changes = items.filter((item) => {
+    const previous = state.items.find((entry) => entry.id === item.id)
+    return !previous || JSON.stringify(previous) !== JSON.stringify(item)
+  })
+  if (!changes.length) return state.items.map((item) => ({ ...item }))
+  const result = await executeInventoryOperation({ kind: 'import', items: changes })
+  return result.items.map((item) => ({ ...item }))
 }
-
-export async function deleteCustodyItemFromCloud(id: string): Promise<void> {
-  if (!supabase) return
-  try {
-    await supabase.from('custody_items').delete().eq('id', id)
-  } catch (err) {
-    console.warn('Could not delete custody item from cloud:', err)
-  }
+export async function deleteCustodyItemFromCloud(itemId: string): Promise<void> {
+  await executeInventoryOperation({ kind: 'item_delete', itemId })
 }
-
 export async function clearAllCustodyItemsFromCloud(): Promise<void> {
-  if (!supabase) return
-  try {
-    await supabase.from('custody_items').delete().neq('id', '')
-  } catch (err) {
-    console.warn('Could not clear custody items from cloud:', err)
-  }
+  throw new Error('المسح الشامل غير متاح لحماية البيانات. استخدم الأرشفة الموثقة لكل سجل.')
 }
-
+/** Compatibility API for local snapshots only. Existing ledger/events are retained. */
 export function saveCustodyItems(items: CustodyItem[]): void {
-  try {
-    localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(items))
-  } catch (err) {
-    console.error('Could not save custody items to storage:', err)
-  }
-  // Asynchronously sync to Supabase cloud
-  void saveCustodyItemsToCloud(items)
+  const state = readInventoryState()
+  const byId = new Map(state.items.map((item) => [item.id, item]))
+  for (const item of items) byId.set(item.id, { ...item })
+  writeInventoryState({ ...state, revision: state.revision + 1, items: [...byId.values()] }, state.revision)
 }
 
 export function clearAllCustodyItems(): void {
-  try {
-    localStorage.removeItem(CUSTODY_STORAGE_KEY)
-  } catch (err) {
-    console.error('Could not clear custody items from storage:', err)
-  }
-  // Asynchronously wipe from Supabase cloud
-  void clearAllCustodyItemsFromCloud()
+  throw new Error('المسح الشامل غير متاح لحماية البيانات. استخدم الأرشفة الموثقة لكل سجل.')
 }
 
 export async function exportCustodyToExcel(warehouseName: string, items: CustodyItem[], currency: string) {
@@ -1191,97 +1121,20 @@ export function findWarehouseByRecipient(toText?: string): WarehouseDefinition |
 }
 
 export function syncInwardMovementToCustody(movement: {
-  item: string
-  date?: string
-  qin: string | number
-  price?: string | number
-  from?: string
-  inv?: string | number
-  notes?: string
+  id?: string | number; custodyApplied?: boolean; item: string; date?: string; qin: string | number; price?: string | number; from?: string; inv?: string | number; notes?: string
 }): { added: boolean; item: CustodyItem } {
-  const items = loadCustodyItems()
-  const cleanItemName = (movement.item || '').trim()
-  if (!cleanItemName) {
-    throw new Error('اسم الصنف مطلوب لإضافة العهدة.')
+  const state = readInventoryState()
+  const existing = state.items.find((item) => !item.deletedAt && item.warehouseId === 'main' && item.name.trim().toLowerCase() === movement.item.trim().toLowerCase())
+  if (movement.custodyApplied || (movement.id != null && state.movements.some((entry) => String(entry.id) === String(movement.id)))) {
+    if (!existing) throw new Error('تعذر تحديد الصنف المرتبط بالحركة المسجلة.')
+    return { added: false, item: { ...existing } }
   }
-  const today = localDate()
-  const acquisitionDate = movement.date?.trim() || today
-  const qty = Math.max(0, Number(movement.qin) || 0)
-  const price = Math.max(0, Number(movement.price) || 0)
-
-  // Find if item already exists in main warehouse
-  const existingIdx = items.findIndex(
-    (i) => i.warehouseId === 'main' && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
-  )
-
-  let resultItem: CustodyItem
-
-  if (existingIdx !== -1) {
-    const existing = items[existingIdx]
-    const updatedQty = existing.quantity + qty
-    const updatedValue = existing.value + (price > 0 ? price * qty : 0)
-    const extraNote = movement.from
-      ? `توريد جديد (${qty} ${existing.unit}) من ${movement.from}${movement.inv ? ` (فاتورة ${movement.inv})` : ''}`
-      : ''
-    const updatedNotes = extraNote
-      ? (existing.notes ? `${existing.notes} • ${extraNote}` : extraNote)
-      : existing.notes
-
-    resultItem = {
-      ...existing,
-      quantity: updatedQty,
-      unitPrice: price > 0 ? price : existing.unitPrice,
-      value: updatedValue,
-      notes: updatedNotes,
-    }
-    items[existingIdx] = resultItem
-    saveCustodyItems(items)
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('custody-changed'))
-      }
-    } catch {
-      // ignore
-    }
-    return { added: false, item: resultItem }
-  } else {
-    const mainItemsCount = items.filter((i) => i.warehouseId === 'main').length
-    const nextSeq = (mainItemsCount + 1).toString().padStart(3, '0')
-    const code = `MAIN-${nextSeq}`
-
-    const note = movement.from
-      ? `توريد من: ${movement.from}${movement.inv ? ` (فاتورة: ${movement.inv})` : ''}`
-      : (movement.notes || 'وارد جديد للمخزن الرئيسي')
-
-    resultItem = {
-      id: `c-in-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      warehouseId: 'main',
-      code,
-      name: cleanItemName,
-      category: guessCategory(cleanItemName),
-      custodian: 'أمين المخزن الرئيسي',
-      quantity: qty,
-      unit: 'قطعة',
-      condition: 'excellent',
-      custodyType: 'مستديمة',
-      roomLocation: 'المستودع الرئيسي - قسم الوارد',
-      acquisitionDate,
-      unitPrice: price,
-      value: price > 0 ? price * qty : 0,
-      serialNumber: '',
-      notes: note,
-    }
-    items.unshift(resultItem)
-    saveCustodyItems(items)
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('custody-changed'))
-      }
-    } catch {
-      // ignore
-    }
-    return { added: true, item: resultItem }
-  }
+  const row: import('./fixture').FixtureMovement = { id: movement.id ?? crypto.randomUUID(), date: movement.date || localDate(), inv: movement.inv || '', from: movement.from || '', to: '', permit: '', issue: '', item: movement.item, price: movement.price || 0, qin: movement.qin, qout: 0, notes: movement.notes || '' }
+  const plan = planInventoryOperation(state, { kind: 'purchase', movement: row })
+  writeInventoryState(plan.next, state.revision)
+  movement.custodyApplied = true
+  const itemId = plan.next.movements.at(-1)!.inventoryEffects![0].itemId
+  return { added: !existing, item: plan.next.items.find((item) => item.id === itemId)! }
 }
 
 export function requireDisbursementSource(items: CustodyItem[], movement: {
@@ -1316,173 +1169,17 @@ export function resolveDisbursementSources<T extends {
 }
 
 export function syncOutwardMovementToCustody(movement: {
-  item: string
-  date?: string
-  issue?: string
-  qout: string | number
-  price?: string | number
-  to?: string
-  permit?: string | number
-  notes?: string
-  sourceItemId?: string
-  sourceWarehouseId?: string
-  destType?: 'warehouse' | 'custodian'
-  destWarehouseId?: string
-  custodianName?: string
-  custodyApplied?: boolean
-}): {
-  deductedFromMain: boolean
-  addedToTarget: boolean
-  targetWarehouse?: WarehouseDefinition
-  deductedFromSource?: boolean
-  addedToCustodian?: boolean
-} {
-  if (movement.custodyApplied) {
-    return {
-      deductedFromMain: false,
-      addedToTarget: false,
-      deductedFromSource: false,
-      addedToCustodian: false,
-    }
-  }
-
-  const items = loadCustodyItems()
-  let cleanItemName = (movement.item || '').trim()
-  const qty = Math.max(0, Number(movement.qout) || 0)
-  const today = localDate()
-  const actionDate = movement.issue?.trim() || movement.date?.trim() || today
-  const sourceWhId = movement.sourceWarehouseId || 'main'
-
-  // Validation: cannot disburse to the exact same warehouse
-  const explicitTargetWhId = movement.destWarehouseId
-  if (explicitTargetWhId && explicitTargetWhId === sourceWhId) {
-    throw new Error('لا يمكن صرف أو تحويل الصنف إلى نفس المستودع المصدر.')
-  }
-
-  // 1. Find item in source warehouse and deduct quantity
-  const validatedSource = requireDisbursementSource(items, movement)
-  cleanItemName = validatedSource.name
-  const sourceIdx = items.findIndex((item) => item.id === validatedSource.id)
-
-  let sourceItem: CustodyItem | undefined
-  let deductedFromSource = false
-
-  if (sourceIdx !== -1) {
-    sourceItem = validatedSource
-    if (sourceItem.quantity < qty) {
-      throw new Error(`الرصيد المتاح من «${cleanItemName}» في المخزن المصدر (${sourceItem.quantity}) غير كافٍ لصرف كمية ${qty}.`)
-    }
-    const newQty = Math.max(0, sourceItem.quantity - qty)
-    const unitPrice = sourceItem.quantity > 0 ? sourceItem.value / sourceItem.quantity : (Number(movement.price) || 0)
-    items[sourceIdx] = {
-      ...sourceItem,
-      quantity: newQty,
-      value: Math.max(0, Math.round(newQty * unitPrice)),
-      notes: movement.to
-        ? `${sourceItem.notes ? `${sourceItem.notes} • ` : ''}صرف ${qty} ${sourceItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
-        : sourceItem.notes,
-    }
-    deductedFromSource = true
-  }
-
-  // 2. Identify target warehouse or custodian
-  const targetWh = explicitTargetWhId
-    ? WAREHOUSES.find((w) => w.id === explicitTargetWhId)
-    : findWarehouseByRecipient(movement.to)
-
-  let addedToTarget = false
-  let addedToCustodian = false
-
-  if (movement.destType === 'custodian' || movement.custodianName) {
-    const custodianName = movement.custodianName || movement.to || 'أمين عهدة'
-    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
-
-    const newItem: CustodyItem = {
-      id: `c-cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      warehouseId: sourceWhId,
-      code: `CUS-${Date.now().toString().slice(-4)}`,
-      name: cleanItemName,
-      category: sourceItem?.category || guessCategory(cleanItemName),
-      custodian: custodianName,
-      quantity: qty,
-      unit: sourceItem?.unit || 'قطعة',
-      condition: 'excellent',
-      custodyType: 'شخصية',
-      roomLocation: movement.to || 'عهدة موظف',
-      acquisitionDate: actionDate,
-      unitPrice: unitPrice > 0 ? unitPrice : undefined,
-      value: unitPrice > 0 ? unitPrice * qty : 0,
-      serialNumber: '',
-      notes: `صرف كعهدة شخصية للموظف: ${custodianName}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
-    }
-    items.push(newItem)
-    addedToCustodian = true
-  } else if (targetWh && targetWh.id !== sourceWhId) {
-    // Check if target warehouse already has this item
-    const targetIdx = items.findIndex(
-      (i) => i.warehouseId === targetWh.id && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
-    )
-
-    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
-
-    if (targetIdx !== -1) {
-      const existingTarget = items[targetIdx]
-      const newQty = existingTarget.quantity + qty
-      const addedVal = unitPrice > 0 ? unitPrice * qty : 0
-      const extraNote = `صرف وتوريد من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)} (${qty} ${existingTarget.unit})${movement.permit ? ` بإذن صرف ${movement.permit}` : ''}`
-      items[targetIdx] = {
-        ...existingTarget,
-        quantity: newQty,
-        unitPrice: unitPrice > 0 ? unitPrice : existingTarget.unitPrice,
-        value: existingTarget.value + addedVal,
-        notes: existingTarget.notes ? `${existingTarget.notes} • ${extraNote}` : extraNote,
-      }
-      addedToTarget = true
-    } else {
-      const branchItemsCount = items.filter((i) => i.warehouseId === targetWh.id).length
-      const seq = (branchItemsCount + 1).toString().padStart(3, '0')
-      const prefix = targetWh.id.toUpperCase().slice(0, 3)
-      const code = `${prefix}-${seq}`
-
-      const newItem: CustodyItem = {
-        id: `c-out-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        warehouseId: targetWh.id,
-        code,
-        name: cleanItemName,
-        category: sourceItem?.category || guessCategory(cleanItemName),
-        custodian: `أمين عهدة ${targetWh.shortName}`,
-        quantity: qty,
-        unit: sourceItem?.unit || 'قطعة',
-        condition: 'excellent',
-        custodyType: 'مستديمة',
-        roomLocation: targetWh.building,
-        acquisitionDate: actionDate,
-        unitPrice: unitPrice > 0 ? unitPrice : undefined,
-        value: unitPrice > 0 ? unitPrice * qty : 0,
-        serialNumber: '',
-        notes: `مصروف من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
-      }
-      items.push(newItem)
-      addedToTarget = true
-    }
-  }
-
-  saveCustodyItems(items)
-  try {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('custody-changed'))
-    }
-  } catch {
-    // ignore
-  }
-
+  id?: string | number; item: string; date?: string; issue?: string; qout: string | number; price?: string | number;
+  to?: string; permit?: string | number; notes?: string; sourceItemId?: string; sourceWarehouseId?: string;
+  destType?: 'warehouse' | 'custodian'; destWarehouseId?: string; custodianName?: string; custodyApplied?: boolean
+}) {
+  const state = readInventoryState()
+  if (movement.custodyApplied || (movement.id != null && state.movements.some((entry) => String(entry.id) === String(movement.id)))) return { deductedFromMain: false, addedToTarget: false, deductedFromSource: false, addedToCustodian: false, targetWarehouse: undefined as WarehouseDefinition | undefined }
+  const source = requireDisbursementSource(state.items.filter((item) => !item.deletedAt), movement)
+  const row: import('./fixture').FixtureMovement = { ...movement, id: movement.id ?? crypto.randomUUID(), date: movement.date || localDate(), inv: '', from: '', to: movement.to || '', permit: movement.permit || '', issue: movement.issue || localDate(), item: movement.item, price: movement.price || 0, qin: 0, qout: movement.qout, notes: movement.notes || '', sourceItemId: source.id }
+  const plan = planInventoryOperation(state, { kind: 'disbursement', movement: row })
+  writeInventoryState(plan.next, state.revision)
   movement.custodyApplied = true
-
-  return {
-    deductedFromMain: sourceWhId === 'main' && deductedFromSource,
-    addedToTarget,
-    targetWarehouse: targetWh,
-    deductedFromSource,
-    addedToCustodian,
-  }
+  const target = findWarehouseByRecipient(row.destWarehouseId || row.to)
+  return { deductedFromMain: source.warehouseId === 'main', deductedFromSource: true, addedToTarget: row.destType !== 'custodian', addedToCustodian: row.destType === 'custodian', targetWarehouse: target }
 }

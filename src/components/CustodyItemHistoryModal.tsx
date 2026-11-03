@@ -20,7 +20,7 @@ interface CustodyItemHistoryModalProps {
   item: CustodyItem
   currency: AppSettings['currency']
   onClose: () => void
-  onUpdateItem: (updatedItem: CustodyItem) => void
+  onUpdateItem: (updatedItem: CustodyItem, note?: string) => void | Promise<void>
 }
 
 function formatMoney(amount: number, currency: string) {
@@ -43,74 +43,21 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
   const [newLogText, setNewLogText] = useState('')
   const [newCondition, setNewCondition] = useState(item.condition)
   const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-  // Parse notes into historical timeline points
-  const historicalEvents = React.useMemo(() => {
-    const events: Array<{ date?: string; title: string; desc: string; type: 'creation' | 'transfer' | 'maintenance' | 'note' }> = []
-
-    // 1. Initial registration event
-    events.push({
-      date: item.acquisitionDate || 'تاريخ القيد الأولي',
-      title: 'قيد وتوريد الأصل لأول مرة',
-      desc: `تم توريد وقيد الأصل (${item.name}) بعدد ${item.quantity} ${item.unit} بقيمة تقديرية ${formatMoney(item.value, currency)} في عهدة "${warehouse.name}".`,
-      type: 'creation',
-    })
-
-    // 2. Transfer / disbursement notes from item.notes
-    if (item.notes) {
-      const parts = item.notes.split('•').map((p) => p.trim()).filter(Boolean)
-      for (const part of parts) {
-        if (part.includes('تم النقل') || part.includes('منقول')) {
-          events.push({
-            title: 'حركة نقل وتوزيع داخلي',
-            desc: part,
-            type: 'transfer',
-          })
-        } else if (part.includes('صرف') || part.includes('مصروف')) {
-          events.push({
-            title: 'إذن صرف وتغذية مخزنية',
-            desc: part,
-            type: 'transfer',
-          })
-        } else if (part.includes('صيانة') || part.includes('فحص')) {
-          events.push({
-            title: 'إجراء فحص أو صيانة فنية',
-            desc: part,
-            type: 'maintenance',
-          })
-        } else {
-          events.push({
-            title: 'ملاحظة وقيد إداري',
-            desc: part,
-            type: 'note',
-          })
-        }
-      }
-    }
-
-    return events
-  }, [item, warehouse, currency])
-
-  function handleSaveLog() {
+  const historicalEvents = (item.history || []).map((event) => ({
+    date: localDate(event.at), title: event.title, desc: event.description,
+    type: event.kind === 'purchase' ? 'creation' : event.kind === 'transfer' || event.kind === 'disbursement' ? 'transfer' : 'note',
+  }))
+  async function handleSaveLog() {
     if (!newLogText.trim() && newCondition === item.condition) return
-
     setIsSaving(true)
-    const today = localDate()
-    const logEntry = newLogText.trim()
-      ? `[${today}] ${newLogText.trim()}${newCondition !== item.condition ? ` (تعديل الحالة إلى: ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'})` : ''}`
-      : `[${today}] تم تغيير الحالة الفنية إلى ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'}`
-
-    const updatedNotes = item.notes ? `${item.notes} • ${logEntry}` : logEntry
-
-    const updated: CustodyItem = {
-      ...item,
-      condition: newCondition,
-      notes: updatedNotes,
-    }
-
-    onUpdateItem(updated)
-    setNewLogText('')
-    setIsSaving(false)
+    setSaveError('')
+    try {
+      await onUpdateItem({ ...item, condition: newCondition }, newLogText.trim() || `تغيير الحالة الفنية إلى ${newCondition}`)
+      setNewLogText('')
+    } catch (error) { setSaveError(error instanceof Error ? error.message : 'تعذر حفظ الإجراء؛ احتُفظ بالنص للمحاولة مجدداً.') }
+    finally { setIsSaving(false) }
   }
 
   return (
@@ -188,7 +135,10 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
             )}
           </div>
 
-          {/* Timeline of events */}
+          {item.notes && <div className="inline-message"><strong>ملاحظات السجل السابق (ليست أحداثاً موثقة):</strong> {item.notes}</div>}
+          {historicalEvents.length === 0 && <p>لا توجد أحداث مخزنية موثقة لهذا السجل حتى الآن. لم يتم تخمين تاريخ سابق من الملاحظات.</p>}
+          {saveError && <div className="inline-message error" role="alert">{saveError}</div>}
+          {/* Timeline of structured events */}
           <div>
             <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '14px' }}>
               مسار الخط الزمني وسجل العمليات:

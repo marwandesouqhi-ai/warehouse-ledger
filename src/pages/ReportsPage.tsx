@@ -1,3 +1,4 @@
+import { useInventory } from '../lib/useInventory'
 import { localDate } from '../lib/localDate'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -22,7 +23,6 @@ import {
   exportComprehensiveCustodyWorkbook,
   exportCustodyToExcel,
   getWarehouseStats,
-  loadCustodyItems,
   WAREHOUSES,
   type CustodyItem,
   type WarehouseDefinition,
@@ -59,7 +59,8 @@ export default function ReportsPage({
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
 
-  const [items] = useState<CustodyItem[]>(loadCustodyItems)
+  const inventory = useInventory()
+  const items = useMemo(() => inventory.items.filter((item) => !item.deletedAt), [inventory.items])
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
   const [permitInitialItems, setPermitInitialItems] = useState<CustodyItem[]>([])

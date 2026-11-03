@@ -26,12 +26,14 @@ describe('movementsRepository update and delete fallback tests', () => {
         notes: 'ملاحظة تجريبية',
     }
 
-    it('returns movement as-is when supabase client is not connected', async () => {
-        const result = await updateMovement(sampleMovement, 'owner-123')
-        expect(result).toEqual(sampleMovement)
+    it('does not falsely report success for an edit without a recorded inventory effect', async () => {
+        localStorage.clear()
+        localStorage.setItem('warehouse-ledger-movements', JSON.stringify([sampleMovement]))
+        await expect(updateMovement(sampleMovement, 'owner-123')).rejects.toThrow(/حركة قديمة/)
+        expect(JSON.parse(localStorage.getItem('warehouse-ledger-movements')!)).toEqual([sampleMovement])
     })
-
-    it('handles delete without error when supabase is not connected', async () => {
-        await expect(deleteMovement('mock-uuid-1', 'owner-123')).resolves.toBeUndefined()
+    it('rejects cancellation of an unknown movement without removing data', async () => {
+        localStorage.clear()
+        await expect(deleteMovement('missing', 'owner-123')).rejects.toThrow(/غير موجودة/)
     })
 })

@@ -7,75 +7,16 @@ describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
     vi.clearAllMocks()
   })
 
-  it('preserves higher cloud quantities and does not overwrite with stale local copies in saveCustodyItemsToCloud', async () => {
+  it('rejects stale cloud writes instead of taking a larger quantity or mutating input', async () => {
     if (!supabase) return
-
-    // محاكاة حالة السحابة: زيادة الرصيد إلى 25 بسبب فاتورة شراء نُفذت عبر record_purchase
-    const cloudItem = {
-      id: 'cust-main-001',
-      warehouse_id: 'main',
-      name: 'كمبيوتر محمول Dell Core i7',
-      quantity: 25, // القيمة الأحدث في السحابة
-      value: 750000,
-      updated_at: '2026-10-14T10:00:00Z',
-    }
-
-    // محاكاة استجابة Supabase select
-    const selectMock = vi.fn().mockResolvedValue({
-      data: [cloudItem],
-      error: null,
-    })
-
-    const upsertMock = vi.fn().mockResolvedValue({
-      data: null,
-      error: null,
-    })
-
-    // تركيب mock على supabase.from('custody_items')
-    const fromSpy = vi.spyOn(supabase as any, 'from').mockImplementation(((table: string) => {
-      if (table === 'custody_items') {
-        return {
-          select: selectMock,
-          upsert: upsertMock,
-        }
-      }
-      return {}
-    }) as any)
-
-    // نسخة العميل المحلية القديمة (قبل عملية الشراء، ما زالت 10)
-    const staleLocalItems: CustodyItem[] = [
-      {
-        id: 'cust-main-001',
-        warehouseId: 'main',
-        code: 'MAIN-001',
-        name: 'كمبيوتر محمول Dell Core i7',
-        category: 'أجهزة إلكترونية وحواسب',
-        custodian: 'أمين المخزن الرئيسي',
-        quantity: 10, // نسخة محلية قديمة
-        unit: 'جهاز',
-        condition: 'excellent',
-        custodyType: 'مستديمة',
-        roomLocation: 'المستودع الرئيسي',
-        acquisitionDate: '2026-01-01',
-        value: 300000,
-      },
-    ]
-
-    // استدعاء الحفظ السحابي
-    await saveCustodyItemsToCloud(staleLocalItems)
-
-    expect(selectMock).toHaveBeenCalled()
-    expect(upsertMock).toHaveBeenCalledTimes(1)
-
-    // التحقق من أن القيمة المرفوعة لم تمسح رصيد السحابة الأحدث
-    const uploadedRows = upsertMock.mock.calls[0][0] as Array<{ id: string; quantity: number }>
-    expect(uploadedRows[0].id).toBe('cust-main-001')
-    expect(uploadedRows[0].quantity).toBe(25) // تم الحفاظ على كمية السحابة 25 بدلاً من مسحها بـ 10
-
-    // والتحقق أيضاً من تحديث الكائن المحلي ليواكب السحابة
-    expect(staleLocalItems[0].quantity).toBe(25)
-
-    fromSpy.mockRestore()
+    localStorage.clear()
+    const items: CustodyItem[] = [{ id: 'a', warehouseId: 'main', code: '', name: 'حاسوب', category: 'أجهزة إلكترونية وحواسب', quantity: 5, value: 100, unit: 'قطعة', condition: 'good', custodyType: 'مستديمة', custodian: '', roomLocation: '', acquisitionDate: '2020-01-01', version: 0 }]
+    const before = JSON.stringify(items)
+    const rpcSpy = vi.spyOn(supabase, 'rpc').mockResolvedValue({ data: null, error: { message: 'Inventory version conflict' } } as never)
+    await expect(saveCustodyItemsToCloud(items)).rejects.toThrow(/version conflict/)
+    expect(JSON.stringify(items)).toBe(before)
+    expect(rpcSpy).toHaveBeenCalledWith('apply_inventory_operation', expect.objectContaining({ p_kind: 'import' }))
+    rpcSpy.mockRestore()
   })
 
   it('simulates record_purchase RPC contract and verifies idempotency response', async () => {

@@ -1,3 +1,4 @@
+import { deriveLedger } from '../lib/derive'
 import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CheckCircle2, Info, Search, ShieldAlert, X } from 'lucide-react'
 
@@ -38,7 +39,8 @@ export default function QualityPage({ movements, onInspect }: QualityPageProps) 
   const [filter, setFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
 
-  const findings = movements.flatMap((movement) => evaluateQuality(movement as unknown as Record<string, unknown>)
+  const ledger = deriveLedger(movements).rows
+  const findings = movements.flatMap((movement, index) => evaluateQuality(movement as unknown as Record<string, unknown>, undefined, ledger[index]?.available_before)
     .map((finding) => ({ movement, finding })))
   const counts = {
     error: findings.filter(({ finding }) => finding.level === 'error').length,
