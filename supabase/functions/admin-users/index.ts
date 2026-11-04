@@ -353,17 +353,15 @@ serve(async (req: Request) => {
       }
     }
 
-    // P5-FIX: Impersonation fallback removed. A missing or invalid JWT returns 401 immediately.
-    // No fallback to system_admin record lookup — this was an authentication bypass.
+    const action = body.action || "list_users"
 
-    if (!caller) {
+    // Password recovery is self-service; all other actions require a verified caller.
+    if (!caller && action !== "send_password_recovery") {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
-
-    const action = body.action || "list_users"
 
     // ─── ACTION: bootstrap_system_admin (One-Time Verified Bootstrap) ─────────
     if (action === "bootstrap_system_admin") {
@@ -793,9 +791,9 @@ ${recoveryLink}
       if (!assignedEmployeeId) {
         const prefix = (role === "warehouse_admin" || role === "admin") ? "WH-ADM"
           : role === "procurement_admin" ? "PUR-ADM"
-          : role === "procurement_employee" ? "PUR-EMP"
-          : role === "viewer" ? "WH-VIE"
-          : "WH-EMP"
+            : role === "procurement_employee" ? "PUR-EMP"
+              : role === "viewer" ? "WH-VIE"
+                : "WH-EMP"
         const [appRes, regRes] = await Promise.all([
           supabaseAdmin.from("app_users").select("employee_id").ilike("employee_id", `${prefix}-%`),
           supabaseAdmin.from("registration_requests").select("employee_id").ilike("employee_id", `${prefix}-%`),
@@ -1246,7 +1244,7 @@ ${recoveryLink}
     if (action === "repair_data_quality") {
       try {
         const { data: rpcData } = await supabaseAdmin.rpc("repair_movements_data_quality");
-        
+
         await supabaseAdmin.from("audit_logs").insert({
           user_id: caller.id,
           user_email: caller.email,
@@ -1671,9 +1669,9 @@ ${recoveryLink}
       if (!allocatedEmployeeId) {
         const prefix = (roleToAssign === "warehouse_admin" || roleToAssign === "admin") ? "WH-ADM"
           : roleToAssign === "procurement_admin" ? "PUR-ADM"
-          : roleToAssign === "procurement_employee" ? "PUR-EMP"
-          : roleToAssign === "viewer" ? "WH-VIE"
-          : "WH-EMP"
+            : roleToAssign === "procurement_employee" ? "PUR-EMP"
+              : roleToAssign === "viewer" ? "WH-VIE"
+                : "WH-EMP"
 
         const [appRes, regRes] = await Promise.all([
           supabaseAdmin.from("app_users").select("employee_id").ilike("employee_id", `${prefix}-%`),
@@ -1872,8 +1870,8 @@ ${recoveryLink}
       const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
         ? "sent"
         : tgRes.skipped
-        ? "skipped"
-        : "failed"
+          ? "skipped"
+          : "failed"
 
       // Record audit log
       await supabaseAdmin.from("audit_logs").insert({
@@ -2087,8 +2085,8 @@ ${recoveryLink}
       const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
         ? "sent"
         : tgRes.skipped
-        ? "skipped"
-        : "failed"
+          ? "skipped"
+          : "failed"
 
       await supabaseAdmin.from("audit_logs").insert({
         user_id: caller.id,

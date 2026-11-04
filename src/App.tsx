@@ -296,6 +296,29 @@ function App() {
     setMobileMenuOpen(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1025px)')
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileMenuOpen(false)
+    }
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [mobileMenuOpen])
+
   const [settings, setSettings] = useState<AppSettings>(loadAppSettings)
   const [failedLogoSource, setFailedLogoSource] = useState('')
   const logoSource = settings.logoDataUrl || settings.logoUrl || ''
@@ -1497,7 +1520,7 @@ function App() {
         />
       )}
 
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label="شريط التنقل الجانبي">
+      <aside id="app-sidebar" className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} aria-label="شريط التنقل الجانبي">
         <div className="sidebar-scrollable-content">
           {mobileMenuOpen && (
             <div className="mobile-drawer-header">
@@ -1592,6 +1615,8 @@ function App() {
               className="mobile-menu-trigger-btn"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="فتح القائمة الرئيسية"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="app-sidebar"
               title="القائمة الرئيسية"
             >
               <Menu size={20} />

@@ -805,7 +805,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 <input
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="مثال: marwan-desouky أو WH-EMP-000001 أو name@gmail.com"
+                                    placeholder="مثال: employee.name أو WH-EMP-000001 أو name@example.com"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required
@@ -840,7 +840,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 <input
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="اسم المستخدم أو الرقم الوظيفي (مثال: marwan-desouky أو WH-EMP-000001)"
+                                    placeholder="اسم المستخدم أو الرقم الوظيفي (مثال: employee.name أو WH-EMP-000001)"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required

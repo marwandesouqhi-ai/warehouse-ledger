@@ -101,11 +101,10 @@ function getWarehouseIcon(id: string) {
 }
 
 export default function WarehouseChatBot({ session }: WarehouseChatBotProps) {
-  const isAdmin = isSystemAdmin(session)
-  if (!isAdmin) {
-    return null
-  }
+  return isSystemAdmin(session) ? <AdminWarehouseChatBot session={session} /> : null
+}
 
+function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
 

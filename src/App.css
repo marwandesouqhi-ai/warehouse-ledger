@@ -7504,7 +7504,7 @@
 
 .reports-category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
   gap: 20px;
   margin-bottom: 28px;
 }
@@ -7616,7 +7616,7 @@
 
 .reports-wh-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
   gap: 20px;
 }
 
@@ -7752,7 +7752,7 @@
 
 .reports-tech-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 20px;
   margin-bottom: 28px;
 }
@@ -8530,7 +8530,7 @@
 
 .custody-dash-split-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: var(--sp-4);
 }
 
@@ -9971,7 +9971,7 @@
 }
 .form-grid-2col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
@@ -11744,8 +11744,117 @@ a {
   display: none !important;
 }
 
-/* ─── 1. Desktop, Laptops & Landscape Displays (min-width: 769px) ────────── */
-@media screen and (min-width: 769px) {
+/* Shared navigation structure: never inherit the legacy horizontal tablet bar. */
+@media screen {
+  .app-shell {
+    --sidebar-width: 280px;
+  }
+
+  .sidebar > .sidebar-scrollable-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .sidebar .brand-wrap {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 8px 0 16px;
+  }
+
+  .sidebar .brand-mark {
+    flex-shrink: 0;
+  }
+
+  .sidebar .brand-wrap > div:last-child {
+    min-width: 0;
+  }
+
+  .sidebar .brand-title {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 1rem;
+  }
+
+  .sidebar .nav {
+    display: grid;
+    flex: 0 0 auto;
+    overflow: visible;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sidebar .nav-section {
+    display: grid;
+    min-width: 0;
+  }
+
+  .sidebar .nav-section-title {
+    display: block;
+  }
+
+  .sidebar .nav-item {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    justify-content: flex-start;
+  }
+
+  .sidebar .nav-item svg {
+    flex-shrink: 0;
+  }
+
+  .sidebar .nav-label {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .main-panel,
+  .main-panel > *,
+  .topbar-meta,
+  .toolbar-actions,
+  .route-content-container {
+    min-width: 0;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .toolbar-search {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-grid > *,
+  .content-grid > *,
+  .lower-grid > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* ─── 1. Desktop, Laptops & Landscape Displays (min-width: 1025px) ────────── */
+@media screen and (min-width: 1025px) {
   /* Strict hiding of mobile widgets on all desktop/laptop resolutions */
   .mobile-topbar-row,
   .mobile-native-greeting,
@@ -11774,7 +11883,7 @@ a {
     bottom: 0 !important;
     right: 0 !important;
     left: auto !important;
-    width: 280px !important;
+    width: var(--sidebar-width) !important;
     height: 100vh !important;
     height: 100dvh !important;
     max-height: 100dvh !important;
@@ -11808,9 +11917,9 @@ a {
   .main-panel {
     display: flex !important;
     flex-direction: column !important;
-    margin-inline-start: 280px !important;
-    width: calc(100% - 280px) !important;
-    max-width: calc(100% - 280px) !important;
+    margin-inline-start: var(--sidebar-width) !important;
+    width: calc(100% - var(--sidebar-width)) !important;
+    max-width: calc(100% - var(--sidebar-width)) !important;
     min-height: 100vh !important;
     padding: clamp(24px, 2.5vw, 44px) clamp(24px, 3vw, 48px) 64px !important;
     box-sizing: border-box !important;
@@ -11818,12 +11927,12 @@ a {
   }
 
   [dir="rtl"] .main-panel {
-    margin-right: 280px !important;
+    margin-right: var(--sidebar-width) !important;
     margin-left: 0 !important;
   }
 
   [dir="ltr"] .main-panel {
-    margin-left: 280px !important;
+    margin-left: var(--sidebar-width) !important;
     margin-right: 0 !important;
   }
 
@@ -11854,8 +11963,16 @@ a {
   }
 }
 
-/* Medium Desktop / Small Laptop Refinement (769px to 1100px) */
-@media screen and (min-width: 769px) and (max-width: 1100px) {
+/* Medium Desktop / Small Laptop Refinement (1025px to 1100px) */
+@media screen and (min-width: 1025px) and (max-width: 1366px) {
+  .app-shell {
+    --sidebar-width: 240px;
+  }
+
+  .main-panel {
+    padding: 20px 20px 40px !important;
+  }
+
   .kpi-block,
   .purchases-kpis,
   .operational-strip,
@@ -11866,8 +11983,8 @@ a {
   }
 }
 
-/* ─── 2. Mobile Phones & Handheld Displays (max-width: 768px) ─────────────── */
-@media screen and (max-width: 768px) {
+/* ─── 2. Mobile Phones & Handheld Displays (max-width: 1024px) ─────────────── */
+@media screen and (max-width: 1024px) {
   .topbar-meta,
   .toolbar-actions {
     display: none !important;
@@ -11896,13 +12013,29 @@ a {
   .main-panel {
     display: flex !important;
     flex-direction: column !important;
+    margin: 0 !important;
     width: 100% !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
     min-width: 0 !important;
     padding: 12px 12px 96px !important;
     box-sizing: border-box !important;
     overflow-x: hidden !important;
     gap: 14px !important;
+  }
+
+  .mobile-nav-active .chatbot-trigger-btn,
+  .mobile-nav-active .mobile-bottom-dock {
+    display: none !important;
+    pointer-events: none;
+  }
+
+  .chatbot-trigger-btn {
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 16px !important;
+  }
+
+  .main-panel {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* Off-Canvas Slide Drawer */
@@ -11930,6 +12063,25 @@ a {
     flex-direction: column !important;
     padding: 16px 14px 36px !important;
     box-sizing: border-box !important;
+    transform: none !important;
+    justify-content: flex-start !important;
+    gap: 16px;
+    overflow-y: hidden !important;
+  }
+
+  .mobile-drawer-header > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-drawer-close-btn {
+    flex-shrink: 0;
+  }
+
+  .sidebar .pwa-sidebar-card,
+  .sidebar .pwa-installed-tag {
+    flex-shrink: 0;
+    margin: 0;
   }
 
   @keyframes drawerSlideIn {
@@ -11942,13 +12094,19 @@ a {
   }
 
   .mobile-sidebar-backdrop {
+    display: block !important;
     position: fixed !important;
     inset: 0 !important;
     background: rgba(15, 23, 42, 0.6) !important;
     -webkit-backdrop-filter: blur(5px) !important;
     backdrop-filter: blur(5px) !important;
     z-index: 1190 !important;
-    animation: fadeIn 0.2s ease-out !important;
+    animation: sidebarBackdropFade 0.2s ease-out !important;
+  }
+
+  @keyframes sidebarBackdropFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   .mobile-drawer-header {
@@ -12039,6 +12197,21 @@ a {
     padding: 6px 12px !important;
     border-radius: var(--r-pill) !important;
     border: 1px solid var(--accent-border) !important;
+    min-width: 0;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .mobile-brand-pill span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-brand-pill svg,
+  .mobile-menu-trigger-btn,
+  .mobile-theme-toggle {
+    flex-shrink: 0;
   }
 
   .mobile-theme-toggle {
@@ -12075,6 +12248,7 @@ a {
     color: var(--ink) !important;
     margin: 2px 0 !important;
     line-height: 1.3 !important;
+    overflow-wrap: anywhere;
   }
 
   .mobile-greeting-subtitle {
@@ -12127,7 +12301,7 @@ a {
   }
 
   .toolbar-actions {
-    display: flex !important;
+    display: none !important;
     flex-direction: column !important;
     width: 100% !important;
     gap: 8px !important;
@@ -12542,15 +12716,166 @@ a {
   }
 }
 
+/* Internal pages share the same shrinking and scrolling boundaries. */
+@media screen {
+  .custody-module,
+  .reports-module,
+  .purchases-module,
+  .custody-header-main,
+  .reports-header-layout > *,
+  .movement-form label,
+  .form-grid-2col > *,
+  .form-grid-3col > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-scroll-container,
+  .responsive-table {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  .custody-actions-group,
+  .reports-header-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    width: 100%;
+  }
+
+  .custody-actions-group > *,
+  .reports-header-actions > * {
+    min-width: 0;
+    white-space: normal;
+    justify-content: center;
+  }
+
+  .custody-toolbar,
+  .movements-filter-toolbar {
+    align-items: stretch;
+  }
+
+  .custody-toolbar > *,
+  .movements-filter-toolbar > *,
+  .filter-select-group,
+  .filter-select-group select {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .reports-tech-head,
+  .reports-wh-actions,
+  .reports-scope-switcher,
+  .reports-scope-switcher-tabs {
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .chatbot-window,
+  .chatbot-window.maximized {
+    left: 8px !important;
+    right: 8px;
+    width: auto !important;
+    max-width: none;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    height: min(590px, calc(100dvh - 108px)) !important;
+    max-height: calc(100dvh - 108px) !important;
+    transform: none !important;
+    animation: sidebarBackdropFade 0.2s ease-out;
+  }
+
+  .chatbot-main-content {
+    min-height: 0;
+  }
+
+  .chatbot-live-sidebar {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 640px) {
+  .custody-form-grid,
+  .movement-form,
+  .modal-body .movement-form,
+  .form-grid-2col,
+  .form-grid-3col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custody-form-grid .span-2,
+  .movement-form .span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .custody-toolbar,
+  .movements-filter-toolbar,
+  .custody-filter-selects {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .custody-filter-selects > *,
+  .custody-toolbar .custody-search,
+  .movements-filter-toolbar > * {
+    width: 100%;
+  }
+
+  .filter-select-group select {
+    flex: 1;
+  }
+
+  .custody-nav-tabs-bar {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .custody-nav-tab-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .reports-wh-actions > * {
+    flex: 1 1 100%;
+    white-space: normal;
+    height: auto;
+    min-height: 44px;
+  }
+
+  .modal-header,
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .modal-header > div {
+    min-width: 0;
+  }
+
+  .modal-body,
+  .modal-body-padded {
+    padding: 14px;
+  }
+
+  .modal-footer button {
+    flex: 1 1 120px;
+  }
+}
+
 /* ─── 4. Mobile Bottom Navigation Dock (App-Like Touch Bar) ─────────────── */
 .mobile-bottom-dock {
   display: none;
 }
 
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 1024px) {
   .mobile-bottom-dock {
     position: fixed !important;
-    bottom: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
     left: 14px !important;
     right: 14px !important;
     height: 62px !important;

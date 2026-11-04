@@ -2,11 +2,10 @@
 project_id = "agfvwyycgqhzjbywyzqi"
 
 # ─── Edge Function JWT verification settings ──────────────────────────────────
-# SECURITY: All sensitive admin functions MUST have verify_jwt = true.
-# Exceptions must be explicitly listed below with a documented reason.
+# admin-users verifies JWTs internally for every action except public password recovery.
 
 [functions.admin-users]
-verify_jwt = true
+verify_jwt = false
 
 [functions.invite-user]
 verify_jwt = true
