@@ -35,7 +35,7 @@
 
 ### 2. الأولوية 2 — أسرار Hardcoded داخل كود المصدر
 - **المشكلة:**
-  - وجود `Deno.env.get("SMTP_PASS") || "pizpvymhyagcghgt"` في سطر 71 وسطر 528 في `supabase/functions/admin-users/index.ts`.
+  - اكتشف الفحص قيمة SMTP ثابتة في نسخة سابقة من الكود؛ أزيلت من المصدر ويجب تدوير بيانات الاعتماد المتأثرة.
 - **الإصلاح البرمجي:**
   - إزالة كلمة المرور الافتراضية نهائياً.
   - إجبار الدالة على رمي استثناء صريح `throw new Error("SMTP_PASS environment variable is not configured on the server")` أو إرجاع كود `500 Server misconfigured` عند غياب المتغير.

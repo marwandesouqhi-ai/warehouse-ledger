@@ -45,6 +45,64 @@ function generateSecureTempPassword(): string {
   return Array.from(array, (byte) => chars[byte % chars.length]).join("")
 }
 
+async function ensureAuthUserForRecovery(supabaseAdmin: any, appUser: Record<string, any> | null) {
+  if (!appUser?.email) {
+    return null
+  }
+
+  const targetEmail = String(appUser.email).trim().toLowerCase()
+  if (!targetEmail) {
+    return null
+  }
+
+  const { data: existingUser, error: existingError } = await supabaseAdmin.auth.admin.getUserByEmail(targetEmail)
+  if (!existingError && existingUser?.user) {
+    if (appUser.id && appUser.auth_user_id !== existingUser.user.id) {
+      await supabaseAdmin
+        .from("app_users")
+        .update({ auth_user_id: existingUser.user.id, must_change_password: true })
+        .eq("id", appUser.id)
+    }
+    return existingUser.user
+  }
+
+  const username = String(appUser.username || appUser.display_name || targetEmail.split("@")[0] || "user").trim()
+  const displayName = String(appUser.display_name || appUser.username || username).trim()
+  const generatedPassword = generateSecureTempPassword()
+
+  const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email: targetEmail,
+    password: generatedPassword,
+    email_confirm: true,
+    user_metadata: {
+      username,
+      displayName,
+      name: displayName,
+    },
+    app_metadata: {
+      username,
+      role: appUser.role || "viewer",
+      system_admin: false,
+      employee_id: appUser.employee_id || null,
+      department: appUser.department || null,
+      must_change_password: true,
+    },
+  })
+
+  if (createError || !createdUser?.user) {
+    throw createError ?? new Error(`Could not create Auth user for recovery email: ${targetEmail}`)
+  }
+
+  if (appUser.id) {
+    await supabaseAdmin
+      .from("app_users")
+      .update({ auth_user_id: createdUser.user.id, must_change_password: true })
+      .eq("id", appUser.id)
+  }
+
+  return createdUser.user
+}
+
 function resolveAppBaseUrl(req: Request): string {
   const envUrl = Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL")
   if (envUrl && envUrl.trim()) {
@@ -443,6 +501,7 @@ serve(async (req: Request) => {
 
       let targetEmail = ""
       let targetFullName = ""
+      let matchedKnownUser = false
       const cleanIdent = rawIdentifier.toLowerCase()
 
       if (cleanIdent.includes("@")) {
@@ -459,6 +518,7 @@ serve(async (req: Request) => {
       if (dbUser?.email) {
         targetEmail = dbUser.email.trim().toLowerCase()
         targetFullName = dbUser.display_name || dbUser.username
+        matchedKnownUser = true
       } else if (!targetEmail) {
         // Also check registration_requests
         const { data: regUser } = await supabaseAdmin
@@ -469,10 +529,11 @@ serve(async (req: Request) => {
         if (regUser?.email) {
           targetEmail = regUser.email.trim().toLowerCase()
           targetFullName = regUser.full_name
+          matchedKnownUser = true
         }
       }
 
-      if (!targetEmail) {
+      if (!matchedKnownUser) {
         // For security, do not expose whether user exists or not, but return friendly message
         return new Response(JSON.stringify({
           success: true,
@@ -484,24 +545,58 @@ serve(async (req: Request) => {
       }
 
       const appBaseUrl = resolveAppBaseUrl(req)
-      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-        type: "recovery",
-        email: targetEmail,
-        options: {
-          redirectTo: `${appBaseUrl}/#type=recovery`,
-        },
-      })
 
-      if (linkErr || !linkData?.properties?.action_link) {
+      let recoveryLink = ""
+      let linkErr: any = null
+
+      try {
+        const { data: linkData, error: generatedErr } = await supabaseAdmin.auth.admin.generateLink({
+          type: "recovery",
+          email: targetEmail,
+          options: {
+            redirectTo: `${appBaseUrl}/#type=recovery`,
+          },
+        })
+
+        linkErr = generatedErr
+        if (!generatedErr && linkData?.properties?.action_link) {
+          recoveryLink = linkData.properties.action_link
+        }
+      } catch (generateError) {
+        linkErr = generateError
+      }
+
+      if ((!recoveryLink || linkErr) && dbUser?.email) {
+        const msg = linkErr instanceof Error ? linkErr.message : String(linkErr || "")
+        if (msg.toLowerCase().includes("user with this email not found") || msg.toLowerCase().includes("email not found")) {
+          const repairedUser = await ensureAuthUserForRecovery(supabaseAdmin, dbUser)
+          if (repairedUser) {
+            const { data: repairedLinkData, error: repairedErr } = await supabaseAdmin.auth.admin.generateLink({
+              type: "recovery",
+              email: targetEmail,
+              options: {
+                redirectTo: `${appBaseUrl}/#type=recovery`,
+              },
+            })
+
+            if (!repairedErr && repairedLinkData?.properties?.action_link) {
+              recoveryLink = repairedLinkData.properties.action_link
+              linkErr = null
+            } else {
+              linkErr = repairedErr
+            }
+          }
+        }
+      }
+
+      if (!recoveryLink || linkErr) {
         return new Response(JSON.stringify({
-          error: `تعذر إنشاء رابط تعيين كلمة المرور: ${linkErr?.message || "خطأ غير معروف"}`,
+          error: `تعذر إنشاء رابط تعيين كلمة المرور: ${linkErr?.message || linkErr || "خطأ غير معروف"}`,
         }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
-
-      const recoveryLink = linkData.properties.action_link
       const smtpUser = Deno.env.get("SMTP_USER")?.trim()
       if (!smtpUser) {
         return new Response(JSON.stringify({ error: "Server misconfigured: SMTP_USER environment variable is not set" }), {

@@ -90,6 +90,6 @@ git ls-files .vercel => error: did not match any file known to git
 
 ## ما تم إصلاحه برمجياً
 
-- الأولوية 2: إزالة الـ fallback الحقيقي من كود المصدر (pizpvymhyagcghgt من admin-users)
+ - الأولوية 2: إزالة قيمة SMTP الثابتة من نسخة سابقة من دالة admin-users.
 - الأولوية 5: إزالة fallback انتحال هوية المدير (UUID + email مكتوب في الكود)
 - إضافة GitHub Action لمنع commit أي أسرار مستقبلاً

@@ -236,7 +236,16 @@ describe('Edge Functions Security & Idempotency Logic Suite', () => {
     }
   })
 
-  it('9. Static Security: No Edge Function returns password or temporaryPassword in response bodies', () => {
+  it('9. Public recovery: unknown formatted emails are treated as non-existent accounts before generateLink is called', () => {
+    const file = path.resolve(__dirname, '../../supabase/functions/admin-users/index.ts')
+    const content = fs.readFileSync(file, 'utf-8')
+
+    expect(content).toContain('matchedKnownUser')
+    expect(content).toMatch(/if\s*\(\s*!matchedKnownUser\s*\)\s*\{/)
+    expect(content).toContain('إذا كان الحساب مسجلاً في المنظومة')
+  })
+
+  it('10. Static Security: No Edge Function returns password or temporaryPassword in response bodies', () => {
     const functionsDir = path.resolve(__dirname, '../../supabase/functions')
     const files = fs.readdirSync(functionsDir, { recursive: true })
       .filter((f) => String(f).endsWith('.ts'))
@@ -273,5 +282,14 @@ describe('Edge Functions Security & Idempotency Logic Suite', () => {
         expect(hasCallerVerification, `Function ${path.basename(path.dirname(file))} must verify caller or webhook secret`).toBe(true)
       }
     }
+  })
+
+  it('11. admin-users: missing Auth users are healed before recovery links are generated', () => {
+    const file = path.resolve(__dirname, '../../supabase/functions/admin-users/index.ts')
+    const content = fs.readFileSync(file, 'utf-8')
+
+    expect(content).toContain('getUserByEmail')
+    expect(content).toContain('ensureAuthUserForRecovery')
+    expect(content).toContain('must_change_password: true')
   })
 })
