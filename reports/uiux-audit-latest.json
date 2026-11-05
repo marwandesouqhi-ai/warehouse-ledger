@@ -1,0 +1,168 @@
+{
+  "timestamp": "2026-11-05T23:33:29.392Z",
+  "baseUrl": "http://localhost:5173",
+  "totalRoutesAudited": 4,
+  "averageScore": 7.3,
+  "results": [
+    {
+      "route": "/",
+      "overallScore": 7,
+      "visualHierarchyIssues": [
+        "Placeholder text in the username/employee ID input field truncates awkwardly on mobile viewports due to inline mixed RTL/LTR example text.",
+        "Footer system note and header description draw unnecessary visual attention to backend technical stack details rather than guidance.",
+        "The spacing below the primary login button is inconsistent, leaving the 'Forgot Password' link visually detached from the input group."
+      ],
+      "accessibilityGlitches": [
+        "Password visibility toggle button inside the password field has an interactive tap target smaller than 44x44px.",
+        "The 'Forgot Password' link ('نسيت كلمة المرور؟') lacks sufficient target padding, measuring below the WCAG 2.2 AA requirement of 44x44px.",
+        "The technical support callout pill ('تواجه مشكلة أو عطل فني؟') has an interactive target height below 44px on mobile viewports."
+      ],
+      "uxHeuristics": [
+        "Cognitive load is unnecessarily increased by exposing technical architecture terminology ('Supabase Auth') to university non-technical employees.",
+        "Mixed LTR/RTL string in input placeholders ('(مثال: employee.name') causes text clipping and readability issues on small screens."
+      ],
+      "actionableFixes": [
+        {
+          "category": "visual",
+          "target": "input[name='username']",
+          "issue": "Placeholder text overflows input field on mobile portrait viewports (375px)",
+          "fix": "Change placeholder attribute to purely Arabic text: placeholder='أدخل اسم المستخدم أو الرقم الوظيفي'"
+        },
+        {
+          "category": "accessibility",
+          "target": "button.password-toggle-btn",
+          "issue": "Password visibility eye icon tap target is less than 44px",
+          "fix": "Apply min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; to the button container."
+        },
+        {
+          "category": "ux",
+          "target": "LoginPage.tsx header & footer text",
+          "issue": "System backend branding ('Supabase Auth') is displayed prominently to end users",
+          "fix": "Replace description text with 'سجّل الدخول إلى منظومة حركة المخازن والعهدة' and footer badge with 'نظام مصادقة موحّد وآمن'."
+        }
+      ]
+    },
+    {
+      "route": "/custody",
+      "overallScore": 6,
+      "visualHierarchyIssues": [
+        "The primary button icon (arrow pointing right) violates RTL layout standards, where right-pointing arrows indicate backward/back navigation instead of forward/submit.",
+        "English text mixed inside Arabic placeholder ('employee.name') causes text truncation and improper bidi rendering on mobile viewports.",
+        "Header branding is inconsistent between viewports: desktop displays an SVG building icon while mobile displays a circular university emblem badge."
+      ],
+      "accessibilityGlitches": [
+        "Password eye toggle icon button and 'نسيت كلمة المرور؟' link have tap target areas under 44x44px on mobile screens.",
+        "The technical support alert box uses low-contrast purple text (#6366f1) over a pale purple background (#f3f0ff), failing WCAG 2.2 AA contrast requirements (4.5:1 ratio).",
+        "Mixed English/Arabic string in input placeholder lacks explicit bidi isolation, causing improper character clipping on smaller screen widths."
+      ],
+      "uxHeuristics": [
+        "Exposing developer implementation details ('Supabase Auth') in the main subtitle and footer badge increases cognitive load for university employees.",
+        "Form submit action lacks visual clear indication of input validation state prior to submission."
+      ],
+      "actionableFixes": [
+        {
+          "category": "visual",
+          "target": ".login-submit-button svg",
+          "issue": "Arrow icon inside login button points right, which signifies 'Back' in RTL layouts.",
+          "fix": "Add 'transform scale-x-[-1]' or use an RTL-aware enter icon (e.g., 'LuLogIn' flipped for RTL)."
+        },
+        {
+          "category": "accessibility",
+          "target": ".support-ticket-banner",
+          "issue": "Low contrast purple text on light background in support button.",
+          "fix": "Update text color to 'color: #4338ca' (Indigo 700) and background to 'background-color: #eef2ff' for a contrast ratio above 4.5:1."
+        },
+        {
+          "category": "ux",
+          "target": "LoginPage.tsx",
+          "issue": "Technical jargon ('Supabase Auth') shown in user-facing UI text.",
+          "fix": "Replace 'عبر Supabase Auth' with user-friendly text like 'عبر البوابة الموحدة' (via Unified Portal)."
+        },
+        {
+          "category": "accessibility",
+          "target": "#username-input",
+          "issue": "Placeholder truncation on mobile screens due to inline bidi text alignment.",
+          "fix": "Set placeholder to 'اسم المستخدم أو الرقم الوظيفي' without inline English code examples or add 'dir=\"auto\"'."
+        }
+      ]
+    },
+    {
+      "route": "/purchases",
+      "overallScore": 8,
+      "visualHierarchyIssues": [
+        "The placeholder text in the input fields has low contrast against the background, potentially failing WCAG AA requirements for non-text content.",
+        "The 'Forgot Password' link is positioned too close to the primary CTA, which may cause accidental clicks on mobile devices.",
+        "The footer security badge text is slightly small, impacting readability for users with visual impairments."
+      ],
+      "accessibilityGlitches": [
+        "Three interactive elements (likely the password toggle and support links) have tap targets smaller than the recommended 44px minimum.",
+        "The password visibility toggle icon lacks an explicit aria-label describing its function (e.g., 'Show password').",
+        "The support button needs a clear role or aria-label to ensure screen readers identify it as an actionable link/button."
+      ],
+      "uxHeuristics": [
+        "The login form lacks a clear 'loading' state feedback when the user clicks 'تسجيل الدخول'.",
+        "The placeholder text 'مثال: employee.name' is helpful but could be better placed as a helper text below the input to avoid disappearing on focus.",
+        "The visual distinction between the primary login button and the secondary support button is good, but the support button could benefit from a more distinct hover state."
+      ],
+      "actionableFixes": [
+        {
+          "category": "accessibility",
+          "target": ".password-toggle-icon",
+          "issue": "Missing accessible name for screen readers",
+          "fix": "Add aria-label='إظهار كلمة المرور' to the button element."
+        },
+        {
+          "category": "visual",
+          "target": "input::placeholder",
+          "issue": "Low contrast of placeholder text",
+          "fix": "Increase color contrast to at least 4.5:1 using a darker shade of gray."
+        },
+        {
+          "category": "ux",
+          "target": ".support-button",
+          "issue": "Tap target size below 44px",
+          "fix": "Add padding: 12px 0; to ensure the hit area meets the 44px minimum requirement."
+        }
+      ]
+    },
+    {
+      "route": "/settings",
+      "overallScore": 8,
+      "visualHierarchyIssues": [
+        "The placeholder text in the input fields has low contrast against the background, potentially failing WCAG AA requirements.",
+        "The 'Forgot Password' link is visually subtle and may be missed by users needing quick recovery.",
+        "The RTL alignment of the icon inside the password input field is slightly off-center compared to the text field padding."
+      ],
+      "accessibilityGlitches": [
+        "Three interactive elements have tap targets smaller than the recommended 44px, creating friction for mobile users.",
+        "The 'Support' button and 'Forgot Password' link need explicit focus states (outline) to ensure keyboard navigation visibility.",
+        "The password visibility toggle icon lacks a descriptive aria-label (e.g., 'Show password')."
+      ],
+      "uxHeuristics": [
+        "The login button icon (arrow) is redundant and potentially confusing in an RTL context; ensure it points in the direction of the flow.",
+        "The 'Support' call-to-action is placed below the primary login button, which is good, but it should be visually distinct from the footer security badge.",
+        "The input field placeholder text is truncated on mobile, hiding the full example format."
+      ],
+      "actionableFixes": [
+        {
+          "category": "accessibility",
+          "target": ".password-toggle-icon",
+          "issue": "Missing accessible name for screen readers",
+          "fix": "Add aria-label='إظهار كلمة المرور' to the button element."
+        },
+        {
+          "category": "visual",
+          "target": ".input-field",
+          "issue": "Low contrast placeholder text",
+          "fix": "Update CSS color property to #666666 or darker to meet 4.5:1 contrast ratio."
+        },
+        {
+          "category": "ux",
+          "target": ".support-button",
+          "issue": "Small tap target size",
+          "fix": "Add min-height: 44px; and min-width: 44px; to the container."
+        }
+      ]
+    }
+  ]
+}

@@ -30,3 +30,4 @@ dist-ssr
 supabase/.temp/
 scratch/
 data/
+reports/screenshots/
