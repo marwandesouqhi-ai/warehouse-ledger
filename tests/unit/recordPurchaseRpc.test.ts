@@ -9,15 +9,15 @@ describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
     vi.clearAllMocks()
   })
 
-  it('preserves higher cloud quantities and does not overwrite with stale local copies in saveCustodyItemsToCloud', async () => {
+  it('does not mutate supplied item objects and replaces arbitrary larger-quantity logic with explicit operations', async () => {
     if (!supabase) return
 
-    // محاكاة حالة السحابة: زيادة الرصيد إلى 25 بسبب فاتورة شراء نُفذت عبر record_purchase
+    // محاكاة حالة السحابة
     const cloudItem = {
       id: 'cust-main-001',
       warehouse_id: 'main',
       name: 'كمبيوتر محمول Dell Core i7',
-      quantity: 25, // القيمة الأحدث في السحابة
+      quantity: 25,
       value: 750000,
       updated_at: '2026-10-14T10:00:00Z',
     }
@@ -44,8 +44,7 @@ describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
       return {}
     }) as any)
 
-    // نسخة العميل المحلية القديمة (قبل عملية الشراء، ما زالت 10)
-    const staleLocalItems: CustodyItem[] = [
+    const localItems: CustodyItem[] = [
       {
         id: 'cust-main-001',
         warehouseId: 'main',
@@ -53,7 +52,7 @@ describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
         name: 'كمبيوتر محمول Dell Core i7',
         category: 'أجهزة إلكترونية وحواسب',
         custodian: 'أمين المخزن الرئيسي',
-        quantity: 10, // نسخة محلية قديمة
+        quantity: 10,
         unit: 'جهاز',
         condition: 'excellent',
         custodyType: 'مستديمة',
@@ -64,18 +63,13 @@ describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
     ]
 
     // استدعاء الحفظ السحابي
-    await saveCustodyItemsToCloud(staleLocalItems)
+    await saveCustodyItemsToCloud(localItems)
 
     expect(selectMock).toHaveBeenCalled()
-    expect(upsertMock).toHaveBeenCalledTimes(1)
 
-    // التحقق من أن القيمة المرفوعة لم تمسح رصيد السحابة الأحدث
-    const uploadedRows = upsertMock.mock.calls[0][0] as Array<{ id: string; quantity: number }>
-    expect(uploadedRows[0].id).toBe('cust-main-001')
-    expect(uploadedRows[0].quantity).toBe(25) // تم الحفاظ على كمية السحابة 25 بدلاً من مسحها بـ 10
-
-    // والتحقق أيضاً من تحديث الكائن المحلي ليواكب السحابة
-    expect(staleLocalItems[0].quantity).toBe(25)
+    // Issue #2: التحقق من عدم تعديل الكائن الممرر نهائياً (عدم التعديل العشوائي في المكان)
+    expect(localItems[0].quantity).toBe(10)
+    expect(localItems[0].value).toBe(300000)
 
     fromSpy.mockRestore()
   })

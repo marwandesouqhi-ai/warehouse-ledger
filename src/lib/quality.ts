@@ -7,7 +7,11 @@ export type QualityFinding = {
     message: string
 }
 
-export function evaluateQuality(row: Record<string, unknown>, currentDate = new Date()): QualityFinding[] {
+export function evaluateQuality(
+    row: Record<string, unknown>,
+    currentDate = new Date(),
+    availableStock?: number
+): QualityFinding[] {
     const findings: QualityFinding[] = []
     const receivedOn = parseDate(row.date)
     const issuedOn = parseDate(row.issue)
@@ -31,8 +35,16 @@ export function evaluateQuality(row: Record<string, unknown>, currentDate = new 
         findings.push({ id: `${row.id ?? 'row'}-noto`, level: 'warn', rule: 'noto', message: 'Issue quantity exists without a recipient or permit.' })
     }
 
-    if (qtyOut != null && qtyIn != null && qtyOut > qtyIn) {
-        findings.push({ id: `${row.id ?? 'row'}-over`, level: 'error', rule: 'over', message: 'Issued quantity exceeds received quantity.' })
+    if (qtyOut != null && qtyOut > 0) {
+        if (availableStock !== undefined) {
+            // Ledger context: check if disbursement exceeds available stock
+            if (qtyOut > availableStock) {
+                findings.push({ id: `${row.id ?? 'row'}-over`, level: 'error', rule: 'over', message: 'Issued quantity exceeds available warehouse stock.' })
+            }
+        } else if (qtyIn != null && qtyIn > 0 && qtyOut > qtyIn) {
+            // Single-row context where both in and out are on same row
+            findings.push({ id: `${row.id ?? 'row'}-over`, level: 'error', rule: 'over', message: 'Issued quantity exceeds received quantity.' })
+        }
     }
 
     if (row.date && !receivedOn) {
@@ -66,6 +78,27 @@ export function evaluateQuality(row: Record<string, unknown>, currentDate = new 
     return findings
 }
 
+export function evaluateLedgerQuality(
+    rows: Array<Record<string, unknown>>,
+    currentDate = new Date()
+): Array<{ row: Record<string, unknown>; findings: QualityFinding[] }> {
+    const itemStock = new Map<string, number>()
+
+    return rows.map((row) => {
+        const item = String(row.item ?? '').trim().toLowerCase()
+        const qin = num(row.qin) ?? 0
+        const qout = num(row.qout) ?? 0
+
+        const prevStock = itemStock.get(item) ?? 0
+        const availableStock = prevStock + qin
+
+        const findings = evaluateQuality(row, currentDate, availableStock)
+
+        itemStock.set(item, availableStock - qout)
+        return { row, findings }
+    })
+}
+
 export function summarizeQuality(rows: Array<Record<string, unknown>>, currentDate = new Date()): Record<string, number> {
     const counts: Record<string, number> = {
         future: 0,
@@ -79,8 +112,8 @@ export function summarizeQuality(rows: Array<Record<string, unknown>>, currentDa
         noinv: 0,
     }
 
-    for (const row of rows) {
-        const findings = evaluateQuality(row, currentDate)
+    const ledgerResults = evaluateLedgerQuality(rows, currentDate)
+    for (const { findings } of ledgerResults) {
         for (const finding of findings) {
             if (finding.rule in counts) {
                 counts[finding.rule] += 1

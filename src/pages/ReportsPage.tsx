@@ -49,6 +49,7 @@ interface ReportsPageProps {
   currency?: AppSettings['currency']
   settings?: AppSettings
   session?: Session | null
+  custodyItems?: CustodyItem[]
   onExportMovements?: () => void
 }
 
@@ -66,6 +67,7 @@ export default function ReportsPage({
   currency: propCurrency,
   settings: propSettings,
   session,
+  custodyItems: propCustodyItems,
   onExportMovements,
 }: ReportsPageProps) {
   const navigate = useNavigate()
@@ -150,7 +152,15 @@ export default function ReportsPage({
     XLSX.writeFile(wb, `كشف_الموردين_المعتمدين_${getCairoDateString()}.xlsx`)
   }
 
-  const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
+  const [items, setItems] = useState<CustodyItem[]>(() =>
+    propCustodyItems && propCustodyItems.length > 0 ? propCustodyItems : loadCustodyItems()
+  )
+
+  useEffect(() => {
+    if (propCustodyItems && propCustodyItems.length > 0) {
+      setItems(propCustodyItems)
+    }
+  }, [propCustodyItems])
   const [selectedWarehouseForPrint, setSelectedWarehouseForPrint] = useState<WarehouseDefinition>(WAREHOUSES[0])
   const [isPermitModalOpen, setIsPermitModalOpen] = useState(false)
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false)

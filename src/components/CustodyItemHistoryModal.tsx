@@ -13,7 +13,7 @@ import {
   PlusCircle,
   Save,
 } from 'lucide-react'
-import { WAREHOUSES, type CustodyItem } from '../lib/custody'
+import { WAREHOUSES, type CustodyItem, type CustodyHistoryEvent } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 
@@ -45,7 +45,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
   const [newCondition, setNewCondition] = useState(item.condition)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Parse notes into historical timeline points
+  // Render from structured history events if available, falling back to legacy note parsing
   const historicalEvents = React.useMemo(() => {
     const events: Array<{ date?: string; title: string; desc: string; type: 'creation' | 'transfer' | 'maintenance' | 'note' }> = []
 
@@ -57,7 +57,20 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
       type: 'creation',
     })
 
-    // 2. Transfer / disbursement notes from item.notes
+    // 2. Structured events if present
+    if (item.historyEvents && item.historyEvents.length > 0) {
+      for (const ev of item.historyEvents) {
+        events.push({
+          date: ev.date,
+          title: ev.title,
+          desc: ev.description,
+          type: (ev.type === 'maintenance' || ev.type === 'transfer' ? ev.type : 'note') as 'transfer' | 'maintenance' | 'note',
+        })
+      }
+      return events
+    }
+
+    // 3. Fallback: Parse notes into historical timeline points for legacy records
     if (item.notes) {
       const parts = item.notes.split('•').map((p) => p.trim()).filter(Boolean)
       for (const part of parts) {
@@ -101,12 +114,23 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
       ? `[${today}] ${newLogText.trim()}${newCondition !== item.condition ? ` (تعديل الحالة إلى: ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'})` : ''}`
       : `[${today}] تم تغيير الحالة الفنية إلى ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'}`
 
+    const newStructuredEvent: CustodyHistoryEvent = {
+      id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      date: today,
+      title: newCondition !== item.condition ? 'إجراء فحص أو صيانة فنية' : 'ملاحظة وقيد إداري',
+      description: newLogText.trim()
+        ? `${newLogText.trim()}${newCondition !== item.condition ? ` (تعديل الحالة إلى: ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'})` : ''}`
+        : `تم تغيير الحالة الفنية إلى ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'}`,
+      type: newCondition !== item.condition ? 'maintenance' : 'note',
+    }
+
     const updatedNotes = item.notes ? `${item.notes} • ${logEntry}` : logEntry
 
     const updated: CustodyItem = {
       ...item,
       condition: newCondition,
       notes: updatedNotes,
+      historyEvents: [...(item.historyEvents || []), newStructuredEvent],
     }
 
     onUpdateItem(updated)

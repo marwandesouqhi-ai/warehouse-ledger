@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './supabase'
-import { evaluateQuality, type QualityFinding } from './quality'
+import { evaluateLedgerQuality, type QualityFinding } from './quality'
 import { num } from './parse'
 import { fixtureMovements, type FixtureMovement } from './fixture'
 import { saveMovements } from './movementsRepository'
@@ -52,10 +52,10 @@ export function getQualityIssuesSummary(): {
   }
 
   const findings: Array<{ movement: FixtureMovement; finding: QualityFinding }> = []
-  for (const m of moves) {
-    const rowFindings = evaluateQuality(m as unknown as Record<string, unknown>)
+  const ledgerFindings = evaluateLedgerQuality(moves as unknown as Array<Record<string, unknown>>)
+  for (const { row, findings: rowFindings } of ledgerFindings) {
     for (const f of rowFindings) {
-      findings.push({ movement: m, finding: f })
+      findings.push({ movement: row as unknown as FixtureMovement, finding: f })
     }
   }
 
@@ -256,8 +256,8 @@ export async function runDataQualityAutoRepair(sessionUserId?: string): Promise<
 
   // حساب التنبيهات المتبقية بعد الإصلاح
   let remainingCount = 0
-  for (const m of repairedMoves) {
-    const rowFindings = evaluateQuality(m as unknown as Record<string, unknown>)
+  const postRepairFindings = evaluateLedgerQuality(repairedMoves as unknown as Array<Record<string, unknown>>)
+  for (const { findings: rowFindings } of postRepairFindings) {
     remainingCount += rowFindings.length
   }
 

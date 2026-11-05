@@ -1,5 +1,5 @@
 import { isSystemAdmin } from '../lib/permissions'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -13,7 +13,7 @@ import {
 
 import type { Session } from '@supabase/supabase-js'
 import type { FixtureMovement } from '../lib/fixture'
-import { evaluateQuality } from '../lib/quality'
+import { evaluateLedgerQuality, type QualityFinding } from '../lib/quality'
 import { matchesSearch } from '../lib/searchUtils'
 import { runDataQualityAutoRepair } from '../lib/dataQualityAutoRepair'
 
@@ -53,12 +53,15 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
   const [isRepairing, setIsRepairing] = useState(false)
   const [repairNotice, setRepairNotice] = useState('')
 
-  const findings = movements.flatMap((movement) =>
-    evaluateQuality(movement as unknown as Record<string, unknown>).map((finding) => ({
-      movement,
-      finding,
-    }))
-  )
+  const findings: Array<{ movement: FixtureMovement; finding: QualityFinding }> = useMemo(() => {
+    return evaluateLedgerQuality(movements as unknown as Array<Record<string, unknown>>).flatMap(
+      ({ row, findings: rowFindings }) =>
+        rowFindings.map((finding) => ({
+          movement: row as unknown as FixtureMovement,
+          finding,
+        }))
+    )
+  }, [movements])
 
   const counts = {
     error: findings.filter(({ finding }) => finding.level === 'error').length,

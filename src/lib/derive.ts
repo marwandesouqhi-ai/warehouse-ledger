@@ -32,7 +32,12 @@ export type MovementSummary = {
     status_counts: Record<string, number>
 }
 
-export function deriveMovement(raw: Record<string, unknown>, index: number): DerivedMovement {
+export function deriveMovement(
+    raw: Record<string, unknown>,
+    index: number,
+    ledgerBalance?: number,
+    availableStock?: number
+): DerivedMovement {
     const item = String(raw.item ?? '')
     const itemKey = normalizeName(item)
     const supplier = raw.from ? String(raw.from) : undefined
@@ -48,9 +53,25 @@ export function deriveMovement(raw: Record<string, unknown>, index: number): Der
     const total = unitPrice != null && qtyIn != null ? unitPrice * qtyIn : null
     const rem = (qtyIn ?? 0) - (qtyOut ?? 0)
     let status: DerivedMovement['status'] = 'pending'
-    if (qtyOut != null && qtyOut > (qtyIn ?? 0)) status = 'over'
-    else if (rem <= 0) status = 'full'
-    else if (qtyOut != null && qtyOut > 0) status = 'part'
+
+    if (qtyOut != null && qtyOut > 0) {
+        if (availableStock !== undefined) {
+            // Evaluated within cumulative ledger: check against available stock
+            if (qtyOut > availableStock) status = 'over'
+            else status = 'full'
+        } else if (qtyIn != null && qtyIn > 0) {
+            // Combined row where receipt and issue are on same row
+            if (qtyOut > qtyIn) status = 'over'
+            else if (rem <= 0) status = 'full'
+            else status = 'part'
+        } else {
+            // Pure outward movement without ledger context
+            if (ledgerBalance !== undefined && ledgerBalance < 0) status = 'over'
+            else status = 'full'
+        }
+    } else if (qtyIn != null && qtyIn > 0) {
+        status = 'pending'
+    }
 
     const issuedValue = unitPrice != null && qtyOut != null ? unitPrice * qtyOut : null
     const remainingValue = unitPrice != null ? unitPrice * Math.max(rem, 0) : 0
@@ -68,7 +89,7 @@ export function deriveMovement(raw: Record<string, unknown>, index: number): Der
         qty_in: qtyIn,
         qty_out: qtyOut,
         total,
-        balance: 0,
+        balance: ledgerBalance !== undefined ? ledgerBalance : 0,
         rem,
         status,
         issued_value: issuedValue,
@@ -77,27 +98,39 @@ export function deriveMovement(raw: Record<string, unknown>, index: number): Der
 }
 
 export function deriveSummary(rows: Array<Record<string, unknown>>): MovementSummary {
-    const derived = rows.map((row, index) => deriveMovement(row, index))
-    const itemOrder = new Map<string, number>()
+    const itemStock = new Map<string, number>()
+    const itemPrices = new Map<string, number>()
 
-    for (const movement of derived) {
-        const key = movement.item_key
-        itemOrder.set(key, (itemOrder.get(key) ?? 0) + 1)
-    }
+    const withBalance = rows.map((row, index) => {
+        const item = String(row.item ?? '')
+        const itemKey = normalizeName(item)
+        const qin = num(row.qin) ?? 0
+        const qout = num(row.qout) ?? 0
+        const price = num(row.price)
 
-    const itemBalances = new Map<string, number>()
-    const withBalance = derived.map((movement) => {
-        const currentKey = movement.item_key
-        const currentBalance = (itemBalances.get(currentKey) ?? 0) + ((movement.qty_in ?? 0) - (movement.qty_out ?? 0))
-        itemBalances.set(currentKey, currentBalance)
-        return { ...movement, balance: currentBalance }
+        if (price != null && qin > 0) {
+            itemPrices.set(itemKey, price)
+        }
+
+        const prevStock = itemStock.get(itemKey) ?? 0
+        const availableStock = prevStock + qin
+        const newBalance = availableStock - qout
+        itemStock.set(itemKey, newBalance)
+
+        return deriveMovement(row, index, newBalance, availableStock)
     })
 
     const total_value = withBalance.reduce((sum, row) => sum + (row.total ?? 0), 0)
     const qty_in = withBalance.reduce((sum, row) => sum + (row.qty_in ?? 0), 0)
     const qty_out = withBalance.reduce((sum, row) => sum + (row.qty_out ?? 0), 0)
-    const issued_value = withBalance.reduce((sum, row) => sum + (row.issued_value ?? 0), 0)
-    const remaining_value = withBalance.reduce((sum, row) => sum + row.remaining_value, 0)
+    const issued_value = withBalance.reduce((sum, row) => {
+        if (row.issued_value != null) return sum + row.issued_value
+        const knownPrice = itemPrices.get(row.item_key) ?? 0
+        return sum + ((row.qty_out ?? 0) * knownPrice)
+    }, 0)
+
+    // Strictly conserve total value: remaining value equals total receipt value minus issued value
+    const remaining_value = Math.max(0, total_value - issued_value)
     const status_counts = withBalance.reduce<Record<string, number>>((acc, row) => {
         acc[row.status] = (acc[row.status] ?? 0) + 1
         return acc

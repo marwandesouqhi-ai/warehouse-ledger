@@ -77,6 +77,8 @@ import {
   fetchCustodyItemsFromCloud,
   syncInwardMovementToCustody,
   syncOutwardMovementToCustody,
+  reconcileMovementEdit,
+  reverseMovementCustody,
   fixtureCustodyItems,
   WAREHOUSES,
 } from './lib/custody'
@@ -1037,6 +1039,8 @@ function App() {
       throw new Error('تعديل الحركات والبيانات في النظام مقتصر حصرياً على مدير النظام (System Admin).')
     }
 
+    const oldMovement = movements.find((m) => m.id === updated.id)
+
     if (supabase && session) {
       try {
         const saved = await updateMovement(updated, session.user.id)
@@ -1051,15 +1055,14 @@ function App() {
       setMovements((current) => current.map((m) => (m.id === updated.id ? updated : m)))
     }
 
-    // مزامنة العهدة عند التعديل أيضاً
-    try {
-      if (Number(updated.qin) > 0) {
-        syncInwardMovementToCustody(updated)
-      } else if (Number(updated.qout) > 0) {
-        syncOutwardMovementToCustody(updated)
+    // مزامنة العهدة بتطبيق فرق الكميات والقيم فقط بين الحركة السابقة والجديدة (Delta Reconciliation)
+    if (oldMovement) {
+      try {
+        const nextCustody = reconcileMovementEdit(oldMovement, updated)
+        setCustodyItems(nextCustody)
+      } catch (custodyErr) {
+        console.warn('Custody delta reconciliation warning on update:', custodyErr)
       }
-    } catch (custodyErr) {
-      console.warn('Custody synchronization warning on update:', custodyErr)
     }
 
     void logAuditEvent({
@@ -1084,6 +1087,15 @@ function App() {
     if (!isSystemAdmin) {
       throw new Error('حذف الحركات والبيانات في النظام مقتصر حصرياً على مدير النظام (System Admin).')
     }
+
+    // عكس أثر الحركة على رصيد المخزن والعهدة قبل الحذف (Custody Reversal)
+    try {
+      const nextCustody = reverseMovementCustody(movement)
+      setCustodyItems(nextCustody)
+    } catch (custodyErr) {
+      console.warn('Custody reversal warning on delete:', custodyErr)
+    }
+
     if (supabase && session) {
       try {
         await deleteMovement(movement.id, session.user.id, movement)
@@ -2760,6 +2772,7 @@ function App() {
                   settings={settings}
                   currency={settings.currency}
                   session={session}
+                  custodyItems={custodyItems}
                   onExportMovements={() => exportMovements(movements)}
                 />
               ) : (

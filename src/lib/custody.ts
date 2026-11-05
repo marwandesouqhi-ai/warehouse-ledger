@@ -1,6 +1,7 @@
 import { getAccessSession, canReadCurrentDepartment, assertDepartmentWrite } from './accessContext'
 import { isSystemAdmin } from './permissions'
 import { getCairoDateString } from './dateUtils'
+import type { FixtureMovement } from './fixture'
 export type WarehouseDefinition = {
   id: string
   name: string
@@ -117,6 +118,18 @@ export type CustodyCategory =
 
 export type CustodyType = 'مستديمة' | 'مستهلكة' | 'شخصية'
 
+export interface CustodyHistoryEvent {
+  id: string
+  date: string
+  title: string
+  description: string
+  type: 'creation' | 'transfer' | 'disbursement' | 'maintenance' | 'adjustment' | 'note'
+  performedBy?: string
+  warehouseId?: string
+  quantityDelta?: number
+  valueDelta?: number
+}
+
 export type CustodyItem = {
   id: string
   warehouseId: string
@@ -135,6 +148,7 @@ export type CustodyItem = {
   serialNumber?: string
   notes?: string
   importBatchId?: string
+  historyEvents?: CustodyHistoryEvent[]
 }
 
 export const CUSTODY_STORAGE_KEY = 'warehouse-ledger-custody-items'
@@ -1116,7 +1130,11 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
         serialNumber: row.serial_number || '',
         notes: row.notes || '',
         custodyType: (row.custody_type || 'مستديمة') as CustodyType,
-        acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : getCairoDateString(),
+        acquisitionDate: row.acquisition_date
+          ? String(row.acquisition_date).slice(0, 10)
+          : row.created_at
+          ? String(row.created_at).slice(0, 10)
+          : getCairoDateString(),
       }
     })
 
@@ -1124,7 +1142,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
 
     if (!hasVerifiedMedicine) {
       resultItems = [...resultItems, ...MEDICINE_NURSING_67_ITEMS]
-      saveCustodyItems(resultItems)
+      saveCustodyItems(resultItems, false)
       void saveCustodyItemsToCloud(MEDICINE_NURSING_67_ITEMS).catch((err) => {
         console.warn('Syncing initial verified medicine items to cloud:', err)
       })
@@ -1156,7 +1174,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
     if (wsCount < 81 && isSystemAdmin(getAccessSession())) {
       const nonWs = resultItems.filter((i) => i.warehouseId !== 'engineering_workshops')
       resultItems = [...nonWs, ...ENGINEERING_WORKSHOPS_81_ITEMS]
-      saveCustodyItems(resultItems)
+      saveCustodyItems(resultItems, false)
       void saveCustodyItemsToCloud(ENGINEERING_WORKSHOPS_81_ITEMS).catch((err) => {
         console.warn('Syncing restored workshop items to cloud:', err)
       })
@@ -1183,79 +1201,84 @@ export function getWarehouseCustodySnapshot(items: CustodyItem[], warehouseId: s
   return { warehouseItems, stats }
 }
 
+let cloudSyncQueue: Promise<void> = Promise.resolve()
+
+function hasCustodyRowChanged(row: Record<string, unknown>, cloudRow?: Record<string, unknown>): boolean {
+  if (!cloudRow) return true
+  return (
+    Number(cloudRow.quantity) !== Number(row.quantity) ||
+    Number(cloudRow.value) !== Number(row.value) ||
+    (cloudRow.warehouse_id || '') !== (row.warehouse_id || '') ||
+    (cloudRow.condition || '') !== (row.condition || '') ||
+    (cloudRow.custodian || '') !== (row.custodian || '') ||
+    (cloudRow.room_location || '') !== (row.room_location || '') ||
+    (cloudRow.notes || '') !== (row.notes || '') ||
+    (cloudRow.custody_type || '') !== (row.custody_type || '') ||
+    (cloudRow.acquisition_date ? String(cloudRow.acquisition_date).slice(0, 10) : '') !==
+      (row.acquisition_date ? String(row.acquisition_date).slice(0, 10) : '') ||
+    (cloudRow.code || '') !== (row.code || '') ||
+    (cloudRow.name || '') !== (row.name || '')
+  )
+}
+
 export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<void> {
   assertDepartmentWrite('warehouse', 'create')
-  if (!supabase || items.length === 0) return
-  try {
-    // 1. Fetch current cloud state to detect external increments (e.g. from RPC record_purchase)
-    const { data: cloudRows, error: fetchErr } = await supabase
-      .from('custody_items')
-      .select('id, warehouse_id, name, quantity, value, updated_at')
+  const client = supabase
+  if (!client || items.length === 0) return
 
-    const cloudMap = new Map<string, { quantity: number; value: number }>()
-    const cloudNameMap = new Map<string, { quantity: number; value: number }>()
-    if (!fetchErr && cloudRows) {
-      for (const r of cloudRows) {
-        const q = Number(r.quantity) || 0
-        const v = Number(r.value) || 0
-        cloudMap.set(r.id, { quantity: q, value: v })
-        if (r.warehouse_id === 'main' && r.name) {
-          cloudNameMap.set(r.name.trim().toLowerCase(), { quantity: q, value: v })
-        }
-      }
-    }
+  const executeSync = async () => {
+    try {
+      // 1. Fetch current cloud state to detect existing rows and changes
+      const { data: cloudRows, error: fetchErr } = await client
+        .from('custody_items')
+        .select('id, warehouse_id, code, name, category, quantity, unit, unit_price, value, condition, custodian, room_location, notes, custody_type, acquisition_date')
 
-    // 2. Prepare rows, preserving any cloud-side increments if local is stale
-    const rows = items.map((item) => {
-      let quantityToSave = item.quantity
-      let valueToSave = item.value
-
-      const cloudById = cloudMap.get(item.id)
-      const cloudByName = item.warehouseId === 'main' ? cloudNameMap.get(item.name.trim().toLowerCase()) : undefined
-      const cloudItem = cloudById || cloudByName
-
-      // If cloud has higher quantity in main warehouse (e.g. from record_purchase RPC),
-      // preserve the higher quantity to prevent accidental overwrite
-      if (cloudItem && item.warehouseId === 'main') {
-        if (cloudItem.quantity > item.quantity) {
-          quantityToSave = cloudItem.quantity
-          item.quantity = cloudItem.quantity
-          if (cloudItem.value > item.value) {
-            valueToSave = cloudItem.value
-            item.value = cloudItem.value
-          }
+      const cloudMap = new Map<string, Record<string, unknown>>()
+      if (!fetchErr && cloudRows) {
+        for (const r of cloudRows) {
+          cloudMap.set(r.id, r as Record<string, unknown>)
         }
       }
 
-      return {
+      // 2. Prepare fresh row objects without mutating input items
+      const rows = items.map((item) => ({
         id: item.id,
         warehouse_id: item.warehouseId,
         code: item.code || '',
         name: item.name,
         category: item.category || '',
-        quantity: quantityToSave,
+        quantity: item.quantity,
         unit: item.unit || 'قطعة',
         unit_price: item.unitPrice ?? null,
-        value: valueToSave,
+        value: item.value,
         condition: item.condition || 'good',
         custodian: item.custodian || '',
         room_location: item.roomLocation || '',
         serial_number: item.serialNumber || '',
         notes: item.notes || '',
         custody_type: item.custodyType || 'مستديمة',
+        acquisition_date: item.acquisitionDate || null,
         updated_at: new Date().toISOString(),
-      }
-    })
+      }))
 
-    const writableRows = isSystemAdmin(getAccessSession()) ? rows : rows.filter(row => !cloudMap.has(row.id))
-    if (!writableRows.length) return
-    const { error } = isSystemAdmin(getAccessSession())
-      ? await supabase.from('custody_items').upsert(writableRows, { onConflict: 'id' })
-      : await supabase.from('custody_items').insert(writableRows)
-    if (error) throw error
-  } catch (err) {
-    console.warn('Could not sync custody items to cloud:', err)
+      // Send only changed records to minimize write pressure and avoid overwrites
+      const writableRows = isSystemAdmin(getAccessSession())
+        ? rows.filter((r) => hasCustodyRowChanged(r, cloudMap.get(r.id)))
+        : rows.filter((r) => !cloudMap.has(r.id))
+
+      if (!writableRows.length) return
+
+      const { error } = isSystemAdmin(getAccessSession())
+        ? await client.from('custody_items').upsert(writableRows, { onConflict: 'id' })
+        : await client.from('custody_items').insert(writableRows)
+      if (error) throw error
+    } catch (err) {
+      console.warn('Could not sync custody items to cloud:', err)
+    }
   }
+
+  cloudSyncQueue = cloudSyncQueue.then(executeSync, executeSync)
+  return cloudSyncQueue
 }
 
 export async function deleteCustodyItemFromCloud(id: string): Promise<void> {
@@ -1861,11 +1884,18 @@ export function syncOutwardMovementToCustody(movement: {
   }
 
   const newQty = Math.max(0, sourceItem.quantity - qty)
-  const unitPrice = sourceItem.quantity > 0 ? sourceItem.value / sourceItem.quantity : (Number(movement.price) || 0)
+  // Mathematically allocate value proportionally and conserve total value
+  const transferredValue = sourceItem.quantity > 0
+    ? (qty === sourceItem.quantity ? sourceItem.value : Math.round((qty / sourceItem.quantity) * sourceItem.value))
+    : Math.round(qty * (Number(movement.price) || 0))
+  const remainingValue = Math.max(0, sourceItem.value - transferredValue)
+  const newUnitPrice = newQty > 0 ? Math.round(remainingValue / newQty) : sourceItem.unitPrice
+
   items[sourceIdx] = {
     ...sourceItem,
     quantity: newQty,
-    value: Math.max(0, Math.round(newQty * unitPrice)),
+    value: remainingValue,
+    unitPrice: newUnitPrice,
     notes: movement.to
       ? `${sourceItem.notes ? `${sourceItem.notes} • ` : ''}صرف ${qty} ${sourceItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
       : sourceItem.notes,
@@ -1882,7 +1912,6 @@ export function syncOutwardMovementToCustody(movement: {
 
   if (movement.destType === 'custodian' || movement.custodianName) {
     const custodianName = movement.custodianName || movement.to || 'أمين عهدة'
-    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
 
     const newItem: CustodyItem = {
       id: `c-cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1897,8 +1926,8 @@ export function syncOutwardMovementToCustody(movement: {
       custodyType: 'شخصية',
       roomLocation: movement.to || 'عهدة موظف',
       acquisitionDate: actionDate,
-      unitPrice: unitPrice > 0 ? unitPrice : undefined,
-      value: unitPrice > 0 ? unitPrice * qty : 0,
+      unitPrice: qty > 0 ? Math.round(transferredValue / qty) : undefined,
+      value: transferredValue,
       serialNumber: '',
       notes: `صرف كعهدة شخصية للموظف: ${custodianName}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
     }
@@ -1910,18 +1939,16 @@ export function syncOutwardMovementToCustody(movement: {
       (i) => i.warehouseId === targetWh.id && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
     )
 
-    const unitPrice = Number(movement.price) || (sourceItem && sourceItem.quantity > 0 ? sourceItem.value / Math.max(1, sourceItem.quantity) : 0)
-
     if (targetIdx !== -1) {
       const existingTarget = items[targetIdx]
-      const newQty = existingTarget.quantity + qty
-      const addedVal = unitPrice > 0 ? unitPrice * qty : 0
+      const newTargetQty = existingTarget.quantity + qty
+      const newTargetVal = existingTarget.value + transferredValue
       const extraNote = `صرف وتوريد من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)} (${qty} ${existingTarget.unit})${movement.permit ? ` بإذن صرف ${movement.permit}` : ''}`
       items[targetIdx] = {
         ...existingTarget,
-        quantity: newQty,
-        unitPrice: unitPrice > 0 ? unitPrice : existingTarget.unitPrice,
-        value: existingTarget.value + addedVal,
+        quantity: newTargetQty,
+        unitPrice: newTargetQty > 0 ? Math.round(newTargetVal / newTargetQty) : existingTarget.unitPrice,
+        value: newTargetVal,
         notes: existingTarget.notes ? `${existingTarget.notes} • ${extraNote}` : extraNote,
       }
       addedToTarget = true
@@ -1944,8 +1971,8 @@ export function syncOutwardMovementToCustody(movement: {
         custodyType: 'مستديمة',
         roomLocation: targetWh.building,
         acquisitionDate: actionDate,
-        unitPrice: unitPrice > 0 ? unitPrice : undefined,
-        value: unitPrice > 0 ? unitPrice * qty : 0,
+        unitPrice: qty > 0 ? Math.round(transferredValue / qty) : undefined,
+        value: transferredValue,
         serialNumber: '',
         notes: `مصروف من ${sourceWhId === 'main' ? 'المخزن الرئيسي' : (WAREHOUSES.find(w => w.id === sourceWhId)?.name || sourceWhId)}${movement.permit ? ` (إذن صرف: ${movement.permit})` : ''}`,
       }
@@ -1972,4 +1999,368 @@ export function syncOutwardMovementToCustody(movement: {
     deductedFromSource,
     addedToCustodian,
   }
+}
+
+export interface TransferCustodyParams {
+  item: CustodyItem
+  targetWarehouseId: string
+  quantity: number
+  custodian?: string
+  roomLocation?: string
+  notes?: string
+  permitNumber?: string
+  actionDate?: string
+  performedBy?: string
+}
+
+/**
+ * Shared custody transfer operation.
+ * Mathematically allocates value proportionally and strictly conserves total quantity and total value.
+ */
+export function executeCustodyTransfer(
+  items: CustodyItem[],
+  params: TransferCustodyParams
+): {
+  updatedItems: CustodyItem[]
+  sourceItem: CustodyItem
+  targetItem: CustodyItem
+  transferredValue: number
+} {
+  const { item, targetWarehouseId, quantity } = params
+  if (quantity <= 0) {
+    throw new Error('كمية التحويل يجب أن تكون أكبر من صفر.')
+  }
+  if (quantity > item.quantity) {
+    throw new Error(`الكمية المطلوبة للتحويل (${quantity}) أكبر من الرصيد المتاح (${item.quantity}).`)
+  }
+  if (targetWarehouseId === item.warehouseId) {
+    throw new Error('لا يمكن تحويل الصنف إلى نفس المخزن الحالي.')
+  }
+
+  const sourceWh = WAREHOUSES.find((w) => w.id === item.warehouseId)
+  const targetWh = WAREHOUSES.find((w) => w.id === targetWarehouseId)
+  const today = getCairoDateString()
+  const eventDate = params.actionDate || today
+  const permitStr = params.permitNumber ? ` (إذن: ${params.permitNumber})` : ''
+  const noteStr = params.notes ? `: ${params.notes}` : ''
+
+  // Proportional value allocation strictly conserving total value
+  const transferredValue = quantity === item.quantity
+    ? item.value
+    : Math.round((quantity / item.quantity) * item.value)
+  const remainingValue = item.value - transferredValue
+
+  const sourceHistoryEvent: CustodyHistoryEvent = {
+    id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    date: eventDate,
+    title: 'نقل وتحويل صنف',
+    description: `نقل ${quantity} ${item.unit} إلى ${targetWh?.name || targetWarehouseId}${permitStr}${noteStr}`,
+    type: 'transfer',
+    performedBy: params.performedBy,
+    warehouseId: item.warehouseId,
+    quantityDelta: -quantity,
+    valueDelta: -transferredValue,
+  }
+
+  const targetHistoryEvent: CustodyHistoryEvent = {
+    id: `ev-${Date.now() + 1}-${Math.random().toString(36).slice(2, 6)}`,
+    date: eventDate,
+    title: 'استلام تحويل مخزني',
+    description: `وارد من ${sourceWh?.name || item.warehouseId} (${quantity} ${item.unit})${permitStr}${noteStr}`,
+    type: 'transfer',
+    performedBy: params.performedBy,
+    warehouseId: targetWarehouseId,
+    quantityDelta: quantity,
+    valueDelta: transferredValue,
+  }
+
+  let updatedSource: CustodyItem
+  let updatedTarget: CustodyItem
+  let nextItems: CustodyItem[]
+
+  // Check if target warehouse already has this item (by code or normalized name)
+  const cleanName = item.name.trim().toLowerCase()
+  const targetIdx = items.findIndex(
+    (i) => i.warehouseId === targetWarehouseId && (i.code === item.code || i.name.trim().toLowerCase() === cleanName)
+  )
+
+  if (targetIdx !== -1) {
+    // Target already has this item -> merge into target
+    const existingTarget = items[targetIdx]
+    const newTargetQty = existingTarget.quantity + quantity
+    const newTargetValue = existingTarget.value + transferredValue
+    const newTargetUnitPrice = newTargetQty > 0 ? Math.round(newTargetValue / newTargetQty) : existingTarget.unitPrice
+
+    updatedTarget = {
+      ...existingTarget,
+      quantity: newTargetQty,
+      value: newTargetValue,
+      unitPrice: newTargetUnitPrice,
+      notes: existingTarget.notes
+        ? `${existingTarget.notes} • ${targetHistoryEvent.description}`
+        : targetHistoryEvent.description,
+      historyEvents: [...(existingTarget.historyEvents || []), targetHistoryEvent],
+    }
+
+    if (quantity === item.quantity) {
+      // Entire source quantity transferred; remove source from list
+      updatedSource = {
+        ...item,
+        quantity: 0,
+        value: 0,
+        notes: item.notes ? `${item.notes} • ${sourceHistoryEvent.description}` : sourceHistoryEvent.description,
+        historyEvents: [...(item.historyEvents || []), sourceHistoryEvent],
+      }
+      nextItems = items
+        .filter((i) => i.id !== item.id)
+        .map((i) => (i.id === existingTarget.id ? updatedTarget : i))
+    } else {
+      // Partial transfer; keep source with remaining quantity and remaining value
+      const newSourceUnitPrice = item.quantity - quantity > 0
+        ? Math.round(remainingValue / (item.quantity - quantity))
+        : item.unitPrice
+
+      updatedSource = {
+        ...item,
+        quantity: item.quantity - quantity,
+        value: remainingValue,
+        unitPrice: newSourceUnitPrice,
+        notes: item.notes ? `${item.notes} • ${sourceHistoryEvent.description}` : sourceHistoryEvent.description,
+        historyEvents: [...(item.historyEvents || []), sourceHistoryEvent],
+      }
+      nextItems = items.map((i) => {
+        if (i.id === item.id) return updatedSource
+        if (i.id === existingTarget.id) return updatedTarget
+        return i
+      })
+    }
+  } else {
+    // Target does not have this item
+    if (quantity === item.quantity) {
+      // Full transfer relocates the record
+      updatedSource = { ...item, quantity: 0, value: 0 }
+      updatedTarget = {
+        ...item,
+        warehouseId: targetWarehouseId,
+        custodian: params.custodian || item.custodian,
+        roomLocation: params.roomLocation || item.roomLocation,
+        notes: item.notes ? `${item.notes} • ${targetHistoryEvent.description}` : targetHistoryEvent.description,
+        historyEvents: [...(item.historyEvents || []), targetHistoryEvent],
+      }
+      nextItems = items.map((i) => (i.id === item.id ? updatedTarget : i))
+    } else {
+      // Partial transfer splits into two records with conserved values
+      const newSourceUnitPrice = item.quantity - quantity > 0
+        ? Math.round(remainingValue / (item.quantity - quantity))
+        : item.unitPrice
+
+      updatedSource = {
+        ...item,
+        quantity: item.quantity - quantity,
+        value: remainingValue,
+        unitPrice: newSourceUnitPrice,
+        notes: item.notes ? `${item.notes} • ${sourceHistoryEvent.description}` : sourceHistoryEvent.description,
+        historyEvents: [...(item.historyEvents || []), sourceHistoryEvent],
+      }
+
+      const branchItemsCount = items.filter((i) => i.warehouseId === targetWarehouseId).length
+      const seq = (branchItemsCount + 1).toString().padStart(3, '0')
+      const prefix = targetWarehouseId.toUpperCase().slice(0, 3)
+      const targetCode = `${prefix}-${seq}`
+
+      updatedTarget = {
+        ...item,
+        id: `c-tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        warehouseId: targetWarehouseId,
+        code: targetCode,
+        quantity,
+        value: transferredValue,
+        unitPrice: quantity > 0 ? Math.round(transferredValue / quantity) : item.unitPrice,
+        custodian: params.custodian || item.custodian,
+        roomLocation: params.roomLocation || item.roomLocation,
+        acquisitionDate: eventDate,
+        notes: targetHistoryEvent.description,
+        historyEvents: [targetHistoryEvent],
+      }
+
+      nextItems = items.map((i) => (i.id === item.id ? updatedSource : i))
+      nextItems.push(updatedTarget)
+    }
+  }
+
+  return {
+    updatedItems: nextItems,
+    sourceItem: updatedSource,
+    targetItem: updatedTarget,
+    transferredValue,
+  }
+}
+
+/**
+ * Reconciles an edited movement with custody inventory by applying only the difference between old and new.
+ */
+export function reconcileMovementEdit(oldMovement: FixtureMovement, newMovement: FixtureMovement): CustodyItem[] {
+  const items = loadCustodyItems()
+  const oldQin = Math.max(0, Number(oldMovement.qin) || 0)
+  const newQin = Math.max(0, Number(newMovement.qin) || 0)
+  const oldQout = Math.max(0, Number(oldMovement.qout) || 0)
+  const newQout = Math.max(0, Number(newMovement.qout) || 0)
+  const oldPrice = Number(oldMovement.price) || 0
+  const newPrice = Number(newMovement.price) || 0
+
+  // 1. Inward delta (purchases / receipts to main warehouse)
+  const deltaIn = newQin - oldQin
+  if (oldQin > 0 || newQin > 0) {
+    const itemName = (newMovement.item || oldMovement.item || '').trim()
+    const itemIdx = items.findIndex(
+      (i) => i.warehouseId === 'main' && i.name.trim().toLowerCase() === itemName.toLowerCase()
+    )
+    if (itemIdx !== -1) {
+      const current = items[itemIdx]
+      const nextQty = Math.max(0, current.quantity + deltaIn)
+      const valDelta = (newQin * newPrice) - (oldQin * oldPrice)
+      const nextVal = Math.max(0, current.value + valDelta)
+      const nextUnitPrice = nextQty > 0 ? Math.round(nextVal / nextQty) : current.unitPrice
+      items[itemIdx] = {
+        ...current,
+        quantity: nextQty,
+        value: nextVal,
+        unitPrice: nextUnitPrice,
+        notes: current.notes
+          ? `${current.notes} • تم تعديل حركة التوريد: تغير الكمية بمقدار (${deltaIn >= 0 ? '+' : ''}${deltaIn})`
+          : `تم تعديل حركة التوريد: تغير الكمية بمقدار (${deltaIn >= 0 ? '+' : ''}${deltaIn})`,
+      }
+    }
+  }
+
+  // 2. Outward delta (disbursements / transfers)
+  const deltaOut = newQout - oldQout
+  if (deltaOut !== 0) {
+    const sourceWhId = newMovement.sourceWarehouseId || oldMovement.sourceWarehouseId || 'main'
+    const targetWhId =
+      newMovement.destWarehouseId ||
+      oldMovement.destWarehouseId ||
+      findWarehouseByRecipient(newMovement.to || oldMovement.to)?.id
+    const itemName = (newMovement.item || oldMovement.item || '').trim()
+
+    const sourceIdx = items.findIndex(
+      (i) => i.warehouseId === sourceWhId && i.name.trim().toLowerCase() === itemName.toLowerCase()
+    )
+
+    if (sourceIdx !== -1) {
+      const src = items[sourceIdx]
+      const unitCost = src.quantity > 0 ? src.value / src.quantity : newPrice
+      const newSrcQty = Math.max(0, src.quantity - deltaOut)
+      const valChange = Math.round(deltaOut * unitCost)
+      const newSrcVal = Math.max(0, src.value - valChange)
+
+      items[sourceIdx] = {
+        ...src,
+        quantity: newSrcQty,
+        value: newSrcVal,
+        notes: src.notes
+          ? `${src.notes} • تعديل حركة صرف: ${deltaOut > 0 ? `صرف إضافي ${deltaOut}` : `إرجاع للمخزن ${-deltaOut}`}`
+          : `تعديل حركة صرف: ${deltaOut > 0 ? `صرف إضافي ${deltaOut}` : `إرجاع للمخزن ${-deltaOut}`}`,
+      }
+
+      // Also adjust target warehouse if applicable
+      if (targetWhId && targetWhId !== sourceWhId) {
+        const tgtIdx = items.findIndex(
+          (i) => i.warehouseId === targetWhId && i.name.trim().toLowerCase() === itemName.toLowerCase()
+        )
+        if (tgtIdx !== -1) {
+          const tgt = items[tgtIdx]
+          const newTgtQty = Math.max(0, tgt.quantity + deltaOut)
+          const newTgtVal = Math.max(0, tgt.value + valChange)
+          items[tgtIdx] = {
+            ...tgt,
+            quantity: newTgtQty,
+            value: newTgtVal,
+          }
+        }
+      }
+    }
+  }
+
+  saveCustodyItems(items)
+  return items
+}
+
+/**
+ * Reverses a deleted movement's inventory effect in custody.
+ */
+export function reverseMovementCustody(movement: FixtureMovement): CustodyItem[] {
+  const items = loadCustodyItems()
+  const qin = Math.max(0, Number(movement.qin) || 0)
+  const qout = Math.max(0, Number(movement.qout) || 0)
+  const price = Number(movement.price) || 0
+  const itemName = (movement.item || '').trim()
+
+  if (qin > 0) {
+    // Reverse inward movement: deduct qin from main warehouse
+    const itemIdx = items.findIndex(
+      (i) => i.warehouseId === 'main' && i.name.trim().toLowerCase() === itemName.toLowerCase()
+    )
+    if (itemIdx !== -1) {
+      const current = items[itemIdx]
+      const nextQty = Math.max(0, current.quantity - qin)
+      const valDeduct = Math.round(qin * price)
+      const nextVal = Math.max(0, current.value - valDeduct)
+      const nextUnitPrice = nextQty > 0 ? Math.round(nextVal / nextQty) : current.unitPrice
+      items[itemIdx] = {
+        ...current,
+        quantity: nextQty,
+        value: nextVal,
+        unitPrice: nextUnitPrice,
+        notes: current.notes
+          ? `${current.notes} • تم إلغاء وحذف حركة التوريد (${qin} ${current.unit})`
+          : `تم إلغاء وحذف حركة التوريد (${qin} ${current.unit})`,
+      }
+    }
+  }
+
+  if (qout > 0) {
+    // Reverse outward movement: restore stock to source warehouse, deduct from target
+    const sourceWhId = movement.sourceWarehouseId || 'main'
+    const targetWhId = movement.destWarehouseId || findWarehouseByRecipient(movement.to)?.id
+
+    const sourceIdx = items.findIndex(
+      (i) => i.warehouseId === sourceWhId && i.name.trim().toLowerCase() === itemName.toLowerCase()
+    )
+    if (sourceIdx !== -1) {
+      const src = items[sourceIdx]
+      const unitCost = src.quantity > 0 ? src.value / src.quantity : price
+      const addedVal = Math.round(qout * unitCost)
+      items[sourceIdx] = {
+        ...src,
+        quantity: src.quantity + qout,
+        value: src.value + addedVal,
+        notes: src.notes
+          ? `${src.notes} • تم إلغاء حركة الصرف واستعادة (${qout} ${src.unit})`
+          : `تم إلغاء حركة الصرف واستعادة (${qout} ${src.unit})`,
+      }
+    }
+
+    if (targetWhId && targetWhId !== sourceWhId) {
+      const tgtIdx = items.findIndex(
+        (i) => i.warehouseId === targetWhId && i.name.trim().toLowerCase() === itemName.toLowerCase()
+      )
+      if (tgtIdx !== -1) {
+        const tgt = items[tgtIdx]
+        const unitCost = tgt.quantity > 0 ? tgt.value / tgt.quantity : price
+        const deductedVal = Math.round(qout * unitCost)
+        items[tgtIdx] = {
+          ...tgt,
+          quantity: Math.max(0, tgt.quantity - qout),
+          value: Math.max(0, tgt.value - deductedVal),
+          notes: tgt.notes
+            ? `${tgt.notes} • تم إلغاء إذن الصرف وسحب (${qout} ${tgt.unit})`
+            : `تم إلغاء إذن الصرف وسحب (${qout} ${tgt.unit})`,
+        }
+      }
+    }
+  }
+
+  saveCustodyItems(items)
+  return items
 }

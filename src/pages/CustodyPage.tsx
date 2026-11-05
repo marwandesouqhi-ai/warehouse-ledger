@@ -38,6 +38,7 @@ import {
 
 import {
   deleteCustodyItemFromCloud,
+  executeCustodyTransfer,
   exportComprehensiveCustodyWorkbook,
   exportCustodyToExcel,
   fetchCustodyItemsFromCloud,
@@ -436,43 +437,18 @@ export default function CustodyPage({
     const targetWarehouse = WAREHOUSES.find((w) => w.id === targetWarehouseId)
     if (!targetWarehouse) return
 
-    let next = [...items]
-    if (transferQty >= item.quantity) {
-      // Transfer entire record
-      next = next.map((i) => {
-        if (i.id === item.id) {
-          return {
-            ...i,
-            warehouseId: targetWarehouseId,
-            custodian: newCustodian || i.custodian,
-            roomLocation: newLocation || i.roomLocation,
-            notes: transferReason ? `${i.notes ? `${i.notes} • ` : ''}تم النقل من ${activeWarehouse.name} (${transferReason})` : i.notes,
-          }
-        }
-        return i
-      })
-    } else {
-      // Split record: reduce source qty and add new item to destination
-      next = next.map((i) => {
-        if (i.id === item.id) {
-          return { ...i, quantity: i.quantity - transferQty }
-        }
-        return i
-      })
-      const newItem: CustodyItem = {
-        ...item,
-        id: `c-tr-${Date.now()}`,
-        warehouseId: targetWarehouseId,
-        quantity: transferQty,
-        custodian: newCustodian || item.custodian,
-        roomLocation: newLocation || item.roomLocation,
-        notes: transferReason ? `منقول من ${activeWarehouse.name}: ${transferReason}` : `منقول من ${activeWarehouse.name}`,
-      }
-      next.push(newItem)
-    }
+    const { updatedItems } = executeCustodyTransfer(items, {
+      item,
+      targetWarehouseId,
+      quantity: transferQty,
+      custodian: newCustodian || item.custodian,
+      roomLocation: newLocation || item.roomLocation,
+      notes: transferReason,
+      performedBy: session?.user?.email || 'أمين العهدة',
+    })
 
-    setItems(next)
-    saveCustodyItems(next)
+    setItems(updatedItems)
+    saveCustodyItems(updatedItems)
 
     void logAuditEvent({
       action: `نقل عهدة: ${item.name} (${transferQty} ${item.unit}) من ${activeWarehouse.name} إلى ${targetWarehouse.name}`,
