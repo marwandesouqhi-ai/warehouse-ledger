@@ -10,6 +10,11 @@ export type AppSettings = {
   systemName?: string
 }
 
+export type PersistenceOutcome = {
+  status: 'saved_locally' | 'pending_sync' | 'saved_to_cloud' | 'error'
+  error?: string
+}
+
 export const settingsStorageKey = 'warehouse-ledger-settings'
 export const logoBackupStorageKey = 'warehouse-ledger-custom-logo'
 
@@ -152,7 +157,10 @@ export async function fetchAppSettingsFromCloud(): Promise<AppSettings | null> {
   }
 }
 
-export async function saveAppSettingsToCloud(settings: AppSettings): Promise<void> {
+export async function saveAppSettingsToCloud(settings: AppSettings): Promise<PersistenceOutcome> {
+  let localSaved = false
+  let localError: string | undefined
+
   // Always persist locally
   try {
     localStorage.setItem(settingsStorageKey, JSON.stringify(settings))
@@ -165,23 +173,37 @@ export async function saveAppSettingsToCloud(settings: AppSettings): Promise<voi
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('settings-changed'))
     }
+    localSaved = true
   } catch (err) {
+    localError = err instanceof Error ? err.message : 'تعذر حفظ الإعدادات محلياً'
     console.warn('Could not save settings locally:', err)
   }
 
+  // If Supabase not connected
+  if (!supabase) {
+    if (!localSaved) {
+      return { status: 'error', error: localError || 'فشل الحفظ المحلي' }
+    }
+    return { status: 'saved_locally' }
+  }
+
   // If connected to Supabase, sync to public.app_settings table
-  if (supabase) {
-    try {
-      await supabase.from('app_settings').upsert({
-        id: 'default',
-        organization: settings.organization,
-        department: settings.department,
-        currency: settings.currency,
-        logo_url: settings.logoUrl || '',
-        logo_data_url: settings.logoDataUrl || '',
-      })
-    } catch (err) {
-      console.warn('Could not sync app settings to Supabase table:', err)
+  try {
+    const { error: upsertError } = await supabase.from('app_settings').upsert({
+      id: 'default',
+      organization: settings.organization,
+      department: settings.department,
+      currency: settings.currency,
+      logo_url: settings.logoUrl || '',
+      logo_data_url: settings.logoDataUrl || '',
+    })
+
+    if (upsertError) {
+      console.warn('Could not sync app settings to Supabase table:', upsertError)
+      return {
+        status: localSaved ? 'saved_locally' : 'error',
+        error: `تعذر حفظ الإعدادات سحابياً: ${upsertError.message}`,
+      }
     }
 
     try {
@@ -205,6 +227,15 @@ export async function saveAppSettingsToCloud(settings: AppSettings): Promise<voi
       }
     } catch (err) {
       console.warn('Could not sync app settings to Supabase user metadata:', err)
+    }
+
+    return { status: 'saved_to_cloud' }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'تعذر الاتصال بالسحابة'
+    console.warn('Error during cloud settings save:', err)
+    return {
+      status: localSaved ? 'saved_locally' : 'error',
+      error: msg,
     }
   }
 }

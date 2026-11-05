@@ -27,7 +27,7 @@ import {
     Warehouse,
 } from 'lucide-react'
 
-import type { AppSettings } from '../lib/settings'
+import type { AppSettings, PersistenceOutcome } from '../lib/settings'
 import { checkIsSystemAdmin } from '../lib/supabase'
 import {
     backupToSupabaseCloud,
@@ -59,7 +59,7 @@ type SettingsPageProps = {
     settings: AppSettings
     darkMode: boolean
     session?: Session | null
-    onSave: (settings: AppSettings) => void
+    onSave: (settings: AppSettings) => Promise<PersistenceOutcome> | PersistenceOutcome | void
     onToggleTheme: () => void
 }
 
@@ -110,6 +110,9 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
     const [draft, setDraft] = useState(settings)
     const [saved, setSaved] = useState(false)
     const [saveNotice, setSaveNotice] = useState('')
+    const [saveError, setSaveError] = useState('')
+    const [isSaving, setIsSaving] = useState(false)
+    const [persistenceOutcome, setPersistenceOutcome] = useState<PersistenceOutcome | null>(null)
     const [logoMode, setLogoMode] = useState<'file' | 'url'>(settings.logoUrl && !settings.logoDataUrl ? 'url' : 'file')
     const [logoError, setLogoError] = useState('')
     const [logoPreviewFailed, setLogoPreviewFailed] = useState(false)
@@ -405,7 +408,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
     const logoPreview = logoMode === 'file' ? draft.logoDataUrl : draft.logoUrl
     const hasSelectedLogo = Boolean(logoPreview?.trim())
 
-    function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         const nextSettings = { ...draft }
 
@@ -427,9 +430,30 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         }
 
         setLogoError('')
-        onSave(nextSettings)
-        setSaved(true)
-        setSaveNotice('تم حفظ وتطبيق كافة الإعدادات والشعار بنجاح.')
+        setSaveError('')
+        setIsSaving(true)
+        try {
+            const outcome = await onSave(nextSettings)
+            if (outcome && typeof outcome === 'object') {
+                setPersistenceOutcome(outcome)
+                if (outcome.status === 'saved_to_cloud') {
+                    setSaved(true)
+                    setSaveNotice('✓ تم حفظ وتطبيق كافة الإعدادات والشعار سحابياً ومحلياً بنجاح.')
+                } else if (outcome.status === 'saved_locally') {
+                    setSaved(true)
+                    setSaveNotice(outcome.error ? `✓ تم الحفظ محلياً بنجاح (${outcome.error})` : '✓ تم حفظ الإعدادات محلياً بنجاح (في انتظار المزامنة مع السحابة).')
+                } else {
+                    setSaveError(outcome.error || 'تعذر حفظ الإعدادات.')
+                }
+            } else {
+                setSaved(true)
+                setSaveNotice('تم حفظ وتطبيق كافة الإعدادات والشعار بنجاح.')
+            }
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : 'تعذر حفظ الإعدادات.')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     async function handleLogoFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -551,9 +575,48 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             </header>
 
             {saveNotice && (
-                <div className="inline-message success flex items-center gap-2 mb-4 font-sm">
-                    <CheckCircle2 size={18} />
-                    <span>{saveNotice}</span>
+                <div className="inline-message success flex items-center justify-between gap-2 mb-4 font-sm">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 size={18} />
+                        <span>{saveNotice}</span>
+                    </div>
+                    {persistenceOutcome?.status === 'saved_to_cloud' && (
+                        <span className="badge badge-success text-xs px-2 py-0.5 rounded">محفوظ سحابياً</span>
+                    )}
+                    {persistenceOutcome?.status === 'saved_locally' && (
+                        <div className="flex items-center gap-2">
+                            <span className="badge badge-warning text-xs px-2 py-0.5 rounded">محفوظ محلياً فقط</span>
+                            <button
+                                type="button"
+                                className="text-xs text-blue-500 underline hover:text-blue-600"
+                                onClick={(e) => {
+                                    e.preventDefault()
+                                    void handleSubmit(e as unknown as FormEvent<HTMLFormElement>)
+                                }}
+                            >
+                                إعادة محاولة المزامنة
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {saveError && (
+                <div className="inline-message error flex items-center justify-between gap-2 mb-4 font-sm">
+                    <div className="flex items-center gap-2">
+                        <ShieldAlert size={18} />
+                        <span>{saveError}</span>
+                    </div>
+                    <button
+                        type="button"
+                        className="text-xs text-red-500 underline hover:text-red-600"
+                        onClick={(e) => {
+                            e.preventDefault()
+                            void handleSubmit(e as unknown as FormEvent<HTMLFormElement>)
+                        }}
+                    >
+                        إعادة المحاولة
+                    </button>
                 </div>
             )}
 
@@ -643,7 +706,9 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                     </div>
                     <div className="settings-actions">
                         {isSystemAdmin ? (
-                            <button type="submit" className="primary-btn"><Save size={17} /> حفظ بيانات المؤسسة</button>
+                            <button type="submit" className="primary-btn" disabled={isSaving}>
+                                <Save size={17} /> {isSaving ? 'جارٍ الحفظ والمزامنة...' : 'حفظ بيانات المؤسسة'}
+                            </button>
                         ) : (
                             <div className="inline-message info m-0 flex items-center gap-2">
                                 <Info size={16} /> هذه الإعدادات للعرض فقط — تعديل إعدادات وشعار المؤسسة مقتصر على مدير النظام (System Admin).

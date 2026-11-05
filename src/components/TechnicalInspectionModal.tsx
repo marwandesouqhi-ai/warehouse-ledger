@@ -307,10 +307,30 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
     }
   }
 
+  const isDirty = Boolean(supplier.trim() || invoiceNumber.trim() || items.some(i => i.name.trim()))
+  function handleSafeClose() {
+    if (isSaving) return
+    if (isDirty && !window.confirm('هل أنت متأكد من إغلاق محضر الفحص الفني وتجاهل التعديلات؟')) {
+      return
+    }
+    onClose()
+  }
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (isSaving) return
+        handleSafeClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSaving, isDirty])
+
   return (
     <motion.div
       className="modal-backdrop"
-      onClick={onClose}
+      onClick={handleSafeClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -331,7 +351,8 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
             <button
               type="button"
               className="modal-close-btn"
-              onClick={onClose}
+              onClick={handleSafeClose}
+              disabled={isSaving}
               aria-label="إغلاق النافذة"
             >
               <X size={18} />

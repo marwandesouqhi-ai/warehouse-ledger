@@ -48,3 +48,39 @@ export function formatCairoDateDisplay(dateInput?: string | null): string {
     return String(dateInput)
   }
 }
+
+/**
+ * Normalizes and parses any date string (ISO, YYYY-MM-DD, DD/MM/YYYY, Arabic digits)
+ * into a reliable numeric timestamp for accurate sorting.
+ */
+export function parseDateToTimestamp(raw?: string | null): number {
+  if (!raw) return 0
+  let str = String(raw).trim()
+  if (!str) return 0
+
+  // Normalize Eastern Arabic numerals (٠-٩) to standard ASCII (0-9)
+  str = str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+
+  // Match DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (dmyMatch) {
+    const day = Number(dmyMatch[1])
+    const month = Number(dmyMatch[2]) - 1
+    const year = Number(dmyMatch[3])
+    const d = new Date(year, month, day)
+    return isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+
+  // Match YYYY/MM/DD or YYYY-MM-DD
+  const ymdMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/)
+  if (ymdMatch) {
+    const year = Number(ymdMatch[1])
+    const month = Number(ymdMatch[2]) - 1
+    const day = Number(ymdMatch[3])
+    const d = new Date(year, month, day)
+    return isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+
+  const parsed = Date.parse(str)
+  return isNaN(parsed) ? 0 : parsed
+}

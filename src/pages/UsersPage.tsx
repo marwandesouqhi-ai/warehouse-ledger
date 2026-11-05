@@ -46,6 +46,7 @@ import {
     getLocalSession,
     isLastActiveSystemAdmin,
     loadLocalUsers,
+    saveUserToCloud,
     syncUsersWithCloud,
     updateLocalUser,
     type LocalUser,
@@ -324,8 +325,13 @@ export default function UsersPage({ session }: UsersPageProps) {
                 permissions: newPermissions,
             })
 
+            const outcome = await saveUserToCloud(added)
             reloadUsers()
-            setAddSuccess(`تمت إضافة وتفعيل المستخدم "${added.username}" بنجاح! الرقم الوظيفي: (${added.employeeId || 'تم تخصيصه'}).`)
+            if (outcome.status === 'saved_to_cloud') {
+                setAddSuccess(`تمت إضافة وتفعيل المستخدم "${added.username}" ومزامنته سحابياً بنجاح! الرقم الوظيفي: (${added.employeeId || 'تم تخصيصه'}).`)
+            } else {
+                setAddSuccess(`تمت إضافة المستخدم "${added.username}" محلياً بنجاح ${outcome.error ? `(${outcome.error})` : '(في انتظار المزامنة السحابية)'}. الرقم الوظيفي: (${added.employeeId || 'تم تخصيصه'}).`)
+            }
             void logAuditEvent({
                 action: `إضافة مستخدم جديد: ${added.username} (الدور: ${ROLE_LABELS[added.role as EffectiveRole] || added.role})`,
                 entity_type: 'user',
@@ -415,7 +421,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                 }
             }
 
-            updateLocalUser(editingUser.id, {
+            const updated = updateLocalUser(editingUser.id, {
                 displayName: editDisplayName,
                 role: editRole,
                 department: editDepartment,
@@ -423,6 +429,21 @@ export default function UsersPage({ session }: UsersPageProps) {
                 status: editStatus,
                 ...(editPassword ? { password: editPassword } : {}),
             })
+
+            if (updated) {
+                const outcome = await saveUserToCloud(updated)
+                if (outcome.status === 'saved_to_cloud') {
+                    setActionFeedback({
+                        message: `تم حفظ تعديلات المستخدم "${editingUser.username}" سحابياً ومحلياً بنجاح.`,
+                        type: 'success',
+                    })
+                } else {
+                    setActionFeedback({
+                        message: `تم حفظ التعديلات محلياً بنجاح ${outcome.error ? `(${outcome.error})` : '(في انتظار المزامنة السحابية)'}.`,
+                        type: 'success',
+                    })
+                }
+            }
 
             reloadUsers()
             void logAuditEvent({

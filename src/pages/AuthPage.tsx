@@ -20,7 +20,7 @@ import { logAuditEvent } from '../lib/auditLogger'
 import { isSupabaseConfigured } from '../lib/authMode'
 import { validateChosenUsername, validateChosenPassword, validateChosenPasswordAsync } from '../lib/employeeIdentity'
 import { getInviteProfile, completeAccountActivation, sendPasswordRecovery, type InviteProfile } from '../lib/registrationService'
-import { ROLE_LABELS } from '../lib/permissions'
+import { ROLE_LABELS, userMustChangePassword } from '../lib/permissions'
 
 function getEmailFromUrl(): string {
     if (typeof window === 'undefined') return ''
@@ -299,6 +299,15 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 })
                 if (updateError) throw updateError
 
+                try {
+                    const { data: userData } = await supabase.auth.getUser()
+                    if (userData?.user?.id) {
+                        await supabase.from('app_users').update({ must_change_password: false }).eq('auth_user_id', userData.user.id)
+                    }
+                } catch {
+                    // Non-blocking
+                }
+
                 void logAuditEvent({
                     action: 'تعيين كلمة مرور جديدة للمستخدم بنجاح',
                     entity_type: 'auth',
@@ -310,16 +319,17 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     window.history.replaceState(null, '', window.location.pathname)
                 }
 
-                // Explicitly sign out of recovery session so single-use is strictly enforced
-                if (supabase) {
-                    await supabase.auth.signOut().catch(() => {})
+                // Refresh session so user_metadata is updated locally
+                try {
+                    await supabase.auth.refreshSession()
+                } catch {
+                    // Non-blocking
                 }
 
-                setNotice('تم تعيين كلمة المرور بنجاح! انتهت صلاحية رابط الاستعادة لمرة واحدة، يُرجى تسجيل الدخول بكلمة المرور الجديدة.')
+                setNotice('تم تعيين كلمة المرور بنجاح! جاري تحويلك إلى لوحة التحكم...')
                 setTimeout(() => {
-                    setMode('signIn')
                     onPasswordSet?.()
-                }, 1200)
+                }, 800)
                 return
             }
 
@@ -434,8 +444,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             // If user is required to change password on first login
-            const userAppMeta = (signInData.user?.app_metadata as Record<string, unknown>) || {}
-            if (userAppMeta.must_change_password === true) {
+            if (userMustChangePassword(signInData.user)) {
                 setActiveUserEmail(signInData.user?.email || cleanUser)
                 setMode('setNewPassword')
                 setNotice('⚠️ يجب تعيين كلمة مرور جديدة لحسابك لأول مرة لمتابعة الدخول (6 أحرف على الأقل).')

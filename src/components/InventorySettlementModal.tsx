@@ -296,6 +296,26 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
     }
   }
 
+  const isDirty = Object.keys(actualQuantities).length > 0
+  function handleSafeClose() {
+    if (isSaving) return
+    if (isDirty && !window.confirm('هل أنت متأكد من إغلاق نافذة التسوية وتجاهل التعديلات غير المحفوظة؟')) {
+      return
+    }
+    onClose()
+  }
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (isSaving) return
+        handleSafeClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSaving, isDirty])
+
   const todayArabic = new Intl.DateTimeFormat('ar-EG', {
     weekday: 'long',
     year: 'numeric',
@@ -308,7 +328,7 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
   return (
     <motion.div
       className="modal-backdrop"
-      onClick={onClose}
+      onClick={handleSafeClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -329,7 +349,8 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
             <button
               type="button"
               className="modal-close-btn"
-              onClick={onClose}
+              onClick={handleSafeClose}
+              disabled={isSaving}
               aria-label="إغلاق النافذة"
             >
               <X size={18} />

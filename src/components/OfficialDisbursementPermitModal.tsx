@@ -10,25 +10,37 @@ import {
   Package,
   Layers,
   ArrowRightLeft,
+  ShieldAlert,
+  CheckCircle2,
 } from 'lucide-react'
 import { WAREHOUSES, type CustodyItem } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 
-interface OfficialDisbursementPermitModalProps {
-  initialItems: CustodyItem[]
+export interface OfficialDisbursementPermitModalProps {
+  initialItems?: CustodyItem[]
   allWarehouseItems: CustodyItem[]
   settings: AppSettings
   onClose: () => void
   defaultWarehouseId?: string
+  onRecordPermit?: (payload: {
+    permitNumber: string
+    permitDate: string
+    sourceWarehouseId: string
+    targetWarehouseId: string
+    recipientName: string
+    notes: string
+    items: Array<{ item: CustodyItem; quantity: number }>
+  }) => Promise<void> | void
 }
 
 export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermitModalProps> = ({
-  initialItems,
+  initialItems = [],
   allWarehouseItems,
   settings,
   onClose,
   defaultWarehouseId,
+  onRecordPermit,
 }) => {
   const [permitType, setPermitType] = useState<'disburse' | 'receive'>('disburse')
   const [permitNumber, setPermitNumber] = useState<string>(() => {
@@ -48,36 +60,24 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
     if (rawDefault && rawDefault !== 'main') {
       return rawDefault
     }
-    const initialRaw = initialItems[0]?.warehouseId === 'nursing' ? 'medicine' : initialItems[0]?.warehouseId
-    if (initialRaw && initialRaw !== 'main') {
-      return initialRaw
-    }
     return 'fci'
   })
-  const [recipientName, setRecipientName] = useState<string>(initialItems[0]?.custodian || '')
+  const [recipientName, setRecipientName] = useState<string>('')
   const [notes, setNotes] = useState<string>('صرف وتغذية عهدة ومهمات معتمدة بقرار لجنة المخازن')
 
   // Search term inside the item selector
   const [itemSearchTerm, setItemSearchTerm] = useState<string>('')
 
-  // Selected items to include in this permit (strictly user-selected or initial items, NEVER dummy items)
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => {
-    if (initialItems && initialItems.length > 0) {
-      return new Set(initialItems.map((i) => i.id))
-    }
-    return new Set<string>()
-  })
+  // Selected items: requirement #18: NO preselected items; explicit user selection only
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set<string>())
 
-  // Quantities to disburse per item (defaults to full quantity of initial items or 1 piece when user adds an item)
-  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>(() => {
-    const init: Record<string, number> = {}
-    if (initialItems && initialItems.length > 0) {
-      for (const it of initialItems) {
-        init[it.id] = it.quantity || 1
-      }
-    }
-    return init
-  })
+  // Quantities to disburse per item
+  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({})
+
+  // Recording and Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRecorded, setIsRecorded] = useState(false)
+  const [recordFeedback, setRecordFeedback] = useState<string | null>(null)
 
   // Clean up printing class after print dialog closes
   useEffect(() => {
@@ -88,15 +88,19 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
     return () => window.removeEventListener('afterprint', handleAfterPrint)
   }, [])
 
+  function handleSourceWarehouseChange(newSourceId: string) {
+    setSourceWarehouseId(newSourceId)
+    // Clear selection when source changes to prevent cross-warehouse leakage
+    setSelectedItemIds(new Set())
+    setItemQuantities({})
+  }
+
   const sourceWh = WAREHOUSES.find((w) => w.id === sourceWarehouseId) || WAREHOUSES[0]
   const targetWh = WAREHOUSES.find((w) => w.id === targetWarehouseId) || WAREHOUSES[1]
 
-  // Available items in the source warehouse (or all items fallback)
+  // Available items strictly in the source warehouse (Requirement #18: NO fallback to all items)
   const candidateItems = useMemo(() => {
-    let pool = allWarehouseItems.filter((i) => i.warehouseId === sourceWarehouseId)
-    if (pool.length === 0) {
-      pool = allWarehouseItems
-    }
+    const pool = allWarehouseItems.filter((i) => i.warehouseId === sourceWarehouseId && (i.quantity || 0) > 0)
     if (!itemSearchTerm.trim()) return pool
     const q = itemSearchTerm.toLowerCase().trim()
     return pool.filter(
@@ -109,26 +113,99 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
   }, [allWarehouseItems, sourceWarehouseId, itemSearchTerm])
 
   const itemsToPrint = useMemo(() => {
-    const pool = [...allWarehouseItems]
-    if (initialItems && initialItems.length > 0) {
-      for (const init of initialItems) {
-        if (!pool.some((p) => p.id === init.id)) {
-          pool.push(init)
-        }
-      }
-    }
-    return pool.filter((i) => selectedItemIds.has(i.id))
-  }, [allWarehouseItems, initialItems, selectedItemIds])
+    return allWarehouseItems
+      .filter((i) => i.warehouseId === sourceWarehouseId && selectedItemIds.has(i.id))
+  }, [allWarehouseItems, sourceWarehouseId, selectedItemIds])
 
   const totalDisbursedPieces = useMemo(() => {
-    return itemsToPrint.reduce((sum, it) => sum + (itemQuantities[it.id] ?? it.quantity), 0)
+    return itemsToPrint.reduce((sum, it) => sum + (itemQuantities[it.id] ?? 1), 0)
   }, [itemsToPrint, itemQuantities])
 
+  // Validation rules (Requirement #18: block same source/target, require quantities and essential fields)
+  const validationError = useMemo(() => {
+    if (sourceWarehouseId === targetWarehouseId) {
+      return 'لا يمكن أن يكون المخزن المنصرف منه هو نفس الجهة المستلمة. يرجى اختيار جهة مستلمة مختلفة.'
+    }
+    if (!permitNumber.trim()) {
+      return 'يرجى إدخال رقم الإذن الرسمي.'
+    }
+    if (!permitDate.trim()) {
+      return 'يرجى تحديد تاريخ الإذن.'
+    }
+    if (!recipientName.trim()) {
+      return 'يرجى إدخال اسم أمين العهدة أو المسؤول المستلم.'
+    }
+    if (selectedItemIds.size === 0) {
+      return 'يرجى تحديد صنف واحد على الأقل لإدراجه في إذن الصرف.'
+    }
+    for (const it of itemsToPrint) {
+      const qty = itemQuantities[it.id] ?? 0
+      if (!qty || qty <= 0) {
+        return `يرجى تحديد كمية صالحة للصنف "${it.name}".`
+      }
+      if (qty > it.quantity) {
+        return `الكمية المحددة للصنف "${it.name}" (${qty}) تتجاوز الرصيد المتاح بالمخزن (${it.quantity}).`
+      }
+    }
+    return null
+  }, [sourceWarehouseId, targetWarehouseId, permitNumber, permitDate, recipientName, selectedItemIds, itemsToPrint, itemQuantities])
+
+  // Safe dismissal handler (Requirement #25)
+  const isDirty = selectedItemIds.size > 0 || recipientName.trim().length > 0
+  function handleSafeClose() {
+    if (isSubmitting) return
+    if (isDirty && !isRecorded) {
+      if (!window.confirm('هل أنت متأكد من إغلاق نافذة الإذن وتجاهل التعديلات غير المسجلة؟')) {
+        return
+      }
+    }
+    onClose()
+  }
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (isSubmitting) return
+        handleSafeClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSubmitting, isDirty, isRecorded])
+
   function handlePrintPermit() {
+    if (validationError) return
     document.body.classList.add('printing-official-permit')
     setTimeout(() => {
       window.print()
     }, 50)
+  }
+
+  async function handleRecordAndExecute() {
+    if (validationError || !onRecordPermit) return
+    setIsSubmitting(true)
+    setRecordFeedback(null)
+    try {
+      const itemsPayload = itemsToPrint.map((it) => ({
+        item: it,
+        quantity: itemQuantities[it.id] ?? 1,
+      }))
+      await onRecordPermit({
+        permitNumber,
+        permitDate,
+        sourceWarehouseId,
+        targetWarehouseId,
+        recipientName,
+        notes,
+        items: itemsPayload,
+      })
+      setIsRecorded(true)
+      setRecordFeedback('✓ تم اعتماد وتسجيل إذن الصرف ونقل العهدة في الدفاتر بنجاح!')
+    } catch (err) {
+      setRecordFeedback(err instanceof Error ? err.message : 'تعذر اعتماد وتسجيل الإذن.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function toggleItem(item: CustodyItem) {
@@ -177,7 +254,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
   return (
     <motion.div
       className="modal-backdrop"
-      onClick={onClose}
+      onClick={handleSafeClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -202,31 +279,58 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 <h3 className="m-0 text-lg font-bold text-ink">
                   إصدار وطباعة إذن صرف / تسليم عهدة رسمي
                 </h3>
-                <span className="permit-badge-tag">
-                  حجم شاشة كامل (A4 معتمد)
+                <span className={`permit-badge-tag ${isRecorded ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-bold' : ''}`}>
+                  {isRecorded ? '✓ إذن رسمي معتمد ومسجل بالدفاتر' : 'مسودة إذن (غير مسجلة بالدفاتر)'}
                 </span>
               </div>
               <span className="modal-subtitle font-xs text-muted mt-1 block">
-                نموذج حكومي رسمي معتمد بالترويسة والختم والعلامة المائية المعتمدة مع إمكانية تحديد عدد القطع بدقة
+                نموذج حكومي رسمي معتمد بالترويسة والختم والعلامة المائية المعتمدة مع التدقيق الفوري للكميات والأرصدة
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="primary-btn permit-print-btn"
-              onClick={handlePrintPermit}
-              disabled={itemsToPrint.length === 0}
-              title="طباعة إذن الصرف فوراً على مقاس A4"
-            >
-              <Printer size={16} />
-              <span>طباعة الإذن ({itemsToPrint.length} صنف - {totalDisbursedPieces} قطعة)</span>
-            </button>
+            {!isRecorded ? (
+              <>
+                <button
+                  type="button"
+                  className="secondary-btn permit-print-btn"
+                  onClick={handlePrintPermit}
+                  disabled={itemsToPrint.length === 0 || !!validationError || isSubmitting}
+                  title={validationError || "طباعة مسودة الإذن للمعاينة"}
+                >
+                  <Printer size={16} />
+                  <span>طباعة مسودة ({itemsToPrint.length} صنف)</span>
+                </button>
+                {onRecordPermit && (
+                  <button
+                    type="button"
+                    className="primary-btn permit-record-btn"
+                    onClick={handleRecordAndExecute}
+                    disabled={itemsToPrint.length === 0 || !!validationError || isSubmitting}
+                    title={validationError || "اعتماد وتسجيل الإذن ونقل الأصناف بالدفاتر"}
+                  >
+                    <FileCheck2 size={16} />
+                    <span>{isSubmitting ? 'جارٍ التسجيل بالدفاتر...' : `اعتماد وتسجيل الإذن (${itemsToPrint.length} صنف)`}</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                className="primary-btn permit-print-btn bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={handlePrintPermit}
+                title="طباعة إذن الصرف الرسمي المعتمد"
+              >
+                <Printer size={16} />
+                <span>طباعة الإذن المعتمد ({itemsToPrint.length} صنف - {totalDisbursedPieces} قطعة)</span>
+              </button>
+            )}
             <button
               type="button"
               className="modal-close-btn permit-close-icon-btn"
-              onClick={onClose}
+              onClick={handleSafeClose}
+              disabled={isSubmitting}
               aria-label="إغلاق"
             >
               <X size={18} />
@@ -241,6 +345,20 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
             {/* RIGHT COLUMN: PERMIT CONFIG & ITEM QUANTITIES (Hidden in Print) */}
             {/* ═══════════════════════════════════════════════════════════ */}
             <div className="no-print permit-left-col">
+              {recordFeedback && (
+                <div className="inline-message success flex items-center gap-2 mb-3 font-sm">
+                  <CheckCircle2 size={16} />
+                  <span>{recordFeedback}</span>
+                </div>
+              )}
+
+              {validationError && (
+                <div className="inline-message error flex items-center gap-2 mb-3 font-sm" role="alert">
+                  <ShieldAlert size={16} />
+                  <span>{validationError}</span>
+                </div>
+              )}
+
               {/* Card 1: Permit Metadata Form */}
               <div className="permit-card-box">
                 <div className="flex items-center gap-2 mb-3 font-bold font-sm text-ink">
@@ -253,6 +371,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     نوع المستند:
                     <select
                       value={permitType}
+                      disabled={isRecorded || isSubmitting}
                       onChange={(e) => setPermitType(e.target.value as 'disburse' | 'receive')}
                       className="input-compact"
                     >
@@ -266,6 +385,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     <input
                       type="text"
                       value={permitNumber}
+                      disabled={isRecorded || isSubmitting}
                       onChange={(e) => setPermitNumber(e.target.value)}
                       className="input-compact"
                     />
@@ -276,6 +396,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     <input
                       type="date"
                       value={permitDate}
+                      disabled={isRecorded || isSubmitting}
                       onChange={(e) => setPermitDate(e.target.value)}
                       className="input-compact"
                     />
@@ -285,7 +406,8 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     المخزن المنصرف منه (المسلّم):
                     <select
                       value={sourceWarehouseId}
-                      onChange={(e) => setSourceWarehouseId(e.target.value)}
+                      disabled={isRecorded || isSubmitting}
+                      onChange={(e) => handleSourceWarehouseChange(e.target.value)}
                       className="input-compact"
                     >
                       {WAREHOUSES.map((w) => (
@@ -298,6 +420,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     الجهة المستلمة (الكلية):
                     <select
                       value={targetWarehouseId}
+                      disabled={isRecorded || isSubmitting}
                       onChange={(e) => setTargetWarehouseId(e.target.value)}
                       className="input-compact"
                     >
@@ -541,7 +664,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     ) : (
                       <div className="print-logo-emblem">شعار المؤسسة</div>
                     )}
-                    <div className="print-stamp-title">إذن رسمي معتمد</div>
+                    <div className="print-stamp-title">
+                      {isRecorded ? 'إذن رسمي معتمد' : 'مسودة للمعاينة'}
+                    </div>
                   </div>
 
                   <div className="print-header-col print-header-left">
@@ -558,7 +683,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                     {permitType === 'disburse' ? 'إذن صرف ونقل عهدة ومهمات مخزنية' : 'محضر فحص واستلام عهدة مستديمة'}
                   </h1>
                   <div className="print-doc-subtitle">
-                    طبقاً للائحة المخازن والمشتريات الحكومية وقواعد حصر وتدقيق الأصول المستديمة
+                    {isRecorded
+                      ? 'طبقاً للائحة المخازن والمشتريات الحكومية وقواعد حصر وتدقيق الأصول المستديمة (مسجل بالدفاتر)'
+                      : 'مسودة غير معتمدة للمراجعة المبدئية فقط — لم تسجل في دفاتر العهدة بعد'}
                   </div>
                 </div>
 

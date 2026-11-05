@@ -45,6 +45,7 @@ import {
   getWarehouseStats,
   loadCustodyItems,
   saveCustodyItems,
+  saveCustodyItemsToCloud,
   syncOutwardMovementToCustody,
   fixtureCustodyItems,
   WAREHOUSES,
@@ -60,6 +61,8 @@ import {
   downloadCustodyTemplate,
   mergeImportedCustody,
   parseRawCustodyRows,
+  MAX_CUSTODY_IMPORT_FILE_SIZE,
+  MAX_CUSTODY_IMPORT_ROWS,
 } from '../lib/custodyImport'
 import { AnimatePresence } from 'motion/react'
 import { CustodyItemHistoryModal } from '../components/CustodyItemHistoryModal'
@@ -465,6 +468,51 @@ export default function CustodyPage({
     })
 
     setTransferringItem(null)
+  }
+
+  async function handleRecordOfficialPermit(payload: {
+    permitNumber: string
+    permitDate: string
+    sourceWarehouseId: string
+    targetWarehouseId: string
+    recipientName: string
+    notes: string
+    items: Array<{ item: CustodyItem; quantity: number }>
+  }) {
+    let currentItems = [...items]
+    const sourceWh = WAREHOUSES.find((w) => w.id === payload.sourceWarehouseId)
+    const targetWh = WAREHOUSES.find((w) => w.id === payload.targetWarehouseId)
+    if (!targetWh || !sourceWh) return
+
+    for (const entry of payload.items) {
+      const res = executeCustodyTransfer(currentItems, {
+        item: entry.item,
+        targetWarehouseId: payload.targetWarehouseId,
+        quantity: entry.quantity,
+        custodian: payload.recipientName,
+        notes: `إذن صرف رقم ${payload.permitNumber} بتاريخ ${payload.permitDate}: ${payload.notes}`,
+        performedBy: session?.user?.email || 'أمين العهدة',
+      })
+      currentItems = res.updatedItems
+    }
+
+    setItems(currentItems)
+    saveCustodyItems(currentItems)
+    if (session?.user?.id) {
+      void saveCustodyItemsToCloud(currentItems)
+    }
+
+    void logAuditEvent({
+      action: `إصدار واعتماد إذن صرف رسمي رقم ${payload.permitNumber} (${payload.items.length} صنف) من ${sourceWh.name} إلى ${targetWh.name}`,
+      entity_type: 'custody',
+      details: {
+        permitNumber: payload.permitNumber,
+        source: payload.sourceWarehouseId,
+        target: payload.targetWarehouseId,
+        itemsCount: payload.items.length,
+      },
+      user: session?.user,
+    })
   }
 
   // Central supply disbursement handler (from main to any branch)
@@ -1633,6 +1681,7 @@ export default function CustodyPage({
             settings={settings}
             defaultWarehouseId={activeWarehouseId}
             onClose={() => setIsPermitModalOpen(false)}
+            onRecordPermit={handleRecordOfficialPermit}
           />
         )}
       </AnimatePresence>
@@ -2355,6 +2404,8 @@ function SupplyFromMainModal({
   const [permitNo, setPermitNo] = useState<string>(`صرف-${new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`)
   const [error, setError] = useState<string>('')
 
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!selectedItem) {
@@ -2370,12 +2421,23 @@ function SupplyFromMainModal({
       return
     }
 
-    try { await onDisburse(selectedItem, targetWarehouseId, quantity, recipientCustodian.trim(), newLocation.trim(), permitNo.trim()) }
-    catch (err) { setError(err instanceof Error ? err.message : 'تعذر الصرف.') }
+    setIsSubmitting(true)
+    try {
+      await onDisburse(selectedItem, targetWarehouseId, quantity, recipientCustodian.trim(), newLocation.trim(), permitNo.trim())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'تعذر الصرف.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function handleSafeClose() {
+    if (isSubmitting) return
+    onClose()
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={handleSafeClose}>
       <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
@@ -2387,7 +2449,7 @@ function SupplyFromMainModal({
               <span className="modal-subtitle">إمداد المخازن الفرعية والكليات من المخزن المركزي المغذي</span>
             </div>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+          <button type="button" className="modal-close-btn" onClick={handleSafeClose} disabled={isSubmitting} aria-label="إغلاق">
             <X size={18} />
           </button>
         </div>
@@ -2550,6 +2612,10 @@ function ImportCustodyModal({
     setIsParsing(true)
 
     try {
+      if (selectedFile.size > MAX_CUSTODY_IMPORT_FILE_SIZE) {
+        throw new Error(`حجم الملف كبير جداً (${(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت). الحد الأقصى المسموح به هو 10 ميجابايت.`)
+      }
+
       const XLSX = await import('xlsx')
       const buffer = await selectedFile.arrayBuffer()
       const workbook = XLSX.read(buffer, { cellDates: true })
@@ -2562,6 +2628,10 @@ function ImportCustodyModal({
 
       if (!rawRows || rawRows.length === 0) {
         throw new Error('لم يتم العثور على أي صفوف أو بيانات داخل ملف Excel.')
+      }
+
+      if (rawRows.length > MAX_CUSTODY_IMPORT_ROWS) {
+        throw new Error(`عدد صفوف الملف (${rawRows.length}) يتجاوز الحد الأقصى المسموح به (${MAX_CUSTODY_IMPORT_ROWS} صف).`)
       }
 
       const result = parseRawCustodyRows(rawRows, targetWarehouseId, existingItemsCount, XLSX)
@@ -3074,7 +3144,7 @@ function NewDisbursementModal({
   }
 
   return (
-    <div className="disbursement-modal-backdrop" onClick={onClose}>
+    <div className="disbursement-modal-backdrop" onClick={() => { if (!isSubmitting) onClose() }}>
       <div className="disbursement-modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-wrap">
@@ -3090,7 +3160,7 @@ function NewDisbursementModal({
               </span>
             </div>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+          <button type="button" className="modal-close-btn" onClick={() => { if (!isSubmitting) onClose() }} disabled={isSubmitting} aria-label="إغلاق">
             <X size={18} />
           </button>
         </div>

@@ -27,6 +27,23 @@ export type ParsedCustodyResult = {
   skippedCount: number
   warnings: string[]
   errors: string[]
+  rejectedRows?: CustodyRowValidationError[]
+}
+
+export const MAX_CUSTODY_IMPORT_ROWS = 5000
+export const MAX_CUSTODY_IMPORT_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+export type CustodyRowValidationError = {
+  rowNumber: number
+  itemName?: string
+  reason: string
+  rawData?: Record<string, unknown>
+}
+
+export function generateCustodyErrorReportCsv(rejectedRows: CustodyRowValidationError[]): string {
+  const header = '\uFEFFرقم الصف في الملف,اسم الصنف,سبب الرفض'
+  const lines = rejectedRows.map((r) => `${r.rowNumber},"${(r.itemName || '—').replace(/"/g, '""')}","${r.reason.replace(/"/g, '""')}"`)
+  return [header, ...lines].join('\r\n')
 }
 
 const VALID_CATEGORIES: CustodyCategory[] = [

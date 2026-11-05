@@ -58,9 +58,10 @@ import { fixtureMovements, type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
 import { createWarehouseIssue, deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
-import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings } from './lib/settings'
+import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings, type PersistenceOutcome } from './lib/settings'
 import { supabase } from './lib/supabase'
 import {
+  can,
   canCreatePurchase,
   canCreateDisbursement,
   isSystemAdmin as permsIsSystemAdmin,
@@ -68,6 +69,7 @@ import {
   canViewPage,
   canAccessRoute,
   getDashboardScope,
+  userMustChangePassword,
   ROLE_LABELS,
 } from './lib/permissions'
 import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
@@ -417,6 +419,7 @@ function App() {
   const [editingMovement, setEditingMovement] = useState<FixtureMovement | null>(null)
   const [deletingMovement, setDeletingMovement] = useState<FixtureMovement | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
   const summary = deriveSummary(movements as Array<Record<string, unknown>>)
@@ -441,7 +444,7 @@ function App() {
 
   const effectiveRole = getEffectiveRole(session)
   const isSystemAdmin = permsIsSystemAdmin(session)
-  const canManageRecords = isSystemAdmin
+  const canManageRecords = can(session, 'manage_records')
   const canEdit = canCreateDisbursement(session) || canCreatePurchase(session)
   const activeUserDisplayName = (
     session?.user?.user_metadata?.displayName ||
@@ -898,15 +901,16 @@ function App() {
     }
   }, [settings])
 
-  async function handleSaveSettings(nextSettings: AppSettings) {
+  async function handleSaveSettings(nextSettings: AppSettings): Promise<PersistenceOutcome> {
     setSettings(nextSettings)
-    await saveAppSettingsToCloud(nextSettings)
+    const outcome = await saveAppSettingsToCloud(nextSettings)
     void logAuditEvent({
       action: 'تعديل إعدادات المؤسسة',
       entity_type: 'settings',
       details: { organization: nextSettings.organization, currency: nextSettings.currency },
       user: session?.user,
     })
+    return outcome
   }
 
   async function handleLoadDemoData() {
@@ -1370,6 +1374,7 @@ function App() {
   }
 
   const isPendingActivation = (session?.user?.app_metadata as Record<string, unknown> | undefined)?.status === 'pending_activation'
+  const requiresPasswordChange = Boolean(session?.user && userMustChangePassword(session.user))
 
   if (supabase && (isInviteFlow || isPendingActivation)) {
     return (
@@ -1400,7 +1405,7 @@ function App() {
     )
   }
 
-  if (supabase && isSettingPassword && !isInviteFlow) {
+  if (supabase && (isSettingPassword || requiresPasswordChange) && !isInviteFlow) {
     return (
       <AuthPage
         initialMode="setNewPassword"
@@ -1410,6 +1415,12 @@ function App() {
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', window.location.pathname)
           }
+          void supabase?.auth.refreshSession().then(({ data }) => {
+            if (data?.session) {
+              updateAccessSession(data.session)
+              setSession(data.session)
+            }
+          })
         }}
       />
     )
@@ -1632,8 +1643,13 @@ function App() {
               role="search"
               onSubmit={(e) => {
                 e.preventDefault()
-                if (searchTerm.trim() && window.location.pathname !== '/movements') {
-                  navigate('/movements')
+                const currentPath = window.location.pathname
+                // Requirement #22: Stay in the active scope if it already supports search (never redirect from custody to purchases)
+                if (['/custody', '/purchases', '/movements', '/reports'].includes(currentPath)) {
+                  return
+                }
+                if (searchTerm.trim()) {
+                  navigate('/purchases')
                 }
               }}
             >
@@ -2815,7 +2831,7 @@ function App() {
           <Route
             path="/audit"
             element={
-              isSystemAdmin ? (
+              canAccessRoute(session, '/audit') ? (
                 <AuditLogPage session={session} />
               ) : (
                 <RestrictedScreen
@@ -2829,7 +2845,7 @@ function App() {
           <Route
             path="/users"
             element={
-              isSystemAdmin ? (
+              canAccessRoute(session, '/users') ? (
                 <UsersPage session={session} />
               ) : (
                 <RestrictedScreen
@@ -2843,7 +2859,7 @@ function App() {
           <Route
             path="/telegram-bot"
             element={
-              isSystemAdmin ? (
+              canAccessRoute(session, '/telegram-bot') ? (
                 <TelegramBotPage session={session} />
               ) : (
                 <RestrictedScreen
@@ -2857,7 +2873,7 @@ function App() {
           <Route
             path="/chatbot-admin"
             element={
-              isSystemAdmin ? (
+              canAccessRoute(session, '/chatbot-admin') ? (
                 <ChatbotAdminPage session={session} />
               ) : (
                 <RestrictedScreen
@@ -2871,7 +2887,7 @@ function App() {
           <Route
             path="/settings"
             element={
-              isSystemAdmin ? (
+              canAccessRoute(session, '/settings') ? (
                 <SettingsPage settings={settings} darkMode={darkMode} session={session} onSave={handleSaveSettings} onToggleTheme={() => setDarkMode((value) => !value)} />
               ) : (
                 <RestrictedScreen
@@ -2989,7 +3005,7 @@ function App() {
           {canManageRecords && editingMovement && (
             <motion.div
               className="modal-backdrop"
-              onClick={() => setEditingMovement(null)}
+              onClick={() => !isUpdating && setEditingMovement(null)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -3011,7 +3027,7 @@ function App() {
                       <span className="modal-subtitle">{editingMovement.item}</span>
                     </div>
                   </div>
-                  <button type="button" className="modal-close-btn" onClick={() => setEditingMovement(null)} aria-label="إغلاق">
+                  <button type="button" className="modal-close-btn" onClick={() => !isUpdating && setEditingMovement(null)} disabled={isUpdating} aria-label="إغلاق">
                     <X size={18} />
                   </button>
                 </div>
@@ -3020,10 +3036,15 @@ function App() {
                     initialMovement={editingMovement}
                     isModal
                     onSave={async (updated) => {
-                      await updateExistingMovement(updated)
-                      setEditingMovement(null)
+                      setIsUpdating(true)
+                      try {
+                        await updateExistingMovement(updated)
+                        setEditingMovement(null)
+                      } finally {
+                        setIsUpdating(false)
+                      }
                     }}
-                    onCancel={() => setEditingMovement(null)}
+                    onCancel={() => !isUpdating && setEditingMovement(null)}
                   />
                 </div>
               </motion.div>

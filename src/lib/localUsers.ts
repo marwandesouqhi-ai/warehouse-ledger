@@ -1,5 +1,6 @@
 import { logAuditEvent } from './auditLogger'
 import { supabase } from './supabase'
+import type { PersistenceOutcome } from './settings'
 import {
   isProtectedUsername,
   canDeleteUser,
@@ -94,12 +95,12 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
   }
 }
 
-export async function saveUserToCloud(user: LocalUser): Promise<void> {
-  if (!supabase) return
+export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutcome> {
+  if (!supabase) return { status: 'saved_locally' }
   // 1. Protected system accounts (e.g. marwan-desouky) are provisioned exclusively via cloud migrations/bootstrap
   // and must never be queried or mutated via client-side sync, which would trigger 403 under RLS.
   if (isProtectedUsername(user.username)) {
-    return
+    return { status: 'saved_to_cloud' }
   }
 
   try {
@@ -131,20 +132,28 @@ export async function saveUserToCloud(user: LocalUser): Promise<void> {
       .maybeSingle()
 
     if (selectErr) {
-      // Direct client access blocked by RLS or restricted
-      return
+      return { status: 'saved_locally', error: `خطأ في قراءة بيانات المستخدم سحابياً: ${selectErr.message}` }
     }
 
     if (existing) {
       if (!payload.password && existing.password) {
         payload.password = existing.password
       }
-      await supabase.from('app_users').update(payload).eq('id', existing.id)
+      const { error: updateErr } = await supabase.from('app_users').update(payload).eq('id', existing.id)
+      if (updateErr) {
+        return { status: 'saved_locally', error: `تعذر تحديث بيانات المستخدم سحابياً: ${updateErr.message}` }
+      }
     } else {
-      await supabase.from('app_users').insert(payload)
+      const { error: insertErr } = await supabase.from('app_users').insert(payload)
+      if (insertErr) {
+        return { status: 'saved_locally', error: `تعذر إضافة المستخدم سحابياً: ${insertErr.message}` }
+      }
     }
+    return { status: 'saved_to_cloud' }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'تعذر حفظ المستخدم في السحابة'
     console.warn('Could not save user to cloud:', err)
+    return { status: 'saved_locally', error: msg }
   }
 }
 

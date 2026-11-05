@@ -3,7 +3,13 @@ import type { Session } from '@supabase/supabase-js'
 import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, FileUp, RotateCcw, ShieldAlert } from 'lucide-react'
 
 import type { FixtureMovement } from '../lib/fixture'
-import { parseMovementRows } from '../lib/importRows'
+import {
+    validateAndClassifyMovementRows,
+    generateMovementErrorReportCsv,
+    MAX_IMPORT_ROWS,
+    MAX_IMPORT_FILE_SIZE,
+    type RowValidationError,
+} from '../lib/importRows'
 import { normalizeHeader } from '../lib/parse'
 import { isSystemAdmin } from '../lib/permissions'
 import { getDashboardScope } from '../lib/permissions'
@@ -42,6 +48,11 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
     const [notice, setNotice] = useState('')
     const [isReading, setIsReading] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
+    const [validationStats, setValidationStats] = useState<{
+        totalRows: number
+        validCount: number
+        rejectedRows: RowValidationError[]
+    } | null>(null)
 
     if (!canEdit) {
         return (
@@ -76,9 +87,16 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
         const file = event.target.files?.[0]
         if (!file) return
 
+        if (file.size > MAX_IMPORT_FILE_SIZE) {
+            setError(`حجم الملف كبير جداً (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت). الحد الأقصى المسموح به هو 10 ميجابايت.`)
+            event.target.value = ''
+            return
+        }
+
         setError('')
         setNotice('')
         setPreview([])
+        setValidationStats(null)
         setFileName(file.name)
         setIsReading(true)
 
@@ -89,16 +107,44 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
             if (!firstSheet) throw new Error('الملف لا يحتوي على ورقة عمل.')
 
             const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '', raw: true })
-            const parsedRows = parseMovementRows(normalizeExcelDates(rows, XLSX))
-            if (parsedRows.length === 0) throw new Error('لم أجد صفوفًا تحتوي على أسماء أصناف.')
+            if (rows.length > MAX_IMPORT_ROWS) {
+                throw new Error(`عدد صفوف الملف (${rows.length.toLocaleString('ar-EG')}) يتجاوز الحد الأقصى المسموح به (${MAX_IMPORT_ROWS.toLocaleString('ar-EG')} صف).`)
+            }
 
-            setPreview(parsedRows)
+            const normalized = normalizeExcelDates(rows, XLSX)
+            const { validMovements, rejectedRows, totalRows } = validateAndClassifyMovementRows(normalized)
+
+            setValidationStats({
+                totalRows,
+                validCount: validMovements.length,
+                rejectedRows,
+            })
+
+            if (validMovements.length === 0) {
+                throw new Error(rejectedRows.length > 0 ? 'لم يتم العثور على أي صف صالح للإضافة. يرجى مراجعة تقرير الأخطاء وتنزيله أدناه.' : 'لم أجد صفوفًا تحتوي على أسماء أصناف.')
+            }
+
+            setPreview(validMovements)
         } catch (caughtError) {
             setError(caughtError instanceof Error ? caughtError.message : 'تعذر قراءة الملف. تأكد من صيغة Excel.')
         } finally {
             setIsReading(false)
             event.target.value = ''
         }
+    }
+
+    function handleDownloadErrorReport() {
+        if (!validationStats || validationStats.rejectedRows.length === 0) return
+        const csvContent = generateMovementErrorReportCsv(validationStats.rejectedRows)
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `تقرير-أخطاء-استيراد-الحركات-${new Date().toISOString().slice(0, 10)}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
     }
 
     async function confirmImport() {
@@ -108,6 +154,7 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
             const result = await onImport(preview)
             setNotice(`تمت الإضافة: ${result.added.toLocaleString('ar-EG')} حركة. الصفوف المكررة التي تم تخطيها: ${result.skipped.toLocaleString('ar-EG')}.`)
             setPreview([])
+            setValidationStats(null)
             setFileName('')
         } catch (caughtError) {
             setError(caughtError instanceof Error ? caughtError.message : 'تعذر استيراد الحركات.')
@@ -202,6 +249,30 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
 
             {error && <div className="inline-message error"><AlertCircle size={18} />{error}</div>}
             {notice && <div className="inline-message success"><CheckCircle2 size={18} />{notice}</div>}
+
+            {validationStats && (
+                <div className="card-surface p-4 flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                            <span>إجمالي صفوف الملف: <strong>{validationStats.totalRows.toLocaleString('ar-EG')}</strong></span>
+                            <span className="text-good font-bold">المقبولة: {validationStats.validCount.toLocaleString('ar-EG')}</span>
+                            {validationStats.rejectedRows.length > 0 && (
+                                <span className="text-bad font-bold">المرفوضة: {validationStats.rejectedRows.length.toLocaleString('ar-EG')}</span>
+                            )}
+                        </div>
+                        {validationStats.rejectedRows.length > 0 && (
+                            <button
+                                type="button"
+                                className="secondary-btn btn-sm"
+                                onClick={handleDownloadErrorReport}
+                                title="تحميل تقرير تفصيلي بأرقام الصفوف وأسباب الرفض بصيغة CSV"
+                            >
+                                <Download size={15} /> تحميل تقرير الصفوف المرفوضة ({validationStats.rejectedRows.length.toLocaleString('ar-EG')})
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {preview.length > 0 && (
                 <section className="card-surface import-preview">

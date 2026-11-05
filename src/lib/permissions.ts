@@ -347,3 +347,31 @@ export function getDashboardScope(
   if (role === 'warehouse_admin' || role === 'warehouse_employee' || role === 'warehouse_staff' || role === 'editor') return 'warehouse_only'
   return 'full' // viewer يرى الكل للقراءة
 }
+
+/**
+ * userMustChangePassword — هل يجب على المستخدم تعيين كلمة مرور جديدة عند أول تسجيل دخول؟
+ *
+ * يفحص كلا من app_metadata و user_metadata مع معالجة أي تعارض:
+ * - إذا كان user_metadata.must_change_password === false فإن المستخدم قد أتم التعيين بالفعل.
+ * - إذا كان app_metadata.must_change_password === true أو user_metadata.must_change_password === true
+ *   (ولم يكن user_metadata.must_change_password مساوياً لـ false)، فإنه يلزم تغيير كلمة المرور.
+ */
+export function userMustChangePassword(
+  userOrSession: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown>; user?: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } } | null | undefined
+): boolean {
+  if (!userOrSession) return false
+  const user = ('user' in userOrSession && userOrSession.user) ? userOrSession.user : userOrSession
+  const userMeta = (user.user_metadata as Record<string, unknown> | undefined) || {}
+  const appMeta = (user.app_metadata as Record<string, unknown> | undefined) || {}
+
+  // إذا سجل user_metadata صراحةً false، فهذا يعني أن المستخدم أتم التغيير بنجاح
+  if (userMeta.must_change_password === false) return false
+
+  // إذا كان أي من المصدرين يطلب التغيير
+  if (userMeta.must_change_password === true || appMeta.must_change_password === true) {
+    return true
+  }
+
+  return false
+}
+

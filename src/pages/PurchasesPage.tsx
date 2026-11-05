@@ -23,7 +23,7 @@ import {
 import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
-import { getCairoDateString } from '../lib/dateUtils'
+import { getCairoDateString, parseDateToTimestamp } from '../lib/dateUtils'
 import { canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
 
@@ -189,9 +189,13 @@ export default function PurchasesPage({
       const derA = deriveMovement(a, 0)
       const derB = deriveMovement(b, 0)
       if (sortOption === 'date-desc') {
+        const timeDiff = parseDateToTimestamp(b.date) - parseDateToTimestamp(a.date)
+        if (timeDiff !== 0) return timeDiff
         return (b.date || '').localeCompare(a.date || '')
       }
       if (sortOption === 'date-asc') {
+        const timeDiff = parseDateToTimestamp(a.date) - parseDateToTimestamp(b.date)
+        if (timeDiff !== 0) return timeDiff
         return (a.date || '').localeCompare(b.date || '')
       }
       if (sortOption === 'item-asc') {
@@ -217,6 +221,11 @@ export default function PurchasesPage({
     const start = (currentPage - 1) * pageSize
     return sortedPurchases.slice(start, start + pageSize)
   }, [sortedPurchases, currentPage, pageSize])
+
+  // Requirement #23: Clamp currentPage when result count or pageSize changes
+  useEffect(() => {
+    setCurrentPage((curr) => Math.max(1, Math.min(curr, totalPages)))
+  }, [totalPages])
 
   useEffect(() => {
     setCurrentPage(1)

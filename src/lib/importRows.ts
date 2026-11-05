@@ -82,3 +82,83 @@ export function movementFingerprint(movement: FixtureMovement): string {
         .map((value) => String(value ?? '').trim().toLocaleLowerCase())
         .join('\u001f')
 }
+
+export type RowValidationError = {
+    rowNumber: number
+    itemName?: string
+    reason: string
+    rawData?: Record<string, unknown>
+}
+
+export type MovementImportValidationResult = {
+    validMovements: FixtureMovement[]
+    rejectedRows: RowValidationError[]
+    totalRows: number
+}
+
+export const MAX_IMPORT_ROWS = 5000
+export const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+export function validateAndClassifyMovementRows(
+    rows: Array<Record<string, unknown>>,
+    idBase = Date.now()
+): MovementImportValidationResult {
+    const validMovements: FixtureMovement[] = []
+    const rejectedRows: RowValidationError[] = []
+
+    rows.forEach((row, index) => {
+        const rowNumber = index + 2 // 1-indexed, header is row 1
+        // If entirely blank row, skip
+        const values = Object.values(row).map(v => text(v)).filter(Boolean)
+        if (values.length === 0) return
+
+        const item = text(getCell(row, 'item'))
+        if (!item) {
+            rejectedRows.push({
+                rowNumber,
+                reason: 'اسم الصنف فارغ أو غير محدد',
+                rawData: row,
+            })
+            return
+        }
+
+        const qin = Number(getCell(row, 'qin')) || 0
+        const qout = Number(getCell(row, 'qout')) || 0
+        if (qin <= 0 && qout <= 0) {
+            rejectedRows.push({
+                rowNumber,
+                itemName: item,
+                reason: 'يجب تحديد كمية وارد أو كمية منصرف أكبر من صفر',
+                rawData: row,
+            })
+            return
+        }
+
+        validMovements.push({
+            id: idBase + index,
+            date: text(getCell(row, 'date')),
+            inv: textOrNumber(getCell(row, 'inv')),
+            from: text(getCell(row, 'from')),
+            to: text(getCell(row, 'to')),
+            permit: textOrNumber(getCell(row, 'permit')),
+            issue: text(getCell(row, 'issue')),
+            item,
+            price: textOrNumber(getCell(row, 'price')),
+            qin: textOrNumber(getCell(row, 'qin')),
+            qout: textOrNumber(getCell(row, 'qout')),
+            notes: text(getCell(row, 'notes')),
+        })
+    })
+
+    return {
+        validMovements,
+        rejectedRows,
+        totalRows: rows.length,
+    }
+}
+
+export function generateMovementErrorReportCsv(rejectedRows: RowValidationError[]): string {
+    const header = '\uFEFFرقم الصف في الملف,اسم الصنف,سبب الرفض'
+    const lines = rejectedRows.map((r) => `${r.rowNumber},"${(r.itemName || '—').replace(/"/g, '""')}","${r.reason.replace(/"/g, '""')}"`)
+    return [header, ...lines].join('\r\n')
+}
