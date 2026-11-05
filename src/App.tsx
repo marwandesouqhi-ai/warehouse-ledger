@@ -93,6 +93,7 @@ import {
 import { startAutoBackupWatcher } from './lib/autoBackupEngine'
 import { usePwaInstall } from './lib/pwa'
 import AuthPage from './pages/AuthPage'
+import { extractAuthTokensFromUrl } from './lib/authSessionUtils'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageLoadingFallback } from './components/PageLoadingFallback'
 
@@ -731,6 +732,28 @@ function App() {
     }
 
     let active = true
+
+    // Recover session from URL tokens (handles single or double hashes and query params)
+    const urlTokens = extractAuthTokensFromUrl()
+    if (urlTokens?.access_token && urlTokens?.refresh_token) {
+      void supabase.auth.setSession({
+        access_token: urlTokens.access_token,
+        refresh_token: urlTokens.refresh_token,
+      }).then(({ data }) => {
+        if (!active) return
+        if (data?.session) {
+          updateAccessSession(data.session)
+          const isRecovery = urlTokens.type === 'recovery' ||
+            window.location.hash.includes('type=recovery') ||
+            window.location.search.includes('type=recovery')
+          if (isRecovery) {
+            setIsSettingPassword(true)
+            setIsInviteFlow(false)
+          }
+        }
+      })
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
 
       const isActivation = window.location.hash.includes('type=invite') ||

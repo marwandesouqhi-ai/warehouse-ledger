@@ -20,6 +20,7 @@ import { logAuditEvent } from '../lib/auditLogger'
 import { isSupabaseConfigured } from '../lib/authMode'
 import { validateChosenUsername, validateChosenPassword, validateChosenPasswordAsync } from '../lib/employeeIdentity'
 import { getInviteProfile, completeAccountActivation, sendPasswordRecovery, type InviteProfile } from '../lib/registrationService'
+import { extractAuthTokensFromUrl, ensureActiveAuthSession } from '../lib/authSessionUtils'
 import { ROLE_LABELS, userMustChangePassword } from '../lib/permissions'
 
 function getEmailFromUrl(): string {
@@ -102,11 +103,23 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
     useEffect(() => {
         if (mode === 'setNewPassword' && supabase) {
-            void supabase.auth.getUser().then(({ data }) => {
-                if (data.user?.email) {
-                    setActiveUserEmail(data.user.email)
-                }
-            })
+            const tokens = extractAuthTokensFromUrl()
+            if (tokens?.access_token && tokens?.refresh_token) {
+                void supabase.auth.setSession({
+                    access_token: tokens.access_token,
+                    refresh_token: tokens.refresh_token,
+                }).then(({ data }) => {
+                    if (data?.session?.user?.email) {
+                        setActiveUserEmail(data.session.user.email)
+                    }
+                })
+            } else {
+                void supabase.auth.getUser().then(({ data }) => {
+                    if (data.user?.email) {
+                        setActiveUserEmail(data.user.email)
+                    }
+                })
+            }
         }
     }, [mode])
 
@@ -293,11 +306,22 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     throw new Error('كلمتا المرور غير متطابقتين.')
                 }
 
+                const hasSession = await ensureActiveAuthSession()
+                if (!hasSession) {
+                    throw new Error('انتهت صلاحية جلسة التحقق أو رابط الاستعادة. يُرجى فتح الرابط من بريدك الإلكتروني مرة أخرى أو طلب رابط جديد.')
+                }
+
                 const { error: updateError } = await supabase.auth.updateUser({
                     password,
                     data: { must_change_password: false },
                 })
-                if (updateError) throw updateError
+                if (updateError) {
+                    const errMsg = (updateError.message || '').toLowerCase()
+                    if (errMsg.includes('session missing') || errMsg.includes('jwt') || errMsg.includes('unauthorized')) {
+                        throw new Error('انتهت صلاحية جلسة التحقق أو رابط الاستعادة. يُرجى فتح الرابط من البريد الإلكتروني مرة أخرى أو طلب رابط جديد.')
+                    }
+                    throw updateError
+                }
 
                 try {
                     const { data: userData } = await supabase.auth.getUser()

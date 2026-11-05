@@ -554,7 +554,7 @@ serve(async (req: Request) => {
           type: "recovery",
           email: targetEmail,
           options: {
-            redirectTo: `${appBaseUrl}/#type=recovery`,
+            redirectTo: `${appBaseUrl}/?type=recovery`,
           },
         })
 
@@ -614,21 +614,21 @@ serve(async (req: Request) => {
       const smtpPass = rawPass.replace(/\s+/g, "")
       const smtpHost = Deno.env.get("SMTP_HOST") || "smtp.gmail.com"
       const smtpPort = Number(Deno.env.get("SMTP_PORT")) || 465
-      const fromName = "منظومة إدارة المخازن"
+      const fromName = "جامعة الزقازيق الأهلية - منظومة المخازن"
       const emailFrom = `"${fromName}" <${smtpUser}>`
 
-      const emailSubject = "إعادة تعيين كلمة المرور - منظومة إدارة المخازن والمشتريات"
+      const emailSubject = "[جامعة الزقازيق الأهلية] رابط استعادة كلمة المرور الخاص بحسابك"
 
       const emailText = `مرحباً ${targetFullName || "بك"}،
 
-تم طلب رابط لإعادة تعيين كلمة المرور الخاصة بحسابك في منظومة إدارة المخازن والمشتريات.
+تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في منظومة إدارة المخازن والمشتريات بجامعة الزقازيق الأهلية.
 
-يُرجى الضغط على الرابط التالي لتعيين كلمة مرور جديدة لحسابك:
+يُرجى الضغط على الرابط التالي لاختيار كلمة مرور جديدة لحسابك:
 ${recoveryLink}
 
-⚠️ ملاحظة أمنية: هذا الرابط مخصص لك وصالح لفترة محدودة. إذا لم تكن قد طلبت تعيين كلمة المرور، يرجى تجاهل هذه الرسالة والتأكد من أمان حسابك.
+⚠️ ملاحظة أمنية: هذا الرابط مخصص لك وصالح لفترة محدودة وللاستخدام مرة واحدة فقط. إذا لم تكن قد طلبت تعيين كلمة المرور، يرجى تجاهل هذه الرسالة وسيبقى حسابك آمناً تماماً.
 
-نظام إدارة المخازن والمشتريات الداخلي © 2026`
+جامعة الزقازيق الأهلية — الإدارة العامة للمخازن والمشتريات © 2026`
 
       const emailHtml = `
 <!DOCTYPE html>
@@ -639,32 +639,32 @@ ${recoveryLink}
   <title>${emailSubject}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; direction: rtl;">
-  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <div style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%); padding: 30px 24px; text-align: center; color: #ffffff;">
-      <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff;">منظومة إدارة المخازن والمشتريات</h1>
-      <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; color: #f0fdfa;">إعادة تعيين كلمة المرور</p>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff;">جامعة الزقازيق الأهلية</h1>
+      <p style="margin: 8px 0 0 0; opacity: 0.95; font-size: 15px; color: #f0fdfa;">منظومة إدارة المخازن والمشتريات — استعادة كلمة المرور</p>
     </div>
     <div style="padding: 30px 24px;">
       <div style="font-size: 17px; font-weight: 600; margin-bottom: 16px; color: #0f172a;">مرحباً ${targetFullName || "بك"}،</div>
       <p style="line-height: 1.6; color: #334155; font-size: 15px; margin: 0 0 16px 0;">
-        تلقينا طلباً لإعادة تعيين كلمة المرور لحسابك في النظام. يُرجى الضغط على الزر أدناه لاختيار كلمة مرور جديدة لحسابك:
+        تلقينا طلباً لإعادة تعيين كلمة المرور لحسابك في المنظومة. يُرجى الضغط على الزر أدناه لاختيار كلمة مرور جديدة:
       </p>
 
-      <div style="text-align: center; margin: 30px 0 15px 0;">
-        <a href="${recoveryLink}" target="_blank" style="display: inline-block; background-color: #0d9488; color: #ffffff !important; padding: 14px 34px; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3); text-align: center;">إعادة تعيين كلمة المرور</a>
+      <div style="text-align: center; margin: 30px 0 25px 0;">
+        <a href="${recoveryLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #0d9488; color: #ffffff !important; padding: 14px 34px; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3); text-align: center;">إعادة تعيين كلمة المرور الآن</a>
       </div>
 
-      <div style="margin-top: 15px; margin-bottom: 25px; text-align: center; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
-        إذا واجهتك مشكلة في الضغط على الزر أعلاه، يمكنك نسخ الرابط التالي ولصقه في المتصفح:<br>
-        <a href="${recoveryLink}" target="_blank" style="color: #0d9488; text-decoration: underline; font-weight: 500;">${recoveryLink}</a>
+      <div style="margin-top: 15px; margin-bottom: 25px; text-align: center; font-size: 13px; color: #64748b; line-height: 1.6;">
+        إذا واجهتك مشكلة في الضغط على الزر أعلاه، يُرجى <a href="${recoveryLink}" target="_blank" rel="noopener noreferrer" style="color: #0d9488; font-weight: 600; text-decoration: underline;">الضغط هنا لفتح صفحة تعيين كلمة المرور مباشرة</a>.
       </div>
 
       <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
-        ⚠️ <strong>ملاحظة أمنية:</strong> ينتهي هذا الرابط تلقائياً بعد فترة قصيرة. إذا لم تكن قد طلبت تعيين كلمة المرور، يرجى تجاهل هذه الرسالة، وسيبقى حسابك آمناً.
+        ⚠️ <strong>ملاحظة أمنية:</strong> هذا الرابط صالح للاستخدام لمرة واحدة فقط وينتهي تلقائياً بعد فترة قصيرة. إذا لم تكن قد طلبت تعيين كلمة المرور، يمكنك تجاهل هذه الرسالة بكل أمان.
       </p>
     </div>
-    <div style="background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
-      نظام إدارة المخازن والمشتريات الداخلي &copy; 2026 جميع الحقوق محفوظة
+    <div style="background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0; line-height: 1.5;">
+      جامعة الزقازيق الأهلية &copy; 2026 — الإدارة العامة للمخازن والمشتريات<br>
+      <span style="font-size: 11px; color: #94a3b8;">تم إرسال هذا البريد الإلكتروني تلقائياً للتحقق من هوية صاحب الحساب.</span>
     </div>
   </div>
 </body>
@@ -687,7 +687,9 @@ ${recoveryLink}
           text: emailText,
           html: emailHtml,
           headers: {
-            "X-Mailer": "Warehouse-Ledger-System",
+            "Auto-Submitted": "auto-generated",
+            "X-Auto-Response-Suppress": "All",
+            "Precedence": "bulk",
           },
         })
       } catch (err: unknown) {
