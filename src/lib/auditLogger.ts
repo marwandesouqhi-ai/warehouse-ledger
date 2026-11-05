@@ -32,7 +32,7 @@ export function getLocalAuditLogs(): AuditLogEntry[] {
 function saveLocalAuditLog(entry: AuditLogEntry) {
     try {
         const current = getLocalAuditLogs()
-        const updated = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 150)
+        const updated = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 1000)
         localStorage.setItem(localAuditLogsKey, JSON.stringify(updated))
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('audit-logs-changed', { detail: entry }))
@@ -140,9 +140,9 @@ export async function logAuditEvent(params: {
 }
 
 /**
- * Fetch all audit logs for the audit view (from Supabase with local fallback)
+ * Fetch all audit logs for the audit view (from Supabase with local fallback, permanently merging records)
  */
-export async function fetchAuditLogs(limit = 100): Promise<AuditLogEntry[]> {
+export async function fetchAuditLogs(limit = 1000): Promise<AuditLogEntry[]> {
     const localLogs = getLocalAuditLogs()
 
     if (!supabase) {
@@ -162,17 +162,28 @@ export async function fetchAuditLogs(limit = 100): Promise<AuditLogEntry[]> {
         }
 
         const remoteLogs = (data ?? []) as AuditLogEntry[]
-        if (remoteLogs.length > 0) {
-            // Cache remote logs locally
-            try {
-                localStorage.setItem(localAuditLogsKey, JSON.stringify(remoteLogs.slice(0, 150)))
-            } catch {
-                // ignore
+
+        // Merge remote logs with any local logs, ensuring no historical records are ever overwritten or dropped
+        const mergedMap = new Map<string, AuditLogEntry>()
+        for (const log of remoteLogs) {
+            mergedMap.set(log.id, log)
+        }
+        for (const log of localLogs) {
+            if (!mergedMap.has(log.id)) {
+                mergedMap.set(log.id, log)
             }
-            return remoteLogs
+        }
+        const merged = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+
+        try {
+            localStorage.setItem(localAuditLogsKey, JSON.stringify(merged.slice(0, 1000)))
+        } catch {
+            // ignore
         }
 
-        return localLogs.slice(0, limit)
+        return merged.slice(0, limit)
     } catch {
         return localLogs.slice(0, limit)
     }

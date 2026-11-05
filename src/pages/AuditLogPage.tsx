@@ -40,9 +40,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         setLoading(true)
         setError('')
         try {
-            const data = (await fetchAuditLogs(200)).filter(
-                (log) => log.user_email?.toLowerCase() !== 'marwandesouqhi@gmail.com'
-            )
+            const data = await fetchAuditLogs(1000)
             setLogs(data)
         } catch (caughtError) {
             setError(caughtError instanceof Error ? caughtError.message : 'تعذر تحميل سجل العمليات.')

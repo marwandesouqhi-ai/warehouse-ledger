@@ -13,10 +13,10 @@ export function prepareAccessContext(session: Session | LocalUserSession | null)
     if (previous === identity) return false
     localStorage.removeItem('app_notifications_local')
     localStorage.removeItem('znu_telegram_bot_settings')
-    // Business caches must not cross account or department boundaries.
+    // Business caches must not cross account or department boundaries (audit logs and settings are permanently preserved).
     const protectedKeys = /^(warehouse|custody|budget_plans|financial_reports|asset_movements|disbursement|purchase_|supplier_|support_tickets|notifications|znu_(users|local_users|chatbot))/
     for (const key of Object.keys(localStorage)) {
-      if (protectedKeys.test(key) && !/settings|theme|dark|auto_backup_schedule/.test(key)) localStorage.removeItem(key)
+      if (protectedKeys.test(key) && !/settings|theme|dark|auto_backup_schedule|audit/.test(key)) localStorage.removeItem(key)
     }
     localStorage.setItem('warehouse-access-context-v2', identity)
     return true
