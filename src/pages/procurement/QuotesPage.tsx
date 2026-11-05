@@ -1,4 +1,5 @@
 import { canAddDepartment, isSystemAdmin } from '../../lib/permissions'
+import { getCairoDateString } from '../../lib/dateUtils'
 import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -90,8 +91,8 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   const [reqPurchaseType, setReqPurchaseType] = useState<PurchaseType>('practice')
   const [reqBudgetLine, setReqBudgetLine] = useState('موازنة معامل وأجهزة 2026 / 2027')
   const [reqPriority, setReqPriority] = useState<PurchasePriority>('normal')
-  const [reqNeededBy, setReqNeededBy] = useState(
-    new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10)
+  const [reqNeededBy, setReqNeededBy] = useState(() =>
+    getCairoDateString(new Date(Date.now() + 86400000 * 14))
   )
   const [reqRequestedBy, setReqRequestedBy] = useState(activeUserName)
   const [reqJustification, setReqJustification] = useState('')
@@ -440,7 +441,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'مقارنة عروض الأسعار')
-    XLSX.writeFile(workbook, `مقارنة-عروض-طلب-${selectedRequest.request_no}-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(workbook, `مقارنة-عروض-طلب-${selectedRequest.request_no}-${getCairoDateString()}.xlsx`)
   }
 
   return (

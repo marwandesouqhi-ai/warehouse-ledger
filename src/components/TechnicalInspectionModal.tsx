@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { WAREHOUSES } from '../lib/custody'
+import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { supabase } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
@@ -96,7 +97,7 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   const [poNumber, setPoNumber] = useState(defaultPoNo)
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNo)
   const [warehouseId, setWarehouseId] = useState('main')
-  const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [inspectionDate, setInspectionDate] = useState(() => getCairoDateString())
 
   // Decision State
   const [decision, setDecision] = useState<'accepted' | 'accepted_with_notes' | 'rejected'>('accepted')

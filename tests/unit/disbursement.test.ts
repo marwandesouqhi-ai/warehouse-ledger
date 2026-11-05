@@ -190,4 +190,54 @@ describe('Disbursement & Multi-Warehouse Transfer Suite (Phase 3)', () => {
     expect(mainItem?.quantity).toBe(12) // 20 - 8
     expect(branchItem?.quantity).toBe(8)
   })
+
+  it('rejects disbursement and never creates destination record when source item does not exist (Issue #19)', () => {
+    // Attempting to disburse an item that doesn't exist in source warehouse
+    expect(() => {
+      syncOutwardMovementToCustody({
+        item: 'صنف غير موجود إطلاقاً',
+        sourceItemId: 'non-existent-id',
+        qout: 5,
+        sourceWarehouseId: 'main',
+        to: 'كلية هندسة',
+      })
+    }).toThrow(/غير مسجل في المخزن المصدر المحدد/)
+
+    // Confirm no phantom item was created in destination warehouse
+    const items = loadCustodyItems()
+    expect(items.some((i) => i.name === 'صنف غير موجود إطلاقاً')).toBe(false)
+  })
+
+  it('accepts disbursement with valid sourceItemId and conserves quantity (Issue #19)', () => {
+    syncInwardMovementToCustody({
+      item: 'شاشة سامسونج 27 بوصة',
+      qin: 10,
+      price: 8000,
+      from: 'سامسونج مصر',
+    })
+
+    const itemsBefore = loadCustodyItems()
+    const sourceItem = itemsBefore.find((i) => i.name === 'شاشة سامسونج 27 بوصة' && i.warehouseId === 'main')!
+    expect(sourceItem).toBeDefined()
+
+    const res = syncOutwardMovementToCustody({
+      item: sourceItem.name,
+      sourceItemId: sourceItem.id,
+      qout: 4,
+      sourceWarehouseId: 'main',
+      destWarehouseId: 'engineering',
+      destType: 'warehouse',
+      to: 'كلية هندسة',
+    })
+
+    expect(res.deductedFromSource).toBe(true)
+    expect(res.addedToTarget).toBe(true)
+
+    const itemsAfter = loadCustodyItems()
+    const mainAfter = itemsAfter.find((i) => i.id === sourceItem.id)!
+    const destAfter = itemsAfter.find((i) => i.name === sourceItem.name && i.warehouseId === 'engineering')!
+
+    expect(mainAfter.quantity).toBe(6)
+    expect(destAfter.quantity).toBe(4)
+  })
 })

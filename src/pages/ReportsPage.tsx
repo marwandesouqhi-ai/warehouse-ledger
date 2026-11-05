@@ -33,6 +33,7 @@ import {
   type CustodyItem,
   type WarehouseDefinition,
 } from '../lib/custody'
+import { getCairoDateString } from '../lib/dateUtils'
 import type { FixtureMovement } from '../lib/fixture'
 import { getDashboardScope } from '../lib/permissions'
 import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
@@ -126,7 +127,7 @@ export default function ReportsPage({
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'فواتير وتوريدات المشتريات')
-    XLSX.writeFile(wb, `سجل_فواتير_المشتريات_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `سجل_فواتير_المشتريات_${getCairoDateString()}.xlsx`)
   }
 
   async function exportSuppliersStatementExcel() {
@@ -146,7 +147,7 @@ export default function ReportsPage({
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'كشف الموردين المعتمدين')
-    XLSX.writeFile(wb, `كشف_الموردين_المعتمدين_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `كشف_الموردين_المعتمدين_${getCairoDateString()}.xlsx`)
   }
 
   const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
@@ -1025,7 +1026,7 @@ export default function ReportsPage({
             </div>
             <div className="print-meta-field">
               <span className="print-meta-label">تاريخ الجرد:</span>
-              <span className="print-meta-val">{new Date().toISOString().slice(0, 10)}</span>
+              <span className="print-meta-val">{getCairoDateString()}</span>
             </div>
             <div className="print-meta-field">
               <span className="print-meta-label">الرقم المرجعي:</span>

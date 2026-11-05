@@ -14,6 +14,7 @@ import {
   Save,
 } from 'lucide-react'
 import { WAREHOUSES, type CustodyItem } from '../lib/custody'
+import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 
 interface CustodyItemHistoryModalProps {
@@ -95,7 +96,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
     if (!newLogText.trim() && newCondition === item.condition) return
 
     setIsSaving(true)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getCairoDateString()
     const logEntry = newLogText.trim()
       ? `[${today}] ${newLogText.trim()}${newCondition !== item.condition ? ` (تعديل الحالة إلى: ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'})` : ''}`
       : `[${today}] تم تغيير الحالة الفنية إلى ${newCondition === 'excellent' ? 'ممتازة' : newCondition === 'good' ? 'جيدة' : newCondition === 'maintenance' ? 'صيانة' : 'كهنة'}`

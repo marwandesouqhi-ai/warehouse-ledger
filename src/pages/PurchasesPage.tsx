@@ -23,6 +23,7 @@ import {
 import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
+import { getCairoDateString } from '../lib/dateUtils'
 import { canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
 
@@ -82,7 +83,7 @@ export default function PurchasesPage({
 
   // New Purchase Form State
   const [formItem, setFormItem] = useState('')
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formDate, setFormDate] = useState(() => getCairoDateString())
   const [formInv, setFormInv] = useState('')
   const [formFrom, setFormFrom] = useState('')
   const [formQin, setFormQin] = useState('')
@@ -244,7 +245,7 @@ export default function PurchasesPage({
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'سجل المشتريات والتوريدات')
-    XLSX.writeFile(workbook, `سجل-المشتريات-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(workbook, `سجل-المشتريات-${getCairoDateString()}.xlsx`)
   }
 
   async function handleAddPurchaseSubmit(e: React.FormEvent) {

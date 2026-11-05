@@ -12,6 +12,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { WAREHOUSES, type CustodyItem } from '../lib/custody'
+import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 
 interface OfficialDisbursementPermitModalProps {
@@ -34,7 +35,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
     return `DSP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
   })
   const [permitDate, setPermitDate] = useState<string>(() => {
-    return new Date().toISOString().slice(0, 10)
+    return getCairoDateString()
   })
   const [sourceWarehouseId, setSourceWarehouseId] = useState<string>(() => {
     if (initialItems[0]?.warehouseId) {

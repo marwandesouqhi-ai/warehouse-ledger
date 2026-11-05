@@ -21,6 +21,7 @@ import {
 import { fetchAuditLogs, type AuditLogEntry } from '../lib/auditLogger'
 import { matchesSearch } from '../lib/searchUtils'
 import { checkIsSystemAdmin, supabase } from '../lib/supabase'
+import { getCairoDateString } from '../lib/dateUtils'
 
 type AuditLogPageProps = {
     session?: Session | null
@@ -113,7 +114,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         )
     })
 
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = getCairoDateString()
     const todayCount = logs.filter((l) => l.created_at?.slice(0, 10) === todayStr).length
     const movementsCount = logs.filter((l) => l.entity_type === 'movement' || l.entity_type === 'disbursement' || l.action.includes('حركة') || l.action.includes('صرف')).length
     const procurementCount = logs.filter((l) => l.entity_type === 'procurement' || l.entity_type === 'purchase_request' || l.entity_type === 'contract' || l.action.includes('شراء') || l.action.includes('عقد')).length

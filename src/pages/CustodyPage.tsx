@@ -73,6 +73,7 @@ import { canEditInventory, checkIsSystemAdmin } from '../lib/supabase'
 import type { FixtureMovement } from '../lib/fixture'
 import { getStoredMovements } from '../lib/backup'
 import { canCreateDisbursement } from '../lib/permissions'
+import { getCairoDateString } from '../lib/dateUtils'
 
 const ICONS_MAP: Record<WarehouseDefinition['iconKey'], React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   Warehouse,
@@ -402,7 +403,7 @@ export default function CustodyPage({
   async function saveEmployeeTransfer(item: CustodyItem, targetWarehouseId: string, quantity: number,
     custodian: string, location: string, permit: string, notes: string) {
     if (!canEdit || !onSaveMovement) throw new Error('لا تملك صلاحية إضافة حركة نقل.')
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getCairoDateString()
     const movement: FixtureMovement = {
       id: crypto.randomUUID(), date: today, issue: today, inv: '', from: '',
       to: WAREHOUSES.find(w => w.id === targetWarehouseId)?.name || targetWarehouseId,
@@ -609,7 +610,7 @@ export default function CustodyPage({
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'سجل المنصرف والتحويلات')
-    XLSX.writeFile(workbook, `سجل-المنصرف-والتحويل-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(workbook, `سجل-المنصرف-والتحويل-${getCairoDateString()}.xlsx`)
   }
 
   async function handleCreateDisbursement(mv: FixtureMovement) {
@@ -654,7 +655,7 @@ export default function CustodyPage({
       condition: 'excellent',
       custodyType: 'مستديمة',
       roomLocation: mv.to || '',
-      acquisitionDate: mv.date || new Date().toISOString().slice(0, 10),
+      acquisitionDate: mv.date || getCairoDateString(),
       unitPrice: Number(mv.price) || 0,
       value: (Number(mv.qout) || 1) * (Number(mv.price) || 0),
       serialNumber: '',
@@ -1880,7 +1881,7 @@ function CustodyItemModal({
   onSave: (item: CustodyItem) => void
   onClose: () => void
 }) {
-  const [today] = useState(() => new Date().toISOString().slice(0, 10))
+  const [today] = useState(() => getCairoDateString())
 
   const initialQty = initialItem?.quantity || 1
   const initialUnit = initialItem?.unit || 'جهاز'
@@ -2966,17 +2967,42 @@ function NewDisbursementModal({
     return items.filter((i) => i.warehouseId === sourceWarehouseId && i.quantity > 0)
   }, [items, sourceWarehouseId])
 
+  const [selectedItemId, setSelectedItemId] = useState<string>(() => sourceItems[0]?.id || '')
   const [selectedItemName, setSelectedItemName] = useState<string>(() => sourceItems[0]?.name || '')
 
+  // Clear dependent state when the source warehouse changes
+  const handleSourceWarehouseChange = (newWhId: string) => {
+    setSourceWarehouseId(newWhId)
+    setSelectedItemId('')
+    setSelectedItemName('')
+    setQuantity(1)
+    setUnitPrice(0)
+    setErrorMsg('')
+  }
+
   useEffect(() => {
-    if (sourceItems.length > 0 && !sourceItems.some((i) => i.name === selectedItemName)) {
-      setSelectedItemName(sourceItems[0].name)
+    if (sourceItems.length > 0) {
+      const match = sourceItems.find((i) => i.id === selectedItemId || i.name === selectedItemName)
+      if (match) {
+        if (selectedItemId !== match.id) setSelectedItemId(match.id)
+        if (selectedItemName !== match.name) setSelectedItemName(match.name)
+      } else {
+        setSelectedItemId(sourceItems[0].id)
+        setSelectedItemName(sourceItems[0].name)
+      }
+    } else {
+      setSelectedItemId('')
+      setSelectedItemName('')
     }
-  }, [sourceWarehouseId, sourceItems, selectedItemName])
+  }, [sourceWarehouseId, sourceItems, selectedItemId, selectedItemName])
 
   const currentItem = useMemo(() => {
+    if (selectedItemId) {
+      const byId = sourceItems.find((i) => i.id === selectedItemId)
+      if (byId) return byId
+    }
     return sourceItems.find((i) => i.name === selectedItemName)
-  }, [sourceItems, selectedItemName])
+  }, [sourceItems, selectedItemId, selectedItemName])
 
   const availableQty = currentItem ? currentItem.quantity : 0
 
@@ -2992,7 +3018,7 @@ function NewDisbursementModal({
   const [permitNo, setPermitNo] = useState<string>(() => {
     return `DSP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
   })
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState<string>(() => getCairoDateString())
   const [notes, setNotes] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -3004,7 +3030,12 @@ function NewDisbursementModal({
     e.preventDefault()
     setErrorMsg('')
 
-    const cleanItem = selectedItemName.trim()
+    if (!currentItem || availableQty <= 0) {
+      setErrorMsg(`المخزن المصدر (${sourceWh.name}) لا يحتوي على أصناف قابلة للصرف حالياً.`)
+      return
+    }
+
+    const cleanItem = (selectedItemName || currentItem.name).trim()
     if (!cleanItem) {
       setErrorMsg('يرجى اختيار أو تحديد الصنف المراد صرفه.')
       return
@@ -3015,8 +3046,8 @@ function NewDisbursementModal({
       return
     }
 
-    if (availableQty > 0 && quantity > availableQty) {
-      setErrorMsg(`الكمية المطلوبة (${quantity}) تتجاوز الرصيد المتوفر في ${sourceWh.name} (${availableQty} قطعة).`)
+    if (quantity > availableQty) {
+      setErrorMsg(`الكمية المطلوبة (${quantity}) تتجاوز الرصيد المتوفر من «${currentItem.name}» في ${sourceWh.name} (${availableQty} قطعة).`)
       return
     }
 
@@ -3041,18 +3072,20 @@ function NewDisbursementModal({
       const targetName = destType === 'warehouse' ? (targetWh?.name || 'مخزن فرعي') : custodianName.trim()
       const newMovement: FixtureMovement = {
         id: Date.now(),
-        date: date || new Date().toISOString().slice(0, 10),
+        date: date || getCairoDateString(),
         inv: '',
         from: sourceWh.name,
         to: targetName,
         permit: permitNo.trim(),
-        issue: date || new Date().toISOString().slice(0, 10),
+        issue: date || getCairoDateString(),
         item: cleanItem,
         price: unitPrice || 0,
         qin: 0,
         qout: quantity,
         notes: notes.trim(),
         sourceWarehouseId,
+        sourceCustodyId: currentItem.id,
+        sourceItemId: currentItem.id,
         destType,
         destWarehouseId: destType === 'warehouse' ? destWarehouseId : undefined,
         custodianName: destType === 'custodian' ? custodianName.trim() : undefined,
@@ -3100,7 +3133,7 @@ function NewDisbursementModal({
                 المخزن المصدر:
                 <select
                   value={sourceWarehouseId}
-                  onChange={(e) => setSourceWarehouseId(e.target.value)}
+                  onChange={(e) => handleSourceWarehouseChange(e.target.value)}
                   className="form-input-themed"
                 >
                   {WAREHOUSES.map((w) => (
@@ -3115,24 +3148,26 @@ function NewDisbursementModal({
                 الصنف المراد صرفه:
                 {sourceItems.length > 0 ? (
                   <select
-                    value={selectedItemName}
-                    onChange={(e) => setSelectedItemName(e.target.value)}
+                    value={selectedItemId || currentItem?.id || ''}
+                    onChange={(e) => {
+                      const found = sourceItems.find((it) => it.id === e.target.value)
+                      if (found) {
+                        setSelectedItemId(found.id)
+                        setSelectedItemName(found.name)
+                      }
+                    }}
                     className="form-input-themed"
                   >
                     {sourceItems.map((it) => (
-                      <option key={it.id} value={it.name}>
+                      <option key={it.id} value={it.id}>
                         {it.name} (المتاح: {it.quantity} {it.unit})
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <input
-                    type="text"
-                    value={selectedItemName}
-                    onChange={(e) => setSelectedItemName(e.target.value)}
-                    placeholder="اسم الصنف المراد صرفه..."
-                    className="form-input-themed"
-                  />
+                  <div className="text-muted font-sm p-2 bg-surface-soft border border-line rounded">
+                    لا توجد أصناف بمخزون متاح في هذا المخزن حالياً.
+                  </div>
                 )}
               </label>
             </div>
@@ -3266,7 +3301,12 @@ function NewDisbursementModal({
             <button type="button" className="secondary-btn" onClick={onClose} disabled={isSubmitting}>
               إلغاء
             </button>
-            <button type="submit" className="primary-btn" disabled={isSubmitting} id="btn-submit-new-disbursement">
+            <button
+              type="submit"
+              className="primary-btn"
+              disabled={isSubmitting || !currentItem || availableQty <= 0 || quantity > availableQty || quantity <= 0}
+              id="btn-submit-new-disbursement"
+            >
               <CheckCircle2 size={17} />
               <span>{isSubmitting ? 'جاري الصرف والتحويل...' : 'اعتماد وحفظ إذن الصرف'}</span>
             </button>

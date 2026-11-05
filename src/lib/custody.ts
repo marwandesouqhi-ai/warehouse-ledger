@@ -1,5 +1,6 @@
 import { getAccessSession, canReadCurrentDepartment, assertDepartmentWrite } from './accessContext'
 import { isSystemAdmin } from './permissions'
+import { getCairoDateString } from './dateUtils'
 export type WarehouseDefinition = {
   id: string
   name: string
@@ -137,6 +138,31 @@ export type CustodyItem = {
 }
 
 export const CUSTODY_STORAGE_KEY = 'warehouse-ledger-custody-items'
+export const CUSTODY_INITIALIZED_KEY = 'warehouse-ledger-custody-initialized'
+export const CUSTODY_DEMO_FLAG_KEY = 'warehouse-ledger-demo-mode'
+
+export function isCustodyDemoMode(): boolean {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return false
+    return (
+      localStorage.getItem(CUSTODY_DEMO_FLAG_KEY) === 'true' ||
+      sessionStorage.getItem(CUSTODY_DEMO_FLAG_KEY) === 'true'
+    )
+  } catch {
+    return false
+  }
+}
+
+export function seedDemoCustodyItems(): CustodyItem[] {
+  try {
+    localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(fixtureCustodyItems))
+    localStorage.setItem(CUSTODY_INITIALIZED_KEY, 'true')
+    localStorage.setItem(CUSTODY_DEMO_FLAG_KEY, 'true')
+  } catch {
+    // ignore
+  }
+  return fixtureCustodyItems.map((item) => ({ ...item }))
+}
 
 import { MEDICINE_NURSING_67_ITEMS } from './medicineCustody67'
 import { ENGINEERING_WORKSHOPS_81_ITEMS } from './engineeringWorkshopsCustody81'
@@ -978,14 +1004,30 @@ export function loadCustodyItems(): CustodyItem[] {
     console.warn('Could not load custody items from storage:', err)
   }
 
-  // Default to fixture items for main warehouse if storage is empty
-  if (fixtureCustodyItems.length > 0) {
+  // Stop auto-inserting fixture stock when main warehouse is empty.
+  // Treat empty as valid. Keep fixtures only behind an explicit demo flag with durable initialization marker.
+  const isInitialized = (() => {
+    try {
+      return localStorage.getItem(CUSTODY_INITIALIZED_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })()
+
+  if (!isInitialized && isCustodyDemoMode() && fixtureCustodyItems.length > 0) {
     try {
       localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(fixtureCustodyItems))
+      localStorage.setItem(CUSTODY_INITIALIZED_KEY, 'true')
     } catch {
       // ignore
     }
     return fixtureCustodyItems.map((item) => ({ ...item }))
+  }
+
+  try {
+    localStorage.setItem(CUSTODY_INITIALIZED_KEY, 'true')
+  } catch {
+    // ignore
   }
 
   return []
@@ -1074,7 +1116,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
         serialNumber: row.serial_number || '',
         notes: row.notes || '',
         custodyType: (row.custody_type || 'مستديمة') as CustodyType,
-        acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        acquisitionDate: row.created_at ? String(row.created_at).slice(0, 10) : getCairoDateString(),
       }
     })
 
@@ -1305,7 +1347,7 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
       'نوع العهدة': '',
       'الحالة الفنية': '',
       'المكان / القاعة': '',
-      'تاريخ القيد': new Date().toISOString().slice(0, 10),
+      'تاريخ القيد': getCairoDateString(),
       'الرقم التسلسلي': '',
       'ملاحظات': `تم استخراج الكشف إلكترونياً من منظومة إدارة العهد والمخازن`,
     })
@@ -1332,7 +1374,7 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
 
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, `عهدة ${warehouseName.slice(0, 22)}`)
-  const dateStr = new Date().toISOString().slice(0, 10)
+  const dateStr = getCairoDateString()
   XLSX.writeFile(workbook, `كشف-عهدة-${warehouseName.replace(/\s+/g, '-')}-${dateStr}.xlsx`)
 }
 
@@ -1449,7 +1491,7 @@ export async function exportComprehensiveCustodyWorkbook(
     XLSX.utils.book_append_sheet(workbook, whSheet, tabName)
   }
 
-  const dateStr = new Date().toISOString().slice(0, 10)
+  const dateStr = getCairoDateString()
   XLSX.writeFile(workbook, `سجل-جرد-العهد-الموحد-${dateStr}.xlsx`)
 }
 
@@ -1675,7 +1717,7 @@ export function syncInwardMovementToCustody(movement: {
   if (!cleanItemName) {
     throw new Error('اسم الصنف مطلوب لإضافة العهدة.')
   }
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getCairoDateString()
   const acquisitionDate = movement.date?.trim() || today
   const qty = Math.max(0, Number(movement.qin) || 0)
   const price = Math.max(0, Number(movement.price) || 0)
@@ -1757,6 +1799,8 @@ export function syncInwardMovementToCustody(movement: {
 
 export function syncOutwardMovementToCustody(movement: {
   item: string
+  sourceItemId?: string
+  sourceCustodyId?: string
   date?: string
   issue?: string
   qout: string | number
@@ -1788,7 +1832,7 @@ export function syncOutwardMovementToCustody(movement: {
   const items = loadCustodyItems()
   const cleanItemName = (movement.item || '').trim()
   const qty = Math.max(0, Number(movement.qout) || 0)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getCairoDateString()
   const actionDate = movement.issue?.trim() || movement.date?.trim() || today
   const sourceWhId = movement.sourceWarehouseId || 'main'
 
@@ -1798,31 +1842,35 @@ export function syncOutwardMovementToCustody(movement: {
     throw new Error('لا يمكن صرف أو تحويل الصنف إلى نفس المستودع المصدر.')
   }
 
-  // 1. Find item in source warehouse and deduct quantity
-  const sourceIdx = items.findIndex(
-    (i) => i.warehouseId === sourceWhId && i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
-  )
+  const sourceItemId = movement.sourceItemId || movement.sourceCustodyId
 
-  let sourceItem: CustodyItem | undefined
-  let deductedFromSource = false
+  // 1. Find item in source warehouse and deduct quantity (Strict source item requirement)
+  const sourceIdx = items.findIndex((i) => {
+    if (i.warehouseId !== sourceWhId) return false
+    if (sourceItemId && i.id === sourceItemId) return true
+    return i.name.trim().toLowerCase() === cleanItemName.toLowerCase()
+  })
 
-  if (sourceIdx !== -1) {
-    sourceItem = items[sourceIdx]
-    if (sourceItem.quantity < qty) {
-      throw new Error(`الرصيد المتاح من «${cleanItemName}» في المخزن المصدر (${sourceItem.quantity}) غير كافٍ لصرف كمية ${qty}.`)
-    }
-    const newQty = Math.max(0, sourceItem.quantity - qty)
-    const unitPrice = sourceItem.quantity > 0 ? sourceItem.value / sourceItem.quantity : (Number(movement.price) || 0)
-    items[sourceIdx] = {
-      ...sourceItem,
-      quantity: newQty,
-      value: Math.max(0, Math.round(newQty * unitPrice)),
-      notes: movement.to
-        ? `${sourceItem.notes ? `${sourceItem.notes} • ` : ''}صرف ${qty} ${sourceItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
-        : sourceItem.notes,
-    }
-    deductedFromSource = true
+  if (sourceIdx === -1) {
+    throw new Error(`تعذر إتمام الصرف: الصنف «${cleanItemName || sourceItemId}» غير مسجل في المخزن المصدر المحدد (${sourceWhId}).`)
   }
+
+  const sourceItem = items[sourceIdx]
+  if (sourceItem.quantity < qty) {
+    throw new Error(`الرصيد المتاح من «${cleanItemName}» في المخزن المصدر (${sourceItem.quantity}) غير كافٍ لصرف كمية ${qty}.`)
+  }
+
+  const newQty = Math.max(0, sourceItem.quantity - qty)
+  const unitPrice = sourceItem.quantity > 0 ? sourceItem.value / sourceItem.quantity : (Number(movement.price) || 0)
+  items[sourceIdx] = {
+    ...sourceItem,
+    quantity: newQty,
+    value: Math.max(0, Math.round(newQty * unitPrice)),
+    notes: movement.to
+      ? `${sourceItem.notes ? `${sourceItem.notes} • ` : ''}صرف ${qty} ${sourceItem.unit} إلى ${movement.to}${movement.permit ? ` (إذن ${movement.permit})` : ''}`
+      : sourceItem.notes,
+  }
+  const deductedFromSource = true
 
   // 2. Identify target warehouse or custodian
   const targetWh = explicitTargetWhId

@@ -1,6 +1,6 @@
 import { prepareAccessContext, getAccessSession } from './lib/accessContext'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -9,8 +9,6 @@ import {
   FileText,
   ArrowDownToLine,
   ArrowLeft,
-  ArrowRight,
-  ArrowUpDown,
   ArrowUpRight,
   BarChart3,
   Bot,
@@ -24,7 +22,6 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
-  Filter,
   Headphones,
   History,
   Info,
@@ -114,25 +111,18 @@ import ChatbotAdminPage from './pages/ChatbotAdminPage'
 import WarehouseChatBot from './components/WarehouseChatBot'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
+import NotFoundPage from './pages/NotFoundPage'
+import { getSavedTheme, applyTheme } from './lib/theme'
+import { getCairoDateString } from './lib/dateUtils'
 import type { CustodyItem } from './lib/custody'
 import { matchesSearch } from './lib/searchUtils'
 import { purgeLocalDemoData } from './lib/purgeDemoData'
 import './App.css'
 
 const storageKey = 'warehouse-ledger-movements'
-const themeStorageKey = 'warehouse-ledger-theme'
-
 function formatCurrency(value: number, currency: AppSettings['currency']): string {
   if (!Number.isFinite(value)) return '—'
   return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
-}
-
-function loadDarkMode(): boolean {
-  try {
-    return localStorage.getItem(themeStorageKey) === 'dark'
-  } catch {
-    return false
-  }
 }
 
 function normalizeMovementPrice(m: FixtureMovement): FixtureMovement {
@@ -151,28 +141,6 @@ function loadMovements(): FixtureMovement[] {
     if (savedMovements) {
       const parsed = JSON.parse(savedMovements) as unknown
       if (Array.isArray(parsed)) {
-        // Migration: Strip disbursement data from purchases if present in existing localStorage
-        const hasLegacyDisbursements = parsed.some(
-          (m: FixtureMovement) => Number(m.qout) > 0 || Boolean(m.to) || Boolean(m.permit) || Boolean(m.issue)
-        )
-        if (hasLegacyDisbursements) {
-          const cleaned = parsed
-            .filter((m: FixtureMovement) => (Number(m.qin) || 0) > 0)
-            .map((m: FixtureMovement) => ({
-              ...m,
-              to: '',
-              permit: '',
-              issue: '',
-              qout: '',
-            }))
-            .map(normalizeMovementPrice)
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(cleaned))
-          } catch {
-            // ignore
-          }
-          return cleaned
-        }
         return (parsed as FixtureMovement[]).map(normalizeMovementPrice)
       }
     }
@@ -220,7 +188,7 @@ async function exportMovements(movements: FixtureMovement[]) {
   const sheet = XLSX.utils.json_to_sheet(rows)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'سجل حركات المخزن')
-  XLSX.writeFile(workbook, `سجل-حركات-المخزن-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(workbook, `سجل-حركات-المخزن-${getCairoDateString()}.xlsx`)
 }
 
 const qualityRules = [
@@ -268,7 +236,7 @@ function RestrictedScreen({ title, subtitle, message }: { title: string; subtitl
 function App() {
   const location = useLocation()
   const shouldReduceMotion = useReducedMotion()
-  const [darkMode, setDarkMode] = useState(loadDarkMode)
+  const [darkMode, setDarkMode] = useState(() => getSavedTheme() === 'dark')
   const [session, setSession] = useState<Session | null>(() => {
     const local = getLocalSession()
     prepareAccessContext(local)
@@ -962,12 +930,7 @@ function App() {
   }
 
   useEffect(() => {
-    try {
-      localStorage.setItem(themeStorageKey, darkMode ? 'dark' : 'light')
-    } catch {
-      // ignore
-    }
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    applyTheme(darkMode)
   }, [darkMode])
 
   async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
@@ -1375,11 +1338,6 @@ function App() {
     }
     return list.slice(-6).reverse()
   }, [visibleMovements, tableFilter])
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'
-    localStorage.setItem(themeStorageKey, darkMode ? 'dark' : 'light')
-  }, [darkMode])
 
   function signOut() {
     if (session?.user) {
@@ -2696,34 +2654,6 @@ function App() {
           />
 
           <Route
-            path="/movements/new"
-            element={
-              canEdit ? (
-                <MovementsPage
-                  movements={visibleMovements}
-                  totalCount={movements.length}
-                  searchTerm={searchTerm}
-                  onSearchChange={setSearchTerm}
-                  currency={settings.currency}
-                  onSaveMovement={addMovement}
-                  onExport={() => exportMovements(movements)}
-                  onEdit={isSystemAdmin ? (m) => setEditingMovement(m) : () => {}}
-                  onDelete={isSystemAdmin ? (m) => setDeletingMovement(m) : () => {}}
-                  onLoadDemoData={handleLoadDemoData}
-                  initialTab="add"
-                  canEdit={canEdit}
-                  isSystemAdmin={isSystemAdmin}
-                />
-              ) : (
-                <RestrictedScreen
-                  title="تسجيل حركة جديدة"
-                  subtitle="سجل حركات المخزن"
-                  message="خاص ومقتصر على المحررين ومديري النظام لإضافة حركات توريد أو صرف. حسابك الحالي يمتلك صلاحية عرض وقراءة فقط."
-                />
-              )
-            }
-          />
-          <Route
             path="/movements/edit/:id"
             element={
               isSystemAdmin ? (
@@ -3037,6 +2967,7 @@ function App() {
             path="/support"
             element={<SupportPage session={session} />}
           />
+          <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </motion.div>
       </AnimatePresence>
@@ -3228,439 +3159,6 @@ function App() {
 }
 
 
-function MovementsPage({
-  movements,
-  totalCount,
-  searchTerm,
-  onSearchChange,
-  currency,
-  onSaveMovement,
-  onExport,
-  onEdit,
-  onDelete,
-  onLoadDemoData,
-  initialTab = 'list',
-  canEdit = true,
-  isSystemAdmin = false,
-}: {
-  movements: FixtureMovement[]
-  totalCount: number
-  searchTerm: string
-  onSearchChange?: (term: string) => void
-  currency: AppSettings['currency']
-  onSaveMovement: (movement: FixtureMovement) => Promise<void>
-  onExport: () => void
-  onEdit: (movement: FixtureMovement) => void
-  onDelete: (movement: FixtureMovement) => void
-  onLoadDemoData: () => void
-  initialTab?: 'list' | 'add'
-  canEdit?: boolean
-  isSystemAdmin?: boolean
-}) {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const [activeTab, setActiveTab] = useState<'list' | 'add'>(() => {
-    if (!canEdit) return 'list'
-    return tabParam === 'add' || initialTab === 'add' ? 'add' : 'list'
-  })
-  const [addSuccessMessage, setAddSuccessMessage] = useState('')
-
-  useEffect(() => {
-    if (!canEdit) {
-      setActiveTab('list')
-      return
-    }
-    if (tabParam === 'add') {
-      setActiveTab('add')
-    } else if (tabParam === 'list') {
-      setActiveTab('list')
-    }
-  }, [tabParam, canEdit])
-
-  const handleTabChange = (tab: 'list' | 'add') => {
-    if (!canEdit && tab === 'add') return
-    setActiveTab(tab)
-    if (tab === 'add') {
-      setSearchParams({ tab: 'add' })
-    } else {
-      setSearchParams({})
-    }
-  }
-
-  const [statusFilter, setStatusFilter] = useState<'all' | 'full' | 'part' | 'pending'>('all')
-  const [sortOption, setSortOption] = useState<'date-desc' | 'date-asc' | 'item-asc' | 'val-desc' | 'qty-desc'>('date-desc')
-  const [pageSize, setPageSize] = useState<number>(15)
-  const [currentPage, setCurrentPage] = useState<number>(1)
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [statusFilter, sortOption, searchTerm])
-
-  const filtered = useMemo(() => {
-    return movements.filter((m, idx) => {
-      if (statusFilter === 'all') return true
-      const derived = deriveMovement(m, idx)
-      return derived.status === statusFilter
-    })
-  }, [movements, statusFilter])
-
-  const sorted = useMemo(() => {
-    const list = [...filtered]
-    list.sort((a, b) => {
-      const derA = deriveMovement(a, 0)
-      const derB = deriveMovement(b, 0)
-      if (sortOption === 'date-desc') {
-        return (b.date || '').localeCompare(a.date || '')
-      }
-      if (sortOption === 'date-asc') {
-        return (a.date || '').localeCompare(b.date || '')
-      }
-      if (sortOption === 'item-asc') {
-        return (a.item || '').localeCompare(b.item || '')
-      }
-      if (sortOption === 'val-desc') {
-        return (derB.total ?? 0) - (derA.total ?? 0)
-      }
-      if (sortOption === 'qty-desc') {
-        return (Number(b.qin) || 0) - (Number(a.qin) || 0)
-      }
-      return 0
-    })
-    return list
-  }, [filtered, sortOption])
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const paginatedMovements = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return sorted.slice(start, start + pageSize)
-  }, [sorted, currentPage, pageSize])
-
-  const statusCounts = useMemo(() => {
-    let full = 0
-    let part = 0
-    let pending = 0
-    for (let i = 0; i < movements.length; i++) {
-      const st = deriveMovement(movements[i], i).status
-      if (st === 'full') full++
-      else if (st === 'part') part++
-      else if (st === 'pending') pending++
-    }
-    return { full, part, pending }
-  }, [movements])
-
-  return (
-    <section className="movement-page card-surface">
-      {/* التابات الرئيسية لصفحة سجل الحركة: التبديل السلس بين سجل الحركات ونموذج إضافة حركة */}
-      <div className="movements-main-tabs-wrap" role="tablist" aria-label="أقسام سجل الحركة">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'list'}
-          className={`movements-main-tab-btn ${activeTab === 'list' ? 'active' : ''}`}
-          onClick={() => handleTabChange('list')}
-          id="tab-movements-list"
-        >
-          <ClipboardList size={18} />
-          <span>سجل الحركات المسجلة</span>
-          <span className="tab-pill">{movements.length}</span>
-        </button>
-
-        {canEdit && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'add'}
-            className={`movements-main-tab-btn ${activeTab === 'add' ? 'active' : ''}`}
-            onClick={() => handleTabChange('add')}
-            id="tab-movements-add"
-          >
-            <Plus size={18} />
-            <span>إضافة حركة جديدة</span>
-            <span className="tab-pill highlight">وارد / صرف</span>
-          </button>
-        )}
-      </div>
-
-      {activeTab === 'add' ? (
-        <div className="movements-add-section">
-          <div className="section-head movement-heading mb-4">
-            <div>
-              <h2><PackagePlus size={19} /> تسجيل حركة جديدة</h2>
-              <span>سجّل بيانات التوريد لحساب المخزن الرئيسي أو بيانات الصرف لحساب المخازن الفرعية</span>
-            </div>
-            <div className="headline-actions">
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => handleTabChange('list')}
-              >
-                <ClipboardList size={17} /> عرض سجل الحركات ({movements.length})
-              </button>
-            </div>
-          </div>
-
-          <MovementForm
-            onSave={async (m) => {
-              await onSaveMovement(m)
-              setAddSuccessMessage(`تم تسجيل وحفظ الحركة بنجاح: ${m.item} (${Number(m.qin) > 0 ? `وارد +${m.qin}` : `صرف -${m.qout}`}) وتم تحديث رصيد العهدة.`)
-              setActiveTab('list')
-              setSearchParams({})
-            }}
-            onCancel={() => handleTabChange('list')}
-          />
-        </div>
-      ) : (
-        <>
-          <div className="section-head movement-heading">
-            <div>
-              <h2><ClipboardList size={19} /> سجل الحركات</h2>
-              <span>
-                {searchTerm
-                  ? `عرض ${filtered.length.toLocaleString('ar-EG')} من ${totalCount.toLocaleString('ar-EG')} حركة مطابقة`
-                  : `${totalCount.toLocaleString('ar-EG')} حركة مسجلة في المستودع`}
-              </span>
-            </div>
-            <div className="headline-actions">
-              <button type="button" className="secondary-btn" onClick={onExport}><ArrowDownToLine size={17} /> تصدير Excel</button>
-              {canEdit && (
-                <button type="button" className="primary-btn" onClick={() => handleTabChange('add')}><Plus size={18} /> إضافة حركة</button>
-              )}
-            </div>
-          </div>
-
-          {addSuccessMessage && (
-            <div className="inline-message success mb-4 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={18} />
-                <span>{addSuccessMessage}</span>
-              </div>
-              <button
-                type="button"
-                className="primary-btn small"
-                onClick={() => {
-                  setAddSuccessMessage('')
-                  handleTabChange('add')
-                }}
-              >
-                <Plus size={14} /> إضافة حركة أخرى
-              </button>
-            </div>
-          )}
-
-      <div className="movements-filter-toolbar">
-        {onSearchChange && (
-          <div className="input-search-wrap">
-            <Search size={15} className="input-search-icon" />
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="بحث في الحركات..."
-              className="search-input-field w-full"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => onSearchChange('')}
-                className="input-action-btn"
-                title="مسح البحث"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="filter-group">
-          <Filter size={15} className="opacity-60" />
-          <button
-            type="button"
-            className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('all')}
-          >
-            الكل ({movements.length})
-          </button>
-          <button
-            type="button"
-            className={`filter-tab ${statusFilter === 'full' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('full')}
-          >
-            مكتمل ({statusCounts.full})
-          </button>
-          <button
-            type="button"
-            className={`filter-tab ${statusFilter === 'part' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('part')}
-          >
-            جزئي ({statusCounts.part})
-          </button>
-          <button
-            type="button"
-            className={`filter-tab ${statusFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('pending')}
-          >
-            معلق ({statusCounts.pending})
-          </button>
-        </div>
-
-        <div className="sort-group">
-          <ArrowUpDown size={15} className="opacity-60" />
-          <select
-            className="sort-select"
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value as 'date-desc' | 'date-asc' | 'item-asc' | 'val-desc' | 'qty-desc')}
-            aria-label="ترتيب الحركات"
-          >
-            <option value="date-desc">التاريخ (الأحدث أولاً)</option>
-            <option value="date-asc">التاريخ (الأقدم أولاً)</option>
-            <option value="item-asc">اسم الصنف (أبجدياً)</option>
-            <option value="val-desc">القيمة الإجمالية (الأعلى)</option>
-            <option value="qty-desc">كمية الوارد (الأعلى)</option>
-          </select>
-
-          <select
-            className="page-size-select"
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-            aria-label="عدد العناصر بالصفحة"
-          >
-            <option value={15}>15 بالصفحة</option>
-            <option value={30}>30 بالصفحة</option>
-            <option value={50}>50 بالصفحة</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="movement-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>الصنف</th>
-              <th>المورد</th>
-              <th>المستلم</th>
-              <th>الوارد</th>
-              <th>المنصرف</th>
-              <th>سعر الوحدة</th>
-              <th>القيمة</th>
-              <th className="actions-header">الإجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedMovements.length === 0 ? (
-              <tr>
-                <td className="table-empty" colSpan={9}>
-                  <div className="ledger-empty-box">
-                    <div className="ledger-empty-icon">
-                      <Package size={28} />
-                    </div>
-                    <h3>{searchTerm ? 'لا توجد حركات مطابقة لبحثك' : 'سجل الحركات فارغ حالياً'}</h3>
-                    <p>
-                      {searchTerm
-                        ? 'جرّب البحث باسم صنف آخر أو مسح عبارة البحث لرؤية كافة السجلات.'
-                        : 'يمكنك البدء بإضافة أول حركة للمخزن، استيراد شيت Excel، أو تحميل بيانات تجريبية.'}
-                    </p>
-                    {canEdit && (
-                      <div className="empty-quick-actions">
-                        <button type="button" className="primary-btn" onClick={() => handleTabChange('add')}>
-                          <Plus size={16} /> إضافة حركة جديدة
-                        </button>
-                        <button type="button" className="secondary-btn" onClick={onLoadDemoData}>
-                          <Sparkles size={16} /> تحميل بيانات تجريبية
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedMovements.map((movement, index) => {
-                const derived = deriveMovement(movement, index)
-                return (
-                  <tr key={movement.id || index}>
-                    <td>{movement.date || '—'}</td>
-                    <td>
-                      <div className="cell-item-name">{movement.item}</div>
-                      {movement.notes && <small className="cell-sub">{movement.notes}</small>}
-                    </td>
-                    <td>{movement.from || '—'}</td>
-                    <td>{movement.to || '—'}</td>
-                    <td><span className="qty-in-tag">+{movement.qin}</span></td>
-                    <td><span className="qty-out-tag">-{movement.qout}</span></td>
-                    <td>{formatCurrency(derived.unit_price ?? (Number(movement.price) || 0), currency)}</td>
-                    <td>{formatCurrency(derived.total ?? 0, currency)}</td>
-                    <td className="actions-cell">
-                      {isSystemAdmin ? (
-                        <div className="action-buttons-wrap">
-                          <button
-                            type="button"
-                            className="table-action-btn edit-action-btn"
-                            onClick={() => onEdit(movement)}
-                            title="تعديل الحركة"
-                            aria-label={`تعديل حركة ${movement.item}`}
-                          >
-                            <Pencil size={15} />
-                            <span>تعديل</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="table-action-btn delete-action-btn"
-                            onClick={() => onDelete(movement)}
-                            title="حذف الحركة"
-                            aria-label={`حذف حركة ${movement.item}`}
-                          >
-                            <Trash2 size={15} />
-                            <span>حذف</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="read-only-badge" title="صلاحية قراءة وعرض فقط (التعديل والحذف لمدير النظام فقط)">
-                          <Eye size={13} /> عرض فقط
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {sorted.length > pageSize && (
-        <div className="pagination-bar">
-          <div>
-            عرض {((currentPage - 1) * pageSize + 1).toLocaleString('ar-EG')} - {Math.min(currentPage * pageSize, sorted.length).toLocaleString('ar-EG')} من إجمالي {sorted.length.toLocaleString('ar-EG')} حركة
-          </div>
-          <div className="pagination-controls">
-            <button
-              type="button"
-              className="pagination-btn"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            >
-              <ArrowRight size={14} /> السابق
-            </button>
-            <span className="page-indicator">
-              صفحة {currentPage.toLocaleString('ar-EG')} من {totalPages.toLocaleString('ar-EG')}
-            </span>
-            <button
-              type="button"
-              className="pagination-btn"
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            >
-              التالي <ArrowLeft size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-        </>
-      )}
-    </section>
-  )
-}
-
 function MovementEditPage({
   movements,
   onSave,
@@ -3703,7 +3201,7 @@ function MovementForm({
   onSave: (movement: FixtureMovement) => Promise<void>
   onCancel: () => void
 }) {
-  const [today] = useState(() => new Date().toISOString().slice(0, 10))
+  const [today] = useState(() => getCairoDateString())
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 

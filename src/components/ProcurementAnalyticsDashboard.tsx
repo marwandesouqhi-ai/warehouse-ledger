@@ -15,6 +15,7 @@ import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
 import { matchesSearch } from '../lib/searchUtils'
 import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
+import { getCairoDateString } from '../lib/dateUtils'
 
 interface ProcurementAnalyticsDashboardProps {
   movements?: FixtureMovement[]
@@ -138,7 +139,7 @@ export function ProcurementAnalyticsDashboard({
 
     XLSX.utils.book_append_sheet(wb, wsKpis, 'مؤشرات المشتريات')
     XLSX.utils.book_append_sheet(wb, wsPurchases, 'حركات الشراء الفعلية')
-    XLSX.writeFile(wb, `تقرير-تحليلات-المشتريات-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `تقرير-تحليلات-المشتريات-${getCairoDateString()}.xlsx`)
   }
 
   return (

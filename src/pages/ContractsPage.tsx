@@ -31,6 +31,7 @@ import {
 } from '../lib/procurementAttachments'
 import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
+import { getCairoDateString } from '../lib/dateUtils'
 
 type ContractsPageProps = {
   session?: Session | null
@@ -68,9 +69,9 @@ export default function ContractsPage({ session }: ContractsPageProps) {
   const [supplierName, setSupplierName] = useState('')
   const [contractTitle, setContractTitle] = useState('')
   const [contractType, setContractType] = useState<SupplierContract['contract_type']>('supply')
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
-  const [endDate, setEndDate] = useState(
-    new Date(Date.now() + 86400000 * 365).toISOString().slice(0, 10)
+  const [startDate, setStartDate] = useState(() => getCairoDateString())
+  const [endDate, setEndDate] = useState(() =>
+    getCairoDateString(new Date(Date.now() + 86400000 * 365))
   )
   const [contractValue, setContractValue] = useState<number | ''>('')
   const [autoRenewal, setAutoRenewal] = useState(false)

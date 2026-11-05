@@ -8,6 +8,7 @@ import {
   getWarehouseStats,
   loadCustodyItems,
   saveCustodyItems,
+  seedDemoCustodyItems,
   syncInwardMovementToCustody,
   syncOutwardMovementToCustody,
   WAREHOUSES,
@@ -97,11 +98,16 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(stats.healthyRatio).toBe(50) // 1 out of 2 is excellent/good
   })
 
-  it('seeds main warehouse custody with purchases items when no user records are present', () => {
+  it('treats empty storage as valid without auto-inserting fixtures unless explicit demo flag is set', () => {
     expect(fixtureCustodyItems.length).toBe(180)
+    // 1. Without explicit demo seeding, empty storage is valid and returns empty
     const items = loadCustodyItems()
-    expect(items).toHaveLength(180)
-    expect(items.filter((i) => i.warehouseId === 'main')).toHaveLength(32)
+    expect(items).toHaveLength(0)
+
+    // 2. Explicit demo seeding loads all fixtures with durable marker
+    const seeded = seedDemoCustodyItems()
+    expect(seeded).toHaveLength(180)
+    expect(seeded.filter((i) => i.warehouseId === 'main')).toHaveLength(32)
   })
 
   it('persists and retrieves custody items to and from localStorage', () => {
@@ -143,6 +149,7 @@ describe('Custody Module & Warehouse Definitions', () => {
   })
 
   it('syncs inward movements directly to main warehouse custody', () => {
+    seedDemoCustodyItems()
     // 1. First inward movement creates a new item in main warehouse
     const res1 = syncInwardMovementToCustody({
       item: 'ميكروسكوب ضوئي رقمي',

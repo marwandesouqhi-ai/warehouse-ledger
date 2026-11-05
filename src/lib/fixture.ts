@@ -16,6 +16,7 @@ export type FixtureMovement = {
     custodyApplied?: boolean
     createdBy?: string
     sourceCustodyId?: string
+    sourceItemId?: string
     destinationLocation?: string
     sourceWarehouseId?: string
     destType?: 'warehouse' | 'custodian'

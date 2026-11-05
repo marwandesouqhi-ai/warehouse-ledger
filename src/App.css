@@ -266,7 +266,7 @@
 
 .primary-btn {
   background: var(--accent);
-  color: white;
+  color: var(--accent-foreground, #ffffff);
 }
 
 .primary-btn.small {
@@ -2381,7 +2381,14 @@
   }
 
   .movement-form {
+    grid-template-columns: 1fr;
     gap: 13px;
+  }
+
+  .movement-form .span-2,
+  .movement-form .form-notes,
+  .movement-form .form-actions {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6079,7 +6086,7 @@
 
 .backup-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -7504,7 +7511,7 @@
 
 .reports-category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 20px;
   margin-bottom: 28px;
 }
@@ -7616,7 +7623,7 @@
 
 .reports-wh-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 20px;
 }
 
@@ -7752,7 +7759,7 @@
 
 .reports-tech-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 20px;
   margin-bottom: 28px;
 }
@@ -10580,7 +10587,18 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .live-pulse-dot,
+  .pulseGreen,
+  .pulse-green,
+  .spinner,
+  .animate-spin,
+  .skeleton-shimmer,
+  .skeleton-card {
+    animation: none !important;
   }
 }
 
@@ -11729,6 +11747,33 @@ a {
   }
 }
 
+@media (max-width: 480px) {
+  .auth-shell {
+    padding: 10px 6px;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+
+  .auth-panel,
+  .auth-panel.auth-panel-wide {
+    padding: 16px 12px;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .auth-panel h1 {
+    font-size: 1.15rem;
+    line-height: 1.35;
+  }
+
+  .auth-support-link {
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
 /* ==========================================================================
    FLUID RESPONSIVE SYSTEM (Mobile-First to 4K Ultra-Wide Native Standard)
    ========================================================================== */
@@ -12816,16 +12861,28 @@ a {
   .movements-filter-toolbar,
   .custody-filter-selects {
     flex-direction: column;
+    align-items: stretch;
     width: 100%;
+    gap: 10px;
   }
 
   .custody-filter-selects > *,
+  .custody-toolbar .custody-search-wrap,
   .custody-toolbar .custody-search,
+  .filter-select-group,
+  .backup-cards-grid,
   .movements-filter-toolbar > * {
     width: 100%;
+    min-width: 0;
+  }
+
+  .backup-cards-grid {
+    grid-template-columns: 1fr;
   }
 
   .filter-select-group select {
+    width: 100%;
+    min-width: 0;
     flex: 1;
   }
 

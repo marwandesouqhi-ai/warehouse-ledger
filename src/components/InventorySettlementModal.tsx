@@ -15,6 +15,7 @@ import {
   Users,
 } from 'lucide-react'
 import { WAREHOUSES, type CustodyItem } from '../lib/custody'
+import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { supabase } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
@@ -197,7 +198,7 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
     XLSX.utils.book_append_sheet(workbook, sheet, 'محضر التسوية والمطابقة الجردية')
     XLSX.writeFile(
       workbook,
-      `محضر-تسوية-${currentWarehouse.shortName}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      `محضر-تسوية-${currentWarehouse.shortName}-${getCairoDateString()}.xlsx`
     )
   }
 

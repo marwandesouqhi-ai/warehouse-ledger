@@ -21,6 +21,7 @@
   --accent-wash: #e8f5f5;
   --accent-subtle: #eff8f8;
   --accent-border: #a8d5d8;
+  --accent-foreground: #ffffff;
   --text-on-accent: #ffffff;
   --focus-ring: rgba(14, 124, 134, 0.28);
 
@@ -159,7 +160,8 @@
   --accent-wash: #16363a;
   --accent-subtle: #142d30;
   --accent-border: #28656a;
-  --text-on-accent: #ffffff;
+  --accent-foreground: #071e22;
+  --text-on-accent: #071e22;
   --focus-ring: rgba(86, 185, 158, 0.35);
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);

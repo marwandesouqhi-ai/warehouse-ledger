@@ -2,6 +2,7 @@ import { assertDepartmentWrite } from './accessContext'
 import type { CustodyCategory, CustodyCondition, CustodyItem, CustodyType } from './custody'
 import { findWarehouseByRecipient, guessCategory, saveCustodyItems, saveCustodyItemsToCloud, WAREHOUSES } from './custody'
 import { classifyWorkshopItem, WORKSHOP_CATEGORIES } from './workshopCategoryClassifier'
+import { getCairoDateString } from './dateUtils'
 
 export type CustodyImportRow = {
   code?: string
@@ -98,12 +99,12 @@ export function parseCategory(raw?: unknown, itemName = '', targetWarehouseId = 
 }
 
 export function parseExcelDate(val: unknown, XLSX?: typeof import('xlsx')): string {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getCairoDateString()
   if (val == null || val === '') return today
 
   if (val instanceof Date) {
     if (!Number.isNaN(val.getTime())) {
-      return val.toISOString().slice(0, 10)
+      return getCairoDateString(val)
     }
   }
 
@@ -171,7 +172,7 @@ export async function downloadCustodyTemplate(currency = 'EGP'): Promise<void> {
       'نوع العهدة': 'مستديمة',
       'الحالة الفنية': 'ممتازة',
       'المكان / القاعة': 'معمل الكيمياء العامة - مبنى أ',
-      'تاريخ القيد': new Date().toISOString().slice(0, 10),
+      'تاريخ القيد': getCairoDateString(),
       'الرقم المسلسل': 'SN-MC-884920',
       'ملاحظات': 'توريد جديد بضمان الوكيل لمدة عامين (يحسب النظام الإجمالي تلقائياً 5 × 18500 = 92500)',
     },
@@ -186,7 +187,7 @@ export async function downloadCustodyTemplate(currency = 'EGP'): Promise<void> {
       'نوع العهدة': 'مستديمة',
       'الحالة الفنية': 'ممتازة',
       'المكان / القاعة': 'معمل الحاسب الآلي 1',
-      'تاريخ القيد': new Date().toISOString().slice(0, 10),
+      'تاريخ القيد': getCairoDateString(),
       'الرقم المسلسل': 'SN-PC-2026-001',
       'ملاحظات': 'ملحق به ماوس ولوحة مفاتيح وكابلات (يحسب النظام الإجمالي تلقائياً 10 × 24000 = 240000)',
     },
@@ -213,7 +214,7 @@ export async function downloadCustodyTemplate(currency = 'EGP'): Promise<void> {
 
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'نموذج إدخال العهدة')
-  XLSX.writeFile(workbook, `نموذج-استيراد-عهدة-المخازن-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(workbook, `نموذج-استيراد-عهدة-المخازن-${getCairoDateString()}.xlsx`)
 }
 
 /**
@@ -373,7 +374,7 @@ export function parseRawCustodyRows(
       condition: parseCondition(condition),
       custodyType: parseCustodyType(custodyType),
       roomLocation: roomLocation || currentWarehouse.building,
-      acquisitionDate: acquisitionDate || new Date().toISOString().slice(0, 10),
+      acquisitionDate: acquisitionDate || getCairoDateString(),
       unitPrice: finalUnitPrice,
       value: totalValue,
       serialNumber: serialNumber && serialNumber !== '—' ? serialNumber : undefined,
