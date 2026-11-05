@@ -566,7 +566,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                         className="secondary-btn flex-1"
                                         onClick={() => { setMode('signIn'); setError(''); setNotice('') }}
                                     >
-                                        <LogIn size={16} /> شاشة تسجيل الدخول
+                                        <LogIn size={16} className="transform scale-x-[-1]" /> شاشة تسجيل الدخول
                                     </button>
                                 </div>
                             </div>
@@ -599,7 +599,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             setNotice('الحساب مفعل بالفعل. يرجى تسجيل الدخول باسم المستخدم وكلمة المرور.')
                                         }}
                                     >
-                                        <LogIn size={16} /> الانتقال إلى تسجيل الدخول
+                                        <LogIn size={16} className="transform scale-x-[-1]" /> الانتقال إلى تسجيل الدخول
                                     </button>
                                     <button
                                         type="button"
@@ -655,7 +655,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             type="text"
                                             dir="ltr"
                                             autoComplete="username"
-                                            placeholder="مثال: ahmed.ali أو saleh_k"
+                                            placeholder="اختر اسم المستخدم (مثال: ahmed.ali)"
                                             value={username}
                                             onChange={(event) => setUsername(event.target.value)}
                                             required
@@ -690,7 +690,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             />
                                             <button
                                                 type="button"
-                                                className="password-toggle-btn"
+                                                className="password-toggle-btn password-toggle-icon"
                                                 onClick={() => setShowPassword((prev) => !prev)}
                                                 title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                                 aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
@@ -719,7 +719,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                             />
                                             <button
                                                 type="button"
-                                                className="password-toggle-btn"
+                                                className="password-toggle-btn password-toggle-icon"
                                                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                                                 title={showConfirmPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                                 aria-label={showConfirmPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
@@ -783,7 +783,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     />
                                     <button
                                         type="button"
-                                        className="password-toggle-btn"
+                                        className="password-toggle-btn password-toggle-icon"
                                         onClick={() => setShowPassword((prev) => !prev)}
                                         title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
@@ -807,7 +807,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     />
                                     <button
                                         type="button"
-                                        className="password-toggle-btn"
+                                        className="password-toggle-btn password-toggle-icon"
                                         onClick={() => setShowConfirmPassword((prev) => !prev)}
                                         title={showConfirmPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         aria-label={showConfirmPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
@@ -836,12 +836,15 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         <p>أدخل اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني المسجل في المنظومة، وسيقوم النظام بالتحقق وإرسال رابط آمن لإعادة تعيين كلمة المرور إلى بريدك الإلكتروني (Gmail) فوراً.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
-                            <label>
+                            <label htmlFor="recovery-username-input">
                                 اسم المستخدم، الرقم الوظيفي، أو البريد الإلكتروني
                                 <input
+                                    id="recovery-username-input"
+                                    name="username"
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="مثال: employee.name أو WH-EMP-000001 أو name@example.com"
+                                    dir="auto"
+                                    placeholder="أدخل اسم المستخدم أو الرقم الوظيفي أو البريد"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required
@@ -861,32 +864,37 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 className="secondary-btn w-full mt-2"
                                 onClick={() => { setMode('signIn'); setError(''); setNotice('') }}
                             >
-                                <LogIn size={16} /> العودة لشاشة تسجيل الدخول
+                                <LogIn size={16} className="transform scale-x-[-1]" /> العودة لشاشة تسجيل الدخول
                             </button>
                         </form>
                     </>
                 ) : (
                     <>
                         <h1>تسجيل الدخول</h1>
-                        <p>سجّل الدخول باسم المستخدم أو الرقم الوظيفي وكلمة المرور للوصول إلى النظام عبر Supabase Auth.</p>
+                        <p>سجّل الدخول باسم المستخدم أو الرقم الوظيفي وكلمة المرور للوصول إلى منظومة حركة المخازن والعهدة.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
-                            <label>
+                            <label htmlFor="username-input">
                                 اسم المستخدم أو الرقم الوظيفي
                                 <input
+                                    id="username-input"
+                                    name="username"
                                     type="text"
                                     autoComplete="username"
-                                    placeholder="اسم المستخدم أو الرقم الوظيفي (مثال: employee.name أو WH-EMP-000001)"
+                                    dir="auto"
+                                    placeholder="أدخل اسم المستخدم أو الرقم الوظيفي"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required
                                 />
                             </label>
 
-                            <label>
+                            <label htmlFor="password-input">
                                 كلمة المرور
                                 <div className="password-input-wrap">
                                     <input
+                                        id="password-input"
+                                        name="password"
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="current-password"
                                         placeholder="أدخل كلمة المرور"
@@ -896,7 +904,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     />
                                     <button
                                         type="button"
-                                        className="password-toggle-btn"
+                                        className="password-toggle-btn password-toggle-icon"
                                         onClick={() => setShowPassword((prev) => !prev)}
                                         title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                                         aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
@@ -909,8 +917,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             {error && <div className="inline-message error" role="alert">{error}</div>}
                             {notice && <div className="inline-message success" role="status">{notice}</div>}
 
-                            <button type="submit" className="primary-btn" disabled={isSubmitting || !isConfigured}>
-                                <LogIn size={17} />
+                            <button type="submit" className="primary-btn login-submit-button" disabled={isSubmitting || !isConfigured}>
+                                <LogIn size={17} className="transform scale-x-[-1]" />
                                 {isSubmitting ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
                             </button>
                         </form>
@@ -920,6 +928,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                 type="button"
                                 className="auth-switch auth-forgot-btn"
                                 onClick={() => { setMode('forgotPassword'); setError(''); setNotice('') }}
+                                aria-label="استعادة كلمة المرور المنسية"
                             >
                                 نسيت كلمة المرور؟
                             </button>
@@ -928,27 +937,17 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         <div style={{ textAlign: 'center', margin: '14px 0 6px' }}>
                             <Link
                                 to="/support"
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '12px',
-                                    fontWeight: 700,
-                                    color: '#4f46e5',
-                                    textDecoration: 'none',
-                                    padding: '6px 12px',
-                                    borderRadius: '8px',
-                                    backgroundColor: 'rgba(79, 70, 229, 0.08)'
-                                }}
+                                className="support-ticket-banner support-button"
+                                aria-label="تواجه مشكلة أو عطل فني؟ الدعم الفني وفتح تذكرة"
                             >
-                                <Headphones size={15} />
+                                <Headphones size={17} className="shrink-0" />
                                 <span>تواجه مشكلة أو عطل فني؟ الدعم الفني وفتح تذكرة</span>
                             </Link>
                         </div>
 
                         <div className="auth-security-footer">
                             <ShieldCheck size={16} color="var(--accent)" />
-                            <span>نظام المصادقة موحّد ومؤمّن بالكامل عبر جلسات Supabase Auth الموثقة.</span>
+                            <span>نظام المصادقة موحّد ومشفّر بالكامل عبر بروتوكولات الأمان المؤسسي المعتمدة.</span>
                         </div>
                     </>
                 )}

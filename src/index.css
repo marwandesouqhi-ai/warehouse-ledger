@@ -264,21 +264,41 @@ table th,
   font-variant-numeric: tabular-nums;
 }
 
+/* Global Accessibility: High Contrast Placeholders (WCAG 2.2 AA >= 4.5:1) */
+input::placeholder,
+textarea::placeholder,
+select::placeholder {
+  color: #52636a;
+  opacity: 1;
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder,
+[data-theme='dark'] select::placeholder,
+.dark input::placeholder,
+.dark textarea::placeholder,
+.dark select::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
 /* Global focus-visible ring for accessibility */
 :focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-/* Global Touch Target Minimum on touch devices */
-@media (pointer: coarse) {
+/* Global Touch Target Minimum on touch devices and mobile viewports (WCAG 2.2 SC 2.5.5 / 2.5.8) */
+@media (pointer: coarse), (max-width: 640px) {
   button,
-  a,
-  input,
-  select,
-  .action-btn {
+  a[role="button"],
+  .primary-btn,
+  .secondary-btn,
+  .action-btn,
+  .password-toggle-btn,
+  .auth-switch,
+  .auth-forgot-btn {
     min-height: 44px;
-    min-width: 44px;
   }
 }
 

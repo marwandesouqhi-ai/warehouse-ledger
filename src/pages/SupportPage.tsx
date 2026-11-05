@@ -709,17 +709,18 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              fontSize: '12px',
+              fontSize: '13px',
               fontWeight: 700,
-              color: '#4f46e5',
+              color: '#312e81',
               textDecoration: 'none',
               background: '#fff',
-              padding: '6px 14px',
+              minHeight: '44px',
+              padding: '10px 16px',
               borderRadius: '8px',
-              border: '1px solid rgba(79, 70, 229, 0.3)',
+              border: '1px solid rgba(79, 70, 229, 0.4)',
             }}
           >
-            <ArrowRight size={14} />
+            <ArrowRight size={15} className="icon-flip-rtl" />
             <span>الرجوع لنموذج تسجيل الدخول</span>
           </Link>
         </div>

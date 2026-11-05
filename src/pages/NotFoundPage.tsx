@@ -25,7 +25,7 @@ export function NotFoundPage() {
         </p>
         <NavLink to="/" className="primary-btn inline-flex items-center gap-2 mx-auto">
           <span>العودة إلى لوحة التحكم الرئيسية</span>
-          <ArrowRight size={16} />
+          <ArrowRight size={16} className="icon-flip-rtl" />
         </NavLink>
       </div>
     </section>

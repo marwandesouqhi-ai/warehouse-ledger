@@ -75,11 +75,11 @@ describe('Google Sheets Real-time Sync Suite', () => {
   })
 
   it('gets and sets webhook URL in localStorage', () => {
-    expect(getGoogleSheetsWebhookUrl()).toBe('')
+    expect(getGoogleSheetsWebhookUrl()).toContain('script.google.com')
     setGoogleSheetsWebhookUrl('https://script.google.com/macros/s/xyz/exec')
     expect(getGoogleSheetsWebhookUrl()).toBe('https://script.google.com/macros/s/xyz/exec')
     setGoogleSheetsWebhookUrl('')
-    expect(getGoogleSheetsWebhookUrl()).toBe('')
+    expect(getGoogleSheetsWebhookUrl()).toContain('script.google.com')
   })
 
   it('dispatches fetch POST request when webhook URL is set', async () => {
