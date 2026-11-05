@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+vi.mock('../../src/lib/supabase', () => ({ supabase: null }))
+import { prepareAccessContext } from '../../src/lib/accessContext'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   loadCustodyItems,
   saveCustodyItems,
@@ -9,6 +11,7 @@ import {
 
 describe('Disbursement & Multi-Warehouse Transfer Suite (Phase 3)', () => {
   beforeEach(() => {
+    prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any)
     localStorage.clear()
   })
 
@@ -178,11 +181,11 @@ describe('Disbursement & Multi-Warehouse Transfer Suite (Phase 3)', () => {
 
     expect(outRes.deductedFromMain).toBe(true)
     expect(outRes.addedToTarget).toBe(true)
-    expect(outRes.targetWarehouse?.id).toBe('nursing')
+    expect(outRes.targetWarehouse?.id).toBe('medicine')
 
     const items = loadCustodyItems()
     const mainItem = items.find((i) => i.warehouseId === 'main' && i.name === 'لابتوب HP ProBook')
-    const branchItem = items.find((i) => i.warehouseId === 'nursing' && i.name === 'لابتوب HP ProBook')
+    const branchItem = items.find((i) => i.warehouseId === 'medicine' && i.name === 'لابتوب HP ProBook')
 
     expect(mainItem?.quantity).toBe(12) // 20 - 8
     expect(branchItem?.quantity).toBe(8)

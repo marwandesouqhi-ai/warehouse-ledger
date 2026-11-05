@@ -1,3 +1,5 @@
+import { getAccessSession, canReadCurrentDepartment, assertDepartmentWrite } from './accessContext'
+import { isSystemAdmin } from './permissions'
 export type WarehouseDefinition = {
   id: string
   name: string
@@ -871,6 +873,11 @@ export function migrateClientCustodyData(): void {
 }
 
 export function loadCustodyItems(): CustodyItem[] {
+  if (!canReadCurrentDepartment('warehouse')) return []
+  if (!isSystemAdmin(getAccessSession())) {
+    try { return JSON.parse(localStorage.getItem(CUSTODY_STORAGE_KEY) || '[]') as CustodyItem[] }
+    catch { return [] }
+  }
   // Always perform client migration first to ensure nursing items are safely mapped before warehouseId filtering
   migrateClientCustodyData()
   try {
@@ -955,7 +962,7 @@ export function loadCustodyItems(): CustodyItem[] {
 
         // Auto-heal engineering workshops items: ensure all 81 official workshop items are loaded
         const wsCount = items.filter((i) => i.warehouseId === 'engineering_workshops').length
-        if (wsCount < 81) {
+        if (wsCount < 81 && isSystemAdmin(getAccessSession())) {
           const nonWs = items.filter((i) => i.warehouseId !== 'engineering_workshops')
           items = [...nonWs, ...ENGINEERING_WORKSHOPS_81_ITEMS]
           needsResave = true
@@ -987,6 +994,7 @@ export function loadCustodyItems(): CustodyItem[] {
 import { supabase } from './supabase'
 
 export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
+  if (!canReadCurrentDepartment('warehouse')) return []
   if (!supabase) return []
   try {
     const PAGE_SIZE = 1000
@@ -1091,7 +1099,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
           return false
         })
         .map((r) => r.id)
-      if (legacyIds.length > 0) {
+      if (legacyIds.length > 0 && isSystemAdmin(getAccessSession())) {
         void (async () => {
           try {
             await supabase.from('custody_items').delete().in('id', legacyIds)
@@ -1103,7 +1111,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
     }
 
     const wsCount = resultItems.filter((i) => i.warehouseId === 'engineering_workshops').length
-    if (wsCount < 81) {
+    if (wsCount < 81 && isSystemAdmin(getAccessSession())) {
       const nonWs = resultItems.filter((i) => i.warehouseId !== 'engineering_workshops')
       resultItems = [...nonWs, ...ENGINEERING_WORKSHOPS_81_ITEMS]
       saveCustodyItems(resultItems)
@@ -1112,6 +1120,7 @@ export async function fetchCustodyItemsFromCloud(): Promise<CustodyItem[]> {
       })
     }
 
+    saveCustodyItems(resultItems, false)
     return resultItems
   } catch (err) {
     console.error('Could not fetch custody items from cloud:', err)
@@ -1133,6 +1142,7 @@ export function getWarehouseCustodySnapshot(items: CustodyItem[], warehouseId: s
 }
 
 export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<void> {
+  assertDepartmentWrite('warehouse', 'create')
   if (!supabase || items.length === 0) return
   try {
     // 1. Fetch current cloud state to detect external increments (e.g. from RPC record_purchase)
@@ -1195,13 +1205,19 @@ export async function saveCustodyItemsToCloud(items: CustodyItem[]): Promise<voi
       }
     })
 
-    await supabase.from('custody_items').upsert(rows, { onConflict: 'id' })
+    const writableRows = isSystemAdmin(getAccessSession()) ? rows : rows.filter(row => !cloudMap.has(row.id))
+    if (!writableRows.length) return
+    const { error } = isSystemAdmin(getAccessSession())
+      ? await supabase.from('custody_items').upsert(writableRows, { onConflict: 'id' })
+      : await supabase.from('custody_items').insert(writableRows)
+    if (error) throw error
   } catch (err) {
     console.warn('Could not sync custody items to cloud:', err)
   }
 }
 
 export async function deleteCustodyItemFromCloud(id: string): Promise<void> {
+  assertDepartmentWrite('warehouse', 'delete')
   if (!supabase) return
   try {
     await supabase.from('custody_items').delete().eq('id', id)
@@ -1211,6 +1227,7 @@ export async function deleteCustodyItemFromCloud(id: string): Promise<void> {
 }
 
 export async function clearAllCustodyItemsFromCloud(): Promise<void> {
+  assertDepartmentWrite('warehouse', 'delete')
   if (!supabase) return
   try {
     await supabase.from('custody_items').delete().neq('id', '')
@@ -1219,14 +1236,14 @@ export async function clearAllCustodyItemsFromCloud(): Promise<void> {
   }
 }
 
-export function saveCustodyItems(items: CustodyItem[]): void {
+export function saveCustodyItems(items: CustodyItem[], syncToCloud = true): void {
   try {
     localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(items))
   } catch (err) {
     console.error('Could not save custody items to storage:', err)
   }
   // Asynchronously sync to Supabase cloud
-  void saveCustodyItemsToCloud(items)
+  if (syncToCloud) void saveCustodyItemsToCloud(items).catch(() => undefined)
 }
 
 export function clearAllCustodyItems(): void {

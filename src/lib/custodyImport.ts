@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 import type { CustodyCategory, CustodyCondition, CustodyItem, CustodyType } from './custody'
 import { findWarehouseByRecipient, guessCategory, saveCustodyItems, saveCustodyItemsToCloud, WAREHOUSES } from './custody'
 import { classifyWorkshopItem, WORKSHOP_CATEGORIES } from './workshopCategoryClassifier'
@@ -399,6 +400,7 @@ export function mergeImportedCustody(
   targetWarehouseId: string,
   mode: 'append' | 'replace'
 ): { updatedItems: CustodyItem[]; added: number; replaced: number } {
+  assertDepartmentWrite('warehouse', 'update')
   if (mode === 'replace') {
     // Keep items from other warehouses, replace items of targetWarehouseId
     const otherWarehouseItems = currentItems.filter((i) => i.warehouseId !== targetWarehouseId)
@@ -467,7 +469,7 @@ export function mergeImportedCustody(
   }
 
   saveCustodyItems(updatedItems)
-  void saveCustodyItemsToCloud(updatedItems)
+  void saveCustodyItemsToCloud(updatedItems).catch(() => undefined)
 
   return {
     updatedItems,

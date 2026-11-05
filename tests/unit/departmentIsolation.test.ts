@@ -25,13 +25,13 @@ describe('Department Isolation & Role-Based Access Control Suite', () => {
         expect(canCreatePurchase('warehouse_employee')).toBe(false)
         expect(canCreatePurchase('warehouse_admin')).toBe(false)
         expect(canCreatePurchase('procurement_employee')).toBe(true)
-        expect(canCreatePurchase('procurement_admin')).toBe(true)
+        expect(canCreatePurchase('procurement_admin')).toBe(false)
         expect(canCreatePurchase('system_admin')).toBe(true)
     })
 
     it('isolates warehouse disbursement creation to warehouse roles and system admin', () => {
         expect(canCreateDisbursement('warehouse_employee')).toBe(true)
-        expect(canCreateDisbursement('warehouse_admin')).toBe(true)
+        expect(canCreateDisbursement('warehouse_admin')).toBe(false)
         expect(canCreateDisbursement('procurement_employee')).toBe(false)
         expect(canCreateDisbursement('procurement_admin')).toBe(false)
         expect(canCreateDisbursement('system_admin')).toBe(true)

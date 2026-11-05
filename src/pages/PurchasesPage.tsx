@@ -23,7 +23,7 @@ import {
 import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
-import { can, canCreatePurchase } from '../lib/permissions'
+import { canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
 
 import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
@@ -61,7 +61,6 @@ export default function PurchasesPage({
   onEdit,
   onDelete,
   onLoadDemoData,
-  canEdit = true,
   isSystemAdmin = false,
   session,
   globalSearchTerm = '',
@@ -141,8 +140,8 @@ export default function PurchasesPage({
     }
   }, [purchases])
 
-  const userCanAdd = canCreatePurchase(session) || canEdit
-  const canManageRecords = isSystemAdmin || can(session, 'manage_records')
+  const userCanAdd = canCreatePurchase(session)
+  const canManageRecords = isSystemAdmin
 
   // Search and staff filtering
   const filteredPurchases = useMemo(() => {

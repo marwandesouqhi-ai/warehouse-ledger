@@ -17,7 +17,7 @@ import {
   deleteBudgetPlan,
   type BudgetPlan,
 } from '../lib/budgetRepository'
-import { isSystemAdmin } from '../lib/permissions'
+import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 
 type BudgetPageProps = {
@@ -54,6 +54,7 @@ const CATEGORIES = [
 ]
 
 export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProps) {
+  const canAdd = canAddDepartment(session, getDashboardScope(session) === 'warehouse_only' ? 'warehouse' : 'procurement')
   const [plans, setPlans] = useState<BudgetPlan[]>([])
   const [fiscalYear, setFiscalYear] = useState<number>(2026)
   const [isLoading, setIsLoading] = useState(true)
@@ -112,6 +113,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
+    if (!canAdd) return
     if (!allocatedAmount || Number(allocatedAmount) <= 0) {
       alert('يرجى تحديد مبلغ الميزانية المخصصة.')
       return
@@ -222,8 +224,8 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
             <RotateCw size={16} className={isLoading ? 'animate-spin' : ''} /> تحديث
           </button>
 
-          {isAdmin && (
-            <button type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          {canAdd && (
+            <button hidden={!canAdd} type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
               <Plus size={18} /> إضافة بند ميزانية
             </button>
           )}

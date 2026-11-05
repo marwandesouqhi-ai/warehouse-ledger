@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 import { supabase } from './supabase'
 import { purgeLocalDemoData } from './purgeDemoData'
 
@@ -90,6 +91,7 @@ export async function fetchContracts(): Promise<SupplierContract[]> {
 export async function createContract(
   contract: Omit<SupplierContract, 'id' | 'created_at' | 'updated_at'>
 ): Promise<SupplierContract> {
+  assertDepartmentWrite('procurement', 'create')
   const newContract: SupplierContract = {
     ...contract,
     attachments: contract.attachments || [],
@@ -128,6 +130,7 @@ export async function updateContract(
   id: string,
   updates: Partial<SupplierContract>
 ): Promise<SupplierContract> {
+  assertDepartmentWrite('procurement', 'update')
   const payload = {
     ...updates,
     updated_at: new Date().toISOString(),
@@ -158,6 +161,7 @@ export async function updateContract(
 }
 
 export async function deleteContract(id: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'delete')
   if (supabase) {
     try {
       await supabase.from('supplier_contracts').delete().eq('id', id)

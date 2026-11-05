@@ -1,3 +1,5 @@
+import { canAddDepartment } from '../lib/permissions'
+import { getAccessSession } from '../lib/accessContext'
 import React, { useState, useMemo, useEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import {
@@ -218,6 +220,7 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   }
 
   async function handleSave() {
+    if (!canAddDepartment(getAccessSession(), 'warehouse')) return
     setIsSaving(true)
     setSaveStatus('')
 
@@ -353,7 +356,7 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
               <span>إكسيل</span>
             </button>
 
-            <button
+            <button hidden={!canAddDepartment(getAccessSession(), 'warehouse')}
               type="button"
               className="primary-btn btn-sm"
               onClick={handleSave}

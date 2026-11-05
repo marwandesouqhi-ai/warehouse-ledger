@@ -716,7 +716,7 @@ ${recoveryLink}
 
     const isDepartmentAdmin = caller.app_metadata?.role === "admin"
 
-    if (!isSystemAdmin && !isDepartmentAdmin) {
+    if (!isSystemAdmin) {
       return new Response(JSON.stringify({
         error: "غير مصرح لك: إجراءات إدارة الحسابات مقتصرة حصرياً على مدراء النظام والأقسام.",
       }), {

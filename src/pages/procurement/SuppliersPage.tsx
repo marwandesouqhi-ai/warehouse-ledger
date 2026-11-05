@@ -22,7 +22,7 @@ import {
   type SupplierStats,
   type SupplierStatus,
 } from '../../lib/suppliersRepository'
-import { isSystemAdmin } from '../../lib/permissions'
+import { isSystemAdmin, canAddDepartment } from '../../lib/permissions'
 import { logAuditEvent } from '../../lib/auditLogger'
 import { matchesSearch } from '../../lib/searchUtils'
 
@@ -31,6 +31,7 @@ interface SuppliersPageProps {
 }
 
 export default function SuppliersPage({ session }: SuppliersPageProps) {
+  const canAdd = canAddDepartment(session, 'procurement')
   const [suppliers, setSuppliers] = useState<SupplierStats[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string>('')
@@ -145,11 +146,13 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   }
 
   function openAddModal() {
+    if (!canAdd) return
     resetForm()
     setIsAddModalOpen(true)
   }
 
   function openEditModal(supplier: SupplierStats) {
+    if (!isSysAdmin) return
     resetForm()
     setEditingSupplier(supplier)
     setFormName(supplier.name)
@@ -163,6 +166,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   }
 
   async function handleAddSupplierSubmit(e: React.FormEvent) {
+    if (!canAdd) return
     e.preventDefault()
     setActionError('')
     setIsSubmitting(true)
@@ -202,6 +206,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   }
 
   async function handleEditSupplierSubmit(e: React.FormEvent) {
+    if (!isSysAdmin) return
     e.preventDefault()
     if (!editingSupplier) return
 
@@ -261,6 +266,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   }
 
   async function handleQuickStatusChange(supplier: SupplierStats, newStatus: SupplierStatus) {
+    if (!isSysAdmin) return
     try {
       await updateSupplier(supplier.id, { status: newStatus })
       await logAuditEvent({
@@ -291,7 +297,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
           <span>تسجيل وتأهيل الموردين المعتمدين، متابعة التقييمات، وإحصائيات التوريد الحقيقية</span>
         </div>
         <div className="headline-actions">
-          <button
+          <button hidden={!canAdd}
             type="button"
             className="primary-btn inline-flex items-center gap-1"
             onClick={openAddModal}
@@ -536,7 +542,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                   </td>
                   <td className="text-center">
                     <div className="suppliers-actions-group">
-                      <button
+                      <button hidden={!isSysAdmin}
                         type="button"
                         className="suppliers-icon-btn"
                         title="تعديل المورد"
@@ -547,7 +553,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       </button>
 
                       {/* Quick status switch dropdown */}
-                      <select
+                      <select hidden={!isSysAdmin}
                         value={supplier.status}
                         onChange={(e) => handleQuickStatusChange(supplier, e.target.value as SupplierStatus)}
                         className="suppliers-status-select"
@@ -560,7 +566,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                       </select>
 
                       {isSysAdmin && (
-                        <button
+                        <button hidden={!isSysAdmin}
                           type="button"
                           className="suppliers-icon-btn danger"
                           title="حذف المورد نهائياً (متاح فقط إذا لم تكن له حركات)"

@@ -108,7 +108,7 @@ describe('Enterprise Directory Authentication & User Provisioning Suite', () => 
       username: 'marwan-desouky',
       displayName: 'مروان دسوقي (مدير النظام)',
       password: '',
-      role: 'admin', // even if stored as admin
+      role: 'system_admin',
       activationCode: '1001',
       status: 'active',
       createdAt: new Date().toISOString(),

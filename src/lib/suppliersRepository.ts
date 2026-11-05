@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 /**
  * src/lib/suppliersRepository.ts
  *
@@ -210,6 +211,7 @@ export async function fetchActiveSuppliers(): Promise<Supplier[]> {
  * إنشاء مورد جديد مع منع التكرار بالاسم المطبّع
  */
 export async function createSupplier(input: CreateSupplierInput): Promise<Supplier> {
+  assertDepartmentWrite('procurement', 'create')
   const rawName = (input.name || '').trim()
   if (!rawName) {
     throw new Error('اسم المورد مطلوب ولا يمكن تركه فارغاً.')
@@ -295,6 +297,7 @@ export async function createSupplier(input: CreateSupplierInput): Promise<Suppli
  * تعديل بيانات مورد قائم
  */
 export async function updateSupplier(id: string, updates: UpdateSupplierInput): Promise<Supplier> {
+  assertDepartmentWrite('procurement', 'update')
   const updatePayload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   }
@@ -385,6 +388,7 @@ export async function updateSupplier(id: string, updates: UpdateSupplierInput): 
  * حذف مورد — مسموح فقط إذا لم يكن للمورد أي فواتير مسجلة
  */
 export async function deleteSupplierSafe(id: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'delete')
   if (supabase) {
     try {
       // 1. فحص وجود فواتير مرتبطة

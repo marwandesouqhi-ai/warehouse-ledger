@@ -1,3 +1,5 @@
+import { assertDepartmentWrite, getAccessSession } from './accessContext'
+import { getDashboardScope } from './permissions'
 import { supabase } from './supabase'
 import { purgeLocalDemoData } from './purgeDemoData'
 
@@ -78,6 +80,7 @@ export async function fetchFinancialReports(): Promise<FinancialReport[]> {
 export async function createFinancialReport(
   report: Omit<FinancialReport, 'id' | 'created_at' | 'updated_at'>
 ): Promise<FinancialReport> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'create')
   const newReport: FinancialReport = {
     ...report,
     id: `fr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -108,6 +111,7 @@ export async function updateFinancialReportStatus(
   status: FinancialReport['status'],
   approvedBy?: string
 ): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   const updates: Partial<FinancialReport> = {
     status,
     updated_at: new Date().toISOString(),
@@ -130,6 +134,7 @@ export async function updateFinancialReportStatus(
 }
 
 export async function deleteFinancialReport(id: string): Promise<void> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'delete')
   if (supabase) {
     try {
       await supabase.from('financial_reports').delete().eq('id', id)

@@ -5,7 +5,7 @@ import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, FileUp, RotateCcw
 import type { FixtureMovement } from '../lib/fixture'
 import { parseMovementRows } from '../lib/importRows'
 import { normalizeHeader } from '../lib/parse'
-import { canEditInventory } from '../lib/supabase'
+import { isSystemAdmin } from '../lib/permissions'
 import { getDashboardScope } from '../lib/permissions'
 
 type ImportResult = { added: number; skipped: number }
@@ -34,7 +34,7 @@ function normalizeExcelDates(rows: Array<Record<string, unknown>>, XLSX: typeof 
 }
 
 export default function ImportPage({ onImport, session }: ImportPageProps) {
-    const canEdit = canEditInventory(session)
+    const canEdit = isSystemAdmin(session)
     const scope = getDashboardScope(session)
     const [preview, setPreview] = useState<FixtureMovement[]>([])
     const [fileName, setFileName] = useState('')

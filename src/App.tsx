@@ -1,3 +1,4 @@
+import { prepareAccessContext, getAccessSession } from './lib/accessContext'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
@@ -58,13 +59,14 @@ import {
 import { deriveMovement, deriveSummary } from './lib/derive'
 import { fixtureMovements, type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
-import { deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
+import { createWarehouseIssue, deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
 import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings } from './lib/settings'
 import { supabase } from './lib/supabase'
 import {
+  canCreatePurchase,
+  canCreateDisbursement,
   isSystemAdmin as permsIsSystemAdmin,
-  can,
   getEffectiveRole,
   canViewPage,
   canAccessRoute,
@@ -76,7 +78,6 @@ import {
   loadCustodyItems,
   saveCustodyItems,
   fetchCustodyItemsFromCloud,
-  saveCustodyItemsToCloud,
   syncInwardMovementToCustody,
   syncOutwardMovementToCustody,
   fixtureCustodyItems,
@@ -268,11 +269,12 @@ function App() {
   const location = useLocation()
   const shouldReduceMotion = useReducedMotion()
   const [darkMode, setDarkMode] = useState(loadDarkMode)
-  const [movements, setMovements] = useState<FixtureMovement[]>(loadMovements)
   const [session, setSession] = useState<Session | null>(() => {
     const local = getLocalSession()
+    prepareAccessContext(local)
     return local as unknown as Session | null
   })
+  const [movements, setMovements] = useState<FixtureMovement[]>([])
   const [authLoading, setAuthLoading] = useState(() => !getLocalSession() && Boolean(supabase))
   const [isSettingPassword, setIsSettingPassword] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -395,8 +397,15 @@ function App() {
   const { isInstalled, promptInstall } = usePwaInstall()
 
   // Custody and Dashboard Analytics State
-  const [custodyItems, setCustodyItems] = useState<CustodyItem[]>(loadCustodyItems)
+  const [custodyItems, setCustodyItems] = useState<CustodyItem[]>([])
   const dashboardScope = getDashboardScope(session)
+  function updateAccessSession(next: Session | null) {
+    if (prepareAccessContext(next)) {
+      setMovements([])
+      setCustodyItems([])
+    }
+    setSession(next)
+  }
   const [dashboardAnalyticsTab, setDashboardAnalyticsTab] = useState<'all' | 'procurement' | 'movements' | 'custody'>(
     dashboardScope === 'purchases_only' ? 'procurement' : 'all'
   )
@@ -418,6 +427,7 @@ function App() {
 
     // Ensure Main Warehouse contains the purchase items if currently missing
     setCustodyItems((current) => {
+      if (!permsIsSystemAdmin(getAccessSession())) return current
       const hasMain = current.some((i) => i.warehouseId === 'main')
       if (!hasMain && fixtureCustodyItems.length > 0) {
         const merged = [...fixtureCustodyItems.map((i) => ({ ...i })), ...current]
@@ -461,18 +471,8 @@ function App() {
 
   const effectiveRole = getEffectiveRole(session)
   const isSystemAdmin = permsIsSystemAdmin(session)
-  const canManageRecords = isSystemAdmin || can(session, 'manage_records')
-  const canEdit = canManageRecords || [
-    'system_admin',
-    'admin',
-    'warehouse_admin',
-    'warehouse_employee',
-    'procurement_admin',
-    'procurement_employee',
-    'warehouse_staff',
-    'purchasing_staff',
-    'editor',
-  ].includes(effectiveRole)
+  const canManageRecords = isSystemAdmin
+  const canEdit = canCreateDisbursement(session) || canCreatePurchase(session)
   const activeUserDisplayName = (
     session?.user?.user_metadata?.displayName ||
     session?.user?.user_metadata?.name ||
@@ -735,10 +735,10 @@ function App() {
     function handleLocalAuth() {
       const local = getLocalSession()
       if (local) {
-        setSession(local as unknown as Session)
+        updateAccessSession(local as unknown as Session)
         setAuthLoading(false)
       } else if (!supabase) {
-        setSession(null)
+        updateAccessSession(null)
         setAuthLoading(false)
       }
     }
@@ -776,10 +776,10 @@ function App() {
         })
       }
       if (nextSession) {
-        setSession(nextSession)
+        updateAccessSession(nextSession)
       } else {
         const local = getLocalSession()
-        setSession(local ? (local as unknown as Session) : null)
+        updateAccessSession(local ? (local as unknown as Session) : null)
       }
       setAuthLoading(false)
     })
@@ -788,11 +788,11 @@ function App() {
       if (!active) return
       if (error) setSyncError(error.message)
       if (data.session) {
-        setSession(data.session)
+        updateAccessSession(data.session)
       } else {
         const local = getLocalSession()
         if (local) {
-          setSession(local as unknown as Session)
+          updateAccessSession(local as unknown as Session)
         }
       }
       setAuthLoading(false)
@@ -800,7 +800,7 @@ function App() {
       if (!active) return
       setSyncError(error instanceof Error ? error.message : 'تعذر التحقق من جلسة الدخول.')
       const local = getLocalSession()
-      if (local) setSession(local as unknown as Session)
+      if (local) updateAccessSession(local as unknown as Session)
       setAuthLoading(false)
     })
 
@@ -825,7 +825,7 @@ function App() {
     void (async () => {
       // 1. Fetch warehouse movements from Supabase
       let remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
-      if (remoteMovements.length === 0) {
+      if (remoteMovements.length === 0 && isSystemAdmin) {
         let initialMovements: FixtureMovement[] = []
         try {
           const cached = localStorage.getItem(storageKey)
@@ -863,35 +863,14 @@ function App() {
         // ignore
       }
 
-      // 3. Fetch custody items from Supabase
-      try {
-        const cloudCustody = await fetchCustodyItemsFromCloud()
-        if (cloudCustody.length > 0) {
-          const hasMain = cloudCustody.some((i) => i.warehouseId === 'main')
-          const finalItems = hasMain ? cloudCustody : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudCustody]
-          setCustodyItems(finalItems)
-          saveCustodyItems(finalItems)
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('custody-changed'))
-          }
-        } else {
-          const localCustody = loadCustodyItems()
-          const hasMain = localCustody.some((i) => i.warehouseId === 'main')
-          const finalItems = hasMain ? localCustody : [...fixtureCustodyItems.map((i) => ({ ...i })), ...localCustody]
-          if (finalItems.length > 0) {
-            void saveCustodyItemsToCloud(finalItems)
-          }
-        }
-      } catch {
-        // ignore
+      // Read only the department-visible server snapshot. Reads never seed data.
+      if (getDashboardScope(session) !== 'purchases_only') {
+        try {
+          const cloudCustody = await fetchCustodyItemsFromCloud()
+          if (active) setCustodyItems(cloudCustody)
+        } catch { /* report the main synchronization outcome below */ }
       }
-
-      // 4. Sync app users with Supabase app_users table
-      try {
-        await syncUsersWithCloud()
-      } catch {
-        // ignore
-      }
+      if (isSystemAdmin) await syncUsersWithCloud().catch(() => undefined)
 
       setSyncStatus('synced')
     })().catch((error: unknown) => {
@@ -992,6 +971,9 @@ function App() {
   }, [darkMode])
 
   async function addMovement(movement: FixtureMovement, redirectPath: string | null = '/purchases') {
+    if (Number(movement.qin) > 0 ? !canCreatePurchase(session) : !canCreateDisbursement(session)) {
+      throw new Error('حسابك لا يملك صلاحية الإضافة في هذا القسم.')
+    }
     const isPurchase = Number(movement.qin) > 0
     let savedMovement = movement
 
@@ -1041,17 +1023,12 @@ function App() {
       } else {
         // 2. حركات المنصرف والتحويل: الحفظ والخصم المحلي
         try {
-          const [saved] = await saveMovements([movement], session.user.id)
-          if (!saved) throw new Error('الحركة موجودة بالفعل في السجل.')
+          const saved = await createWarehouseIssue(movement, session.user.id)
           savedMovement = saved
           setMovements((current) => [...current, saved])
           setSyncStatus('synced')
-
-          try {
-            syncOutwardMovementToCustody(savedMovement)
-          } catch (custodyErr) {
-            console.warn('Custody synchronization warning:', custodyErr)
-          }
+          const cloudCustody = await fetchCustodyItemsFromCloud()
+          setCustodyItems(cloudCustody)
         } catch (error) {
           setSyncStatus('error')
           setSyncError(error instanceof Error ? error.message : 'تعذر حفظ الحركة على الخادم.')
@@ -1176,6 +1153,7 @@ function App() {
   }
 
   async function mergeImportedMovements(imported: FixtureMovement[]) {
+    if (!isSystemAdmin) throw new Error('استبدال واستيراد السجلات مقتصر على مدير النظام.')
     const knownMovements = new Set(movements.map(movementFingerprint))
     const uniqueMovements: FixtureMovement[] = []
     let skipped = 0
@@ -1412,7 +1390,7 @@ function App() {
       })
     }
     clearLocalSession()
-    setSession(null)
+    updateAccessSession(null)
     navigate('/', { replace: true })
     if (supabase) void supabase.auth.signOut()
   }
@@ -1437,12 +1415,12 @@ function App() {
           // Refresh session after activation — the session is already live from the invite flow
           void supabase?.auth.getSession().then(({ data }) => {
             if (data?.session) {
-              setSession(data.session)
+              updateAccessSession(data.session)
             } else {
               // Fallback: force a session check after a short delay (metadata propagation)
               setTimeout(() => {
                 void supabase?.auth.getSession().then(({ data: d2 }) => {
-                  if (d2?.session) setSession(d2.session)
+                  if (d2?.session) updateAccessSession(d2.session)
                 })
               }, 1200)
             }
@@ -1498,7 +1476,7 @@ function App() {
         settings={settings}
         onPasswordSet={() => {
           const local = getLocalSession()
-          if (local) setSession(local as unknown as Session)
+          if (local) updateAccessSession(local as unknown as Session)
         }}
       />
     )
@@ -3736,7 +3714,7 @@ function MovementForm({
         return 'outward'
       }
     }
-    return 'inward'
+    return canCreatePurchase(getAccessSession()) ? 'inward' : 'outward'
   })
 
   // قائمة المخازن والكليات الفرعية التابعة للجامعة (ما عدا المخزن الرئيسي)
@@ -3905,7 +3883,7 @@ function MovementForm({
     <div className="movement-form-container">
       {/* تابات التبديل بين الوارد والصرف */}
       <div className="movement-type-tabs" role="tablist" aria-label="نوع حركة المخزن">
-        <button
+        <button hidden={!canCreatePurchase(getAccessSession())}
           type="button"
           role="tab"
           aria-selected={movementType === 'inward'}
@@ -3925,7 +3903,7 @@ function MovementForm({
           <span className="movement-tab-badge inward">وارد +</span>
         </button>
 
-        <button
+        <button hidden={!canCreateDisbursement(getAccessSession())}
           type="button"
           role="tab"
           aria-selected={movementType === 'outward'}

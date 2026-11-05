@@ -1,3 +1,4 @@
+import { prepareAccessContext } from '../../src/lib/accessContext'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   createSupplierQuote,
@@ -17,6 +18,7 @@ vi.mock('../../src/lib/supabase', () => ({
 
 describe('Quotes Comparison and Purchase Orders Suite', () => {
   beforeEach(() => {
+    prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any)
     vi.clearAllMocks()
   })
 

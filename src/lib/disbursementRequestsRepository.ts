@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 import { supabase } from './supabase'
 
 export type DisbursementRequest = {
@@ -63,6 +64,7 @@ export async function fetchDisbursementRequests(): Promise<DisbursementRequest[]
 export async function createDisbursementRequest(
   item: Omit<DisbursementRequest, 'id' | 'created_at' | 'updated_at'>
 ): Promise<DisbursementRequest> {
+  assertDepartmentWrite('warehouse', 'create')
   const newRecord: DisbursementRequest = {
     ...item,
     id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -103,6 +105,7 @@ export async function updateDisbursementRequestStatus(
     rejection_reason?: string
   }
 ): Promise<void> {
+  assertDepartmentWrite('warehouse', 'update')
   const updates = {
     status,
     ...extra,

@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 import { supabase } from './supabase'
 import { purgeLocalDemoData } from './purgeDemoData'
 
@@ -92,6 +93,7 @@ export async function fetchAssetMovements(assetCode?: string): Promise<AssetMove
 export async function createAssetMovement(
   item: Omit<AssetMovement, 'id' | 'created_at'>
 ): Promise<AssetMovement> {
+  assertDepartmentWrite('warehouse', 'create')
   const newRecord: AssetMovement = {
     ...item,
     id: `ast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -117,6 +119,7 @@ export async function createAssetMovement(
 }
 
 export async function deleteAssetMovement(id: string): Promise<boolean> {
+  assertDepartmentWrite('warehouse', 'delete')
   if (supabase) {
     try {
       await supabase.from('asset_movement_log').delete().eq('id', id)

@@ -17,7 +17,7 @@ import {
   updateFinancialReportStatus,
   type FinancialReport,
 } from '../lib/financialReportsRepository'
-import { isSystemAdmin } from '../lib/permissions'
+import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 
 type FinancialReportsPageProps = {
@@ -39,6 +39,7 @@ const STATUS_CONFIG = {
 }
 
 export default function FinancialReportsPage({ session, currency = 'EGP' }: FinancialReportsPageProps) {
+  const canAdd = canAddDepartment(session, getDashboardScope(session) === 'warehouse_only' ? 'warehouse' : 'procurement')
   const [reports, setReports] = useState<FinancialReport[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -100,6 +101,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
+    if (!canAdd) return
     if (!reportTitle.trim() || !periodFrom || !periodTo) {
       alert('يرجى تعبئة عنوان التقرير والفترة الزمنية.')
       return
@@ -185,7 +187,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
           <button type="button" className="secondary-btn" onClick={loadData} disabled={isLoading}>
             <RotateCw size={16} className={isLoading ? 'animate-spin' : ''} /> تحديث
           </button>
-          <button type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <button hidden={!canAdd} type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
             <Plus size={18} /> إنشاء تقرير دوري جديد
           </button>
         </div>

@@ -111,7 +111,7 @@ export default function CustodyPage({
   onSaveMovement,
 }: CustodyPageProps) {
   const canEdit = canEditInventory(session)
-  const canDisburse = canCreateDisbursement(session) || canEdit
+  const canDisburse = canCreateDisbursement(session)
   const isSystemAdmin = checkIsSystemAdmin(session)
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
@@ -177,6 +177,7 @@ export default function CustodyPage({
 
     // Ensure main warehouse items exist locally if missing and restore workshop custody if truncated
     setItems((currentItems) => {
+      if (!isSystemAdmin) return currentItems
       const wsCount = currentItems.filter((i) => i.warehouseId === 'engineering_workshops').length
       if (wsCount < 81) {
         return loadCustodyItems()
@@ -194,6 +195,11 @@ export default function CustodyPage({
     let isMounted = true
     void fetchCustodyItemsFromCloud().then((cloudItems) => {
       if (!isMounted) return
+      if (!isSystemAdmin) {
+        setItems(cloudItems)
+        saveCustodyItems(cloudItems, false)
+        return
+      }
       if (cloudItems && cloudItems.length > 0) {
         const hasMain = cloudItems.some((i) => i.warehouseId === 'main')
         let finalItems = hasMain ? cloudItems : [...fixtureCustodyItems.map((i) => ({ ...i })), ...cloudItems]
@@ -339,6 +345,7 @@ export default function CustodyPage({
   }, [outwardMovements])
 
   function handleSaveItem(item: CustodyItem) {
+    if (!canEdit) return
     const exists = items.some((i) => i.id === item.id)
     if (exists && !isSystemAdmin) {
       alert('تعديل الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
@@ -392,7 +399,26 @@ export default function CustodyPage({
     setDeletingItem(null)
   }
 
-  function handleTransfer(
+  async function saveEmployeeTransfer(item: CustodyItem, targetWarehouseId: string, quantity: number,
+    custodian: string, location: string, permit: string, notes: string) {
+    if (!canEdit || !onSaveMovement) throw new Error('لا تملك صلاحية إضافة حركة نقل.')
+    const today = new Date().toISOString().slice(0, 10)
+    const movement: FixtureMovement = {
+      id: crypto.randomUUID(), date: today, issue: today, inv: '', from: '',
+      to: WAREHOUSES.find(w => w.id === targetWarehouseId)?.name || targetWarehouseId,
+      item: item.name, price: item.unitPrice || 0, qin: 0, qout: quantity,
+      permit: permit || 'TR-' + crypto.randomUUID(), notes,
+      sourceWarehouseId: item.warehouseId, sourceCustodyId: item.id,
+      destType: 'warehouse', destWarehouseId: targetWarehouseId,
+      custodianName: custodian, destinationLocation: location,
+    }
+    await onSaveMovement(movement, null)
+    const cloudItems = await fetchCustodyItemsFromCloud()
+    setItems(cloudItems)
+    saveCustodyItems(cloudItems, false)
+  }
+
+  async function handleTransfer(
     item: CustodyItem,
     targetWarehouseId: string,
     transferQty: number,
@@ -400,6 +426,12 @@ export default function CustodyPage({
     newLocation: string,
     transferReason: string
   ) {
+    if (!canEdit) return
+    if (!isSystemAdmin) {
+      await saveEmployeeTransfer(item, targetWarehouseId, transferQty, newCustodian, newLocation, '', transferReason)
+      setTransferringItem(null)
+      return
+    }
     const targetWarehouse = WAREHOUSES.find((w) => w.id === targetWarehouseId)
     if (!targetWarehouse) return
 
@@ -459,7 +491,7 @@ export default function CustodyPage({
   }
 
   // Central supply disbursement handler (from main to any branch)
-  function handleDisburseFromMain(
+  async function handleDisburseFromMain(
     sourceItem: CustodyItem,
     targetWarehouseId: string,
     quantity: number,
@@ -467,6 +499,13 @@ export default function CustodyPage({
     newLocation: string,
     permitNo: string
   ) {
+    if (!canEdit) return
+    if (!isSystemAdmin) {
+      await saveEmployeeTransfer(sourceItem, targetWarehouseId, quantity, recipientCustodian, newLocation, permitNo, '')
+      setIsSupplyingFromMain(false)
+      setSupplyingRowItem(null)
+      return
+    }
     const targetWh = WAREHOUSES.find((w) => w.id === targetWarehouseId)
     if (!targetWh) return
 
@@ -708,7 +747,7 @@ export default function CustodyPage({
             </button>
           )}
 
-          {canEdit && (
+          {isSystemAdmin && (
             <button
               type="button"
               className="highlight-action-btn"
@@ -721,7 +760,7 @@ export default function CustodyPage({
           )}
 
           {/* Inventory Settlement Modal Button */}
-          <button
+          <button hidden={!canEdit}
             type="button"
             className="primary-btn"
             onClick={() => setIsSettlementModalOpen(true)}
@@ -2168,7 +2207,7 @@ function TransferCustodyModal({
     newCustodian: string,
     newLocation: string,
     transferReason: string
-  ) => void
+  ) => Promise<void>
   onClose: () => void
 }) {
   const otherWarehouses = useMemo(() => {
@@ -2182,7 +2221,7 @@ function TransferCustodyModal({
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
 
-  function handleFormSubmit(e: FormEvent) {
+  async function handleFormSubmit(e: FormEvent) {
     e.preventDefault()
     if (qty < 1 || qty > item.quantity) {
       setError(`الكمية المنقولة يجب أن تكون بين 1 و ${item.quantity}.`)
@@ -2193,7 +2232,8 @@ function TransferCustodyModal({
       return
     }
 
-    onTransfer(item, targetId, qty, newCustodian, newLocation, reason)
+    try { await onTransfer(item, targetId, qty, newCustodian, newLocation, reason) }
+    catch (err) { setError(err instanceof Error ? err.message : 'تعذر نقل العهدة.') }
   }
 
   return (
@@ -2315,7 +2355,7 @@ function SupplyFromMainModal({
     recipientCustodian: string,
     newLocation: string,
     permitNo: string
-  ) => void
+  ) => Promise<void>
   onClose: () => void
 }) {
   const branchWarehouses = useMemo(() => {
@@ -2338,7 +2378,7 @@ function SupplyFromMainModal({
   const [permitNo, setPermitNo] = useState<string>(`صرف-${new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`)
   const [error, setError] = useState<string>('')
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!selectedItem) {
       setError('لا توجد أصناف متاحة للصرف في المخزن الرئيسي حالياً.')
@@ -2353,7 +2393,8 @@ function SupplyFromMainModal({
       return
     }
 
-    onDisburse(selectedItem, targetWarehouseId, quantity, recipientCustodian.trim(), newLocation.trim(), permitNo.trim())
+    try { await onDisburse(selectedItem, targetWarehouseId, quantity, recipientCustodian.trim(), newLocation.trim(), permitNo.trim()) }
+    catch (err) { setError(err instanceof Error ? err.message : 'تعذر الصرف.') }
   }
 
   return (

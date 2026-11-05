@@ -1,3 +1,4 @@
+import { canAddDepartment, isSystemAdmin } from '../../lib/permissions'
 import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -54,6 +55,8 @@ function sanitizeExcelCell<T>(value: T): T {
 }
 
 export default function QuotesPage({ session, currency }: QuotesPageProps) {
+  const canAdd = canAddDepartment(session, 'procurement')
+  const isSysAdmin = isSystemAdmin(session)
   const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [selectedRequestId, setSelectedRequestId] = useState<string>('')
   const [quotes, setQuotes] = useState<SupplierQuote[]>([])
@@ -92,7 +95,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   )
   const [reqRequestedBy, setReqRequestedBy] = useState(activeUserName)
   const [reqJustification, setReqJustification] = useState('')
-  const [reqSubmitImmediately, setReqSubmitImmediately] = useState(true)
+  const [reqSubmitImmediately, setReqSubmitImmediately] = useState(isSysAdmin)
   const [reqItems, setReqItems] = useState([
     { item_name: '', quantity: 1, unit: 'قطعة', estimated_price: 0 },
   ])
@@ -123,6 +126,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }, [reqItems])
 
   async function handleCreatePurchaseRequest(e: React.FormEvent) {
+    if (!canAdd) return
     e.preventDefault()
     setCreateReqError('')
 
@@ -160,7 +164,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           unit: i.unit.trim() || 'قطعة',
           estimated_price: Number(i.estimated_price) || 0,
         })),
-        reqSubmitImmediately
+        isSysAdmin && reqSubmitImmediately
       )
 
       await logAuditEvent({
@@ -270,6 +274,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }, [purchaseOrders, selectedRequestId])
 
   async function handleAddQuoteSubmit(e: React.FormEvent) {
+    if (!canAdd) return
     e.preventDefault()
     if (!selectedRequestId) return
 
@@ -332,6 +337,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }
 
   async function handleSelectQuote(quote: SupplierQuote) {
+    if (!isSysAdmin) return
     if (!selectedRequestId) return
     setError('')
     try {
@@ -351,6 +357,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }
 
   async function handleCreatePurchaseOrder() {
+    if (!canAdd) return
     if (!selectedQuote) return
     setError('')
     setIsSubmitting(true)
@@ -380,6 +387,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }
 
   async function handleMarkReceived(po: PurchaseOrder) {
+    if (!isSysAdmin) return
     try {
       await markPoReceivedRpc(po.id)
       await logAuditEvent({
@@ -397,6 +405,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
   }
 
   async function handleMarkInvoiced(po: PurchaseOrder) {
+    if (!isSysAdmin) return
     try {
       await markPoInvoicedRpc(po.id)
       await logAuditEvent({
@@ -459,7 +468,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
             <span>{loading ? 'جاري التحميل...' : 'تحديث البيانات'}</span>
           </button>
-          <button
+          <button hidden={!canAdd}
             type="button"
             onClick={() => setIsCreateRequestModalOpen(true)}
             className="primary-btn inline-flex items-center gap-1.5"
@@ -555,7 +564,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
               </div>
 
               <div className="flex gap-2">
-                <button
+                <button hidden={!canAdd}
                   type="button"
                   className="primary-btn inline-flex items-center gap-1"
                   onClick={() => setIsAddQuoteModalOpen(true)}
@@ -590,7 +599,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           <p className="text-xs text-muted mb-4 max-w-md mx-auto">
             يمكنك اختيار طلب شراء سابق من القائمة المنسدلة أعلاه، أو البدء فوراً بإنشاء طلب شراء جديد وتحديد بنود التوريد المطلوبة.
           </p>
-          <button
+          <button hidden={!canAdd}
             type="button"
             className="primary-btn inline-flex items-center gap-1.5"
             onClick={() => setIsCreateRequestModalOpen(true)}
@@ -606,7 +615,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
           <p className="text-muted font-sm mb-4">
             يمكنك البدء في تلقي عروض الموردين المعتمدين وتسجيل أسعارهم ومواعيد التوريد.
           </p>
-          <button
+          <button hidden={!canAdd}
             type="button"
             className="primary-btn"
             onClick={() => setIsAddQuoteModalOpen(true)}
@@ -626,7 +635,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                   العرض المختار: «{selectedQuote.supplier_name}» ({formatCurrency(selectedQuote.total_price, currency)})
                 </span>
                 {!existingPoForRequest && selectedRequest?.status === 'approved' && (
-                  <button
+                  <button hidden={!canAdd}
                     type="button"
                     className="primary-btn inline-flex items-center gap-1"
                     onClick={handleCreatePurchaseOrder}
@@ -716,7 +725,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                             <Check size={14} /> العرض الفائز
                           </button>
                         ) : (
-                          <button
+                          <button hidden={!isSysAdmin}
                             type="button"
                             className="secondary-btn quotes-btn-choose"
                             disabled={Boolean(existingPoForRequest) || selectedRequest?.status !== 'approved'}
@@ -809,7 +818,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                     <td className="text-center">
                       <div className="inline-flex gap-2">
                         {po.status === 'open' && (
-                          <button
+                          <button hidden={!isSysAdmin}
                             type="button"
                             className="secondary-btn quotes-btn-choose"
                             onClick={() => handleMarkReceived(po)}
@@ -819,7 +828,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                           </button>
                         )}
                         {po.status === 'received' && (
-                          <button
+                          <button hidden={!isSysAdmin}
                             type="button"
                             className="secondary-btn quotes-btn-choose"
                             onClick={() => handleMarkInvoiced(po)}

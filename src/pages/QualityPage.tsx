@@ -1,3 +1,4 @@
+import { isSystemAdmin } from '../lib/permissions'
 import { useState } from 'react'
 import {
   AlertCircle,
@@ -85,6 +86,7 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
   })
 
   const handleAutoRepair = async () => {
+    if (!isSystemAdmin(session)) return
     setIsRepairing(true)
     try {
       const res = await runDataQualityAutoRepair(session?.user?.id)
@@ -109,7 +111,7 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
           <p>تنبيهات محسوبة مباشرة من الحركات المسجلة.</p>
         </div>
         <div className="headline-actions mr-auto flex gap-2">
-          <button
+          <button hidden={!isSystemAdmin(session)}
             type="button"
             className="primary-btn flex items-center gap-2"
             onClick={handleAutoRepair}

@@ -29,7 +29,7 @@ import {
   fileToDataUrl,
   downloadAttachment,
 } from '../lib/procurementAttachments'
-import { isSystemAdmin } from '../lib/permissions'
+import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 
 type ContractsPageProps = {
@@ -52,6 +52,7 @@ const STATUS_CONFIG = {
 }
 
 export default function ContractsPage({ session }: ContractsPageProps) {
+  const canAdd = canAddDepartment(session, 'procurement')
   const [contracts, setContracts] = useState<SupplierContract[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -171,6 +172,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
+    if (!canAdd) return
     if (!supplierName.trim() || !contractTitle.trim() || !startDate || !endDate) {
       alert('يرجى تعبئة كافة الحقول الأساسية وتواريخ العقد.')
       return
@@ -260,7 +262,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
           <button type="button" className="secondary-btn" onClick={loadData} disabled={isLoading}>
             <RotateCw size={16} className={isLoading ? 'animate-spin' : ''} /> تحديث
           </button>
-          <button type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <button hidden={!canAdd} type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
             <Plus size={18} /> إضافة عقد جديد
           </button>
         </div>

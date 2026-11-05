@@ -1,4 +1,5 @@
 import { createClient, type Session, type User } from '@supabase/supabase-js'
+import { accessScopedFetch } from './accessContext'
 
 const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || ''
 const supabasePublishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || ''
@@ -21,6 +22,7 @@ if (typeof window !== 'undefined') {
 
 export const supabase = supabaseUrl && supabasePublishableKey
     ? createClient(supabaseUrl, supabasePublishableKey, {
+        global: { fetch: accessScopedFetch },
         auth: {
             storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
             persistSession: true,
@@ -79,15 +81,6 @@ export function canEditInventory(sessionOrUser: Session | User | null | undefine
 
     const appMeta = ((user as { app_metadata?: Record<string, unknown> }).app_metadata) || {}
     const role = (appMeta.role || '') as string
-    return [
-        'admin',
-        'editor',
-        'warehouse_admin',
-        'warehouse_employee',
-        'procurement_admin',
-        'procurement_employee',
-        'warehouse_staff',
-        'purchasing_staff',
-    ].includes(role)
+    return ['warehouse_employee', 'warehouse_staff', 'editor'].includes(role)
 }
 

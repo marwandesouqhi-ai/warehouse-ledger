@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { prepareAccessContext } from '../../src/lib/accessContext'
+vi.mock('../../src/lib/supabase', () => ({ supabase: null }))
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import {
   normalizeArabicText,
   parseCategory,
@@ -9,6 +11,8 @@ import {
   mergeImportedCustody,
 } from '../../src/lib/custodyImport'
 import type { CustodyItem } from '../../src/lib/custody'
+
+beforeEach(() => prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any))
 
 describe('Custody Excel Import Suite', () => {
   it('normalizes Arabic text correctly', () => {
@@ -68,13 +72,14 @@ describe('Custody Excel Import Suite', () => {
       },
       {
         'كود العهدة': 'EMPTY-ROW',
-        // Missing name - should be skipped
+        // Missing name - receives fallback name instead of being dropped
       },
     ]
 
     const result = parseRawCustodyRows(rawRows, 'main')
-    expect(result.validItems.length).toBe(2)
-    expect(result.skippedCount).toBe(1)
+    expect(result.validItems.length).toBe(3)
+    expect(result.skippedCount).toBe(0)
+    expect(result.validItems[2].name).toContain('صنف بدون اسم')
 
     const item1 = result.validItems[0]
     expect(item1.code).toBe('MAIN-001')
@@ -92,7 +97,7 @@ describe('Custody Excel Import Suite', () => {
 
     const item2 = result.validItems[1]
     expect(item2.name).toBe('مكتب إداري خشب زان')
-    expect(item2.category).toBe('أثاث وتجهيزات')
+    expect(item2.category).toBe('نجارة وأخشاب')
     expect(item2.quantity).toBe(4)
     expect(item2.unitPrice).toBe(6000)
     expect(item2.value).toBe(24000)

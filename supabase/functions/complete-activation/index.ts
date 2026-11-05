@@ -72,7 +72,7 @@ serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     // For complete_activation, caller authentication is strictly required
-    if (action === "complete_activation" && !caller) {
+    if ((action === "complete_activation" || action === "get_profile") && !caller) {
       return new Response(JSON.stringify({ error: "جلسة المستخدم غير صالحة أو منتهية. يرجى إعادة فتح رابط الدعوة." }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -81,7 +81,7 @@ serve(async (req: Request) => {
 
     // ─── ACTION: get_profile ─────────────────────────────────────────────────
     if (action === "get_profile") {
-      const rawEmail = (caller?.email || body.email || "")
+      const rawEmail = (caller?.email || "")
       const emailToLookup = rawEmail.split("#")[0].split("?")[0].trim().toLowerCase()
       if (!emailToLookup && !caller?.id) {
         return new Response(JSON.stringify({ error: "جلسة المستخدم غير صالحة أو منتهية. يرجى إعادة فتح رابط الدعوة." }), {

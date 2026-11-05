@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+vi.mock('../../src/lib/supabase', () => ({ supabase: null }))
+import { prepareAccessContext } from '../../src/lib/accessContext'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import originalData from '../../fixtures/original-data.json'
 import type { FixtureMovement } from '../../src/lib/fixture'
 import { syncInwardMovementToCustody } from '../../src/lib/custody'
+
+beforeEach(() => { prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any) })
 
 describe('Purchases Model and Idempotency Suite', () => {
   it('filters only inward movements (qin > 0) at display time', () => {

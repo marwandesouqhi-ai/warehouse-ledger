@@ -1,3 +1,4 @@
+import { assertDepartmentWrite } from './accessContext'
 /**
  * src/lib/procurementRepository.ts
  *
@@ -275,6 +276,7 @@ export async function createPurchaseRequest(
   }>,
   submitImmediately = false
 ): Promise<PurchaseRequest> {
+  assertDepartmentWrite('procurement', 'create')
   if (!payload.department || !payload.department.trim()) {
     throw new Error('يرجى تحديد أو كتابة اسم القسم الطالب.')
   }
@@ -386,6 +388,7 @@ export async function updatePurchaseRequestDraft(
     custody_item_ref?: string | null
   }>
 ): Promise<PurchaseRequest> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) throw new Error('اتصال قاعدة البيانات غير متوفر.')
 
   const { data: current, error: checkErr } = await supabase
@@ -442,6 +445,7 @@ export async function updatePurchaseRequestDraft(
  * إرسال طلب الشراء للاعتماد عبر RPC
  */
 export async function submitPurchaseRequestRpc(requestId: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) return
 
   const { data, error } = await supabase.rpc('submit_purchase_request', {
@@ -467,6 +471,7 @@ export async function recordApprovalRpc(
   decision: 'approved' | 'rejected',
   note = ''
 ): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) return
 
   const { data, error } = await supabase.rpc('record_approval', {
@@ -490,6 +495,7 @@ export async function recordApprovalRpc(
  * حذف مسودة طلب الشراء
  */
 export async function deletePurchaseRequest(requestId: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'delete')
   if (!supabase) return
 
   const { error } = await supabase
@@ -575,6 +581,7 @@ export async function createSupplierQuote(payload: {
   notes?: string
   created_by?: string
 }): Promise<SupplierQuote> {
+  assertDepartmentWrite('procurement', 'create')
   if (!payload.supplier_id) {
     throw new Error('يرجى تحديد المورد مقدم العرض.')
   }
@@ -616,6 +623,7 @@ export async function createSupplierQuote(payload: {
  * اختيار العرض الفائز وترسيته عبر RPC
  */
 export async function selectQuoteRpc(requestId: string, quoteId: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) return
 
   const { data, error } = await supabase.rpc('select_quote', {
@@ -637,6 +645,7 @@ export async function selectQuoteRpc(requestId: string, quoteId: string): Promis
  * إصدار أمر شراء رسمي عبر RPC
  */
 export async function createPurchaseOrderRpc(quoteId: string): Promise<{ po_id: string; po_no: string }> {
+  assertDepartmentWrite('procurement', 'create')
   if (!supabase) throw new Error('اتصال قاعدة البيانات غير متوفر.')
 
   const { data, error } = await supabase.rpc('create_purchase_order', {
@@ -693,6 +702,7 @@ export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
  * تحديث حالة أمر الشراء إلى "تم الاستلام" عبر RPC
  */
 export async function markPoReceivedRpc(poId: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) return
 
   const { data, error } = await supabase.rpc('mark_po_received', {
@@ -713,6 +723,7 @@ export async function markPoReceivedRpc(poId: string): Promise<void> {
  * تحديث حالة أمر الشراء إلى "مفوتر" عبر RPC
  */
 export async function markPoInvoicedRpc(poId: string): Promise<void> {
+  assertDepartmentWrite('procurement', 'update')
   if (!supabase) return
 
   const { data, error } = await supabase.rpc('mark_po_invoiced', {

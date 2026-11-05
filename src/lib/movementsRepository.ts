@@ -110,6 +110,14 @@ export async function fetchMovements(_ownerId?: string): Promise<FixtureMovement
     return (data as MovementRow[]).map(fromRow)
 }
 
+export async function createWarehouseIssue(movement: FixtureMovement, ownerId: string): Promise<FixtureMovement> {
+    const { data, error } = await getClient().rpc('record_warehouse_issue', {
+        p_movement: { ...toRow(movement, ownerId), source_custody_id: movement.sourceCustodyId, new_location: movement.destinationLocation },
+    })
+    if (error || !data?.movement) throw new Error(error?.message || 'تعذر تسجيل الصرف.')
+    return fromRow(data.movement as MovementRow)
+}
+
 export async function saveMovements(movements: FixtureMovement[], ownerId?: string): Promise<FixtureMovement[]> {
     if (movements.length === 0) return []
 
@@ -250,4 +258,4 @@ export async function deleteMovement(
         .eq('fingerprint', idStr)
 
     if (error) throw error
-}
+}

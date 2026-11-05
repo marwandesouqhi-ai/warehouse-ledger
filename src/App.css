@@ -13012,3 +13012,6 @@ a {
 
 
 
+
+/* Operation controls must remain hidden even when button styles set display. */
+[hidden] { display: none !important; }

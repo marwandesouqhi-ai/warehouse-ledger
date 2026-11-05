@@ -1,3 +1,5 @@
+import { assertDepartmentWrite, getAccessSession } from './accessContext'
+import { getDashboardScope } from './permissions'
 import { supabase } from './supabase'
 import { logAuditEvent } from './auditLogger'
 import type { Session } from '@supabase/supabase-js'
@@ -130,6 +132,7 @@ export async function createSupportTicket(
   attachmentFile?: File | null,
   session?: Session | null
 ): Promise<SupportTicket> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'create')
   let attachmentUrl = ticketData.attachment_url || null
   let attachmentName = ticketData.attachment_name || null
   let attachmentType = ticketData.attachment_type || null

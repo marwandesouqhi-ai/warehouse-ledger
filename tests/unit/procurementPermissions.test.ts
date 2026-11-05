@@ -40,7 +40,7 @@ describe('Procurement Module Permissions & Routing Matrix', () => {
     const session = makeMockSession('admin')
     expect(canAccessProcurementModule(session)).toBe(true)
     for (const route of procurementRoutes) {
-      expect(canAccessRoute(session, route)).toBe(true)
+      expect(canAccessRoute(session, route)).toBe(!route.endsWith('/new'))
     }
   })
 

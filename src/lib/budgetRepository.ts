@@ -1,3 +1,5 @@
+import { assertDepartmentWrite, getAccessSession } from './accessContext'
+import { getDashboardScope } from './permissions'
 import { supabase } from './supabase'
 import { purgeLocalDemoData } from './purgeDemoData'
 
@@ -78,6 +80,7 @@ export async function fetchBudgetPlans(fiscalYear?: number): Promise<BudgetPlan[
 export async function createBudgetPlan(
   plan: Omit<BudgetPlan, 'id' | 'remaining_amount' | 'created_at' | 'updated_at'>
 ): Promise<BudgetPlan> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'create')
   const remaining = Number(plan.allocated_amount) - Number(plan.spent_amount || 0)
   const newPlan: BudgetPlan = {
     ...plan,
@@ -109,6 +112,7 @@ export async function updateBudgetPlan(
   id: string,
   updates: Partial<BudgetPlan>
 ): Promise<BudgetPlan> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'update')
   const local = getLocalBudgetPlans()
   const existing = local.find((p) => p.id === id)
   const allocated = updates.allocated_amount !== undefined ? updates.allocated_amount : existing?.allocated_amount || 0
@@ -144,6 +148,7 @@ export async function updateBudgetPlan(
 }
 
 export async function deleteBudgetPlan(id: string): Promise<void> {
+  assertDepartmentWrite(getDashboardScope(getAccessSession()) === 'warehouse_only' ? 'warehouse' : 'procurement', 'delete')
   if (supabase) {
     try {
       await supabase.from('budget_plans').delete().eq('id', id)

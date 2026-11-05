@@ -1,3 +1,4 @@
+import { canAddDepartment, isSystemAdmin } from '../lib/permissions'
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -39,6 +40,8 @@ const MOVEMENT_TYPES = {
 }
 
 export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
+  const canAdd = canAddDepartment(session, 'warehouse')
+  const canModify = isSystemAdmin(session)
   const [movements, setMovements] = useState<AssetMovement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -91,6 +94,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
   }, [movements, typeFilter, searchTerm])
 
   const handleCreate = async (e: FormEvent) => {
+    if (!canAdd) { e.preventDefault(); return }
     e.preventDefault()
     if (!assetCode.trim() || !assetName.trim() || !toLocation.trim()) {
       alert('يرجى تعبئة كود الأصل واسمه والموقع المستلم.')
@@ -134,6 +138,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
   }
 
   const handleDeleteMovement = async (id: string, code: string) => {
+    if (!canModify) return
     if (!window.confirm(`هل أنت متأكد من حذف حركة الأصل (${code})؟`)) {
       return
     }
@@ -148,6 +153,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
   }
 
   const handlePurgeDemo = async () => {
+    if (!canModify) return
     if (!window.confirm('هل أنت متأكد من مسح جميع البيانات التجريبية والمحاكاة من النظام وقاعدة البيانات؟')) {
       return
     }
@@ -179,7 +185,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
           <p>متابعة حركة كل أصل ومعدة: من استلام التوريد، تسليم الكليات، الصيانة، وحتى الإعدام الجردي</p>
         </div>
         <div className="headline-actions mr-auto flex gap-2">
-          <button
+          <button hidden={!canModify}
             type="button"
             className="secondary-btn text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
             onClick={handlePurgeDemo}
@@ -191,7 +197,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
           <button type="button" className="secondary-btn" onClick={loadData} disabled={isLoading}>
             <RotateCw size={16} className={isLoading ? 'animate-spin' : ''} /> تحديث
           </button>
-          <button type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <button hidden={!canAdd} type="button" className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
             <Plus size={18} /> تسجيل حركة أصل جديدة
           </button>
         </div>
@@ -320,7 +326,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                         </time>
                       </td>
                       <td className="text-center">
-                        <button
+                        <button hidden={!canModify}
                           type="button"
                           className="icon-action-btn hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded transition-colors"
                           onClick={() => handleDeleteMovement(m.id, m.asset_code)}

@@ -1,4 +1,6 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+vi.mock('../../src/lib/supabase', () => ({ supabase: null }))
+import { prepareAccessContext } from '../../src/lib/accessContext'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import {
   CUSTODY_STORAGE_KEY,
   findWarehouseByRecipient,
@@ -14,20 +16,22 @@ import {
 
 describe('Custody Module & Warehouse Definitions', () => {
   beforeEach(() => {
+    prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any)
     localStorage.clear()
   })
 
-  it('contains the 8 university warehouses without commerce, with main warehouse as central hub', () => {
-    expect(WAREHOUSES).toHaveLength(8)
+  it('contains the 9 university warehouses without commerce, with main warehouse as central hub', () => {
+    expect(WAREHOUSES).toHaveLength(9)
 
     const expectedNames = [
       'مخزن رئيسي',
-      'مخزن كلية طب بشري',
+      'مخزن كلية طب بشري وتمريض',
+      'مخزن مبنى بشري أ',
       'كلية طب أسنان',
       'كلية صيدلة',
-      'كلية تمريض',
       'معمل مركزي',
       'كلية هندسة',
+      'مخزن الورش الهندسية',
       'كلية حاسبات و معلومات',
     ]
 
@@ -94,10 +98,10 @@ describe('Custody Module & Warehouse Definitions', () => {
   })
 
   it('seeds main warehouse custody with purchases items when no user records are present', () => {
-    expect(fixtureCustodyItems.length).toBe(32)
+    expect(fixtureCustodyItems.length).toBe(180)
     const items = loadCustodyItems()
-    expect(items).toHaveLength(32)
-    expect(items.every((i) => i.warehouseId === 'main')).toBe(true)
+    expect(items).toHaveLength(180)
+    expect(items.filter((i) => i.warehouseId === 'main')).toHaveLength(32)
   })
 
   it('persists and retrieves custody items to and from localStorage', () => {
@@ -123,15 +127,15 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(localStorage.getItem(CUSTODY_STORAGE_KEY)).toContain('ENG-99')
 
     const loaded = loadCustodyItems()
-    expect(loaded).toHaveLength(1)
-    expect(loaded[0].code).toBe('ENG-99')
+    expect(loaded).toHaveLength(149)
+    expect(loaded.some((i) => i.code === 'ENG-99')).toBe(true)
   })
 
   it('accurately resolves recipient warehouse by name or alias', () => {
     expect(findWarehouseByRecipient('كلية طب بشري')?.id).toBe('medicine')
     expect(findWarehouseByRecipient('طب أسنان')?.id).toBe('dentistry')
     expect(findWarehouseByRecipient('كلية صيدلة')?.id).toBe('pharmacy')
-    expect(findWarehouseByRecipient('كلية تمريض')?.id).toBe('nursing')
+    expect(findWarehouseByRecipient('كلية تمريض')?.id).toBe('medicine')
     expect(findWarehouseByRecipient('معمل مركزي')?.id).toBe('central_lab')
     expect(findWarehouseByRecipient('كلية هندسة')?.id).toBe('engineering')
     expect(findWarehouseByRecipient('كلية حاسبات و معلومات')?.id).toBe('fci')
@@ -166,7 +170,8 @@ describe('Custody Module & Warehouse Definitions', () => {
     expect(res2.item.quantity).toBe(15)
 
     const allMain = loadCustodyItems().filter((i) => i.warehouseId === 'main')
-    expect(allMain).toHaveLength(fixtureCustodyItems.length + 1)
+    // 32 original main items + 1 added microscope = 33
+    expect(allMain).toHaveLength(33)
     const microscope = allMain.find((i) => i.name === 'ميكروسكوب ضوئي رقمي')
     expect(microscope).toBeDefined()
     expect(microscope?.quantity).toBe(15)
@@ -244,7 +249,8 @@ describe('Custody Module & Warehouse Definitions', () => {
     localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(legacyItems))
 
     const loaded = loadCustodyItems()
-    expect(loaded).toHaveLength(2)
+    // 2 legacy items + 67 medicine + 81 workshops auto-healed = 150
+    expect(loaded).toHaveLength(150)
 
     const tableItem = loaded.find((i) => i.code === 'CUS-8832')
     expect(tableItem).toBeDefined()
@@ -282,7 +288,8 @@ describe('Custody Module & Warehouse Definitions', () => {
     localStorage.setItem(CUSTODY_STORAGE_KEY, JSON.stringify(itemsWithValueEqualsUnitPrice))
 
     const loaded = loadCustodyItems()
-    expect(loaded).toHaveLength(1)
+    // 1 repaired item + 67 medicine + 81 workshops auto-healed = 149
+    expect(loaded).toHaveLength(149)
     expect(loaded[0].quantity).toBe(28)
     expect(loaded[0].unitPrice).toBe(14611)
     expect(loaded[0].value).toBe(28 * 14611) // 409,108

@@ -1,3 +1,4 @@
+import { prepareAccessContext } from '../../src/lib/accessContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/settings', async (importOriginal) => {
@@ -61,6 +62,7 @@ describe('System Backup Suite', () => {
   } as unknown as Session
 
   beforeEach(() => {
+    prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any)
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -117,8 +119,10 @@ describe('System Backup Suite', () => {
     const result = await exportLocalBackup(adminSession)
     expect(result.success).toBe(true)
     expect(result.counts.movements).toBe(1)
-    expect(result.counts.custody).toBe(1)
-    expect(result.counts.users).toBe(2)
+    // 1 custom seeded item + 67 medicine + 81 workshops auto-healed = 149
+    expect(result.counts.custody).toBe(149)
+    // 2 custom seeded users + 1 auto-provisioned employee (ahmed-hussain) = 3
+    expect(result.counts.users).toBe(3)
     expect(result.counts.auditLogs).toBe(1)
     expect(result.fileName).toContain('نسخة_احتياطية_شاملة_المخازن_')
     expect(localStorage.getItem(LAST_LOCAL_BACKUP_KEY)).toBeTruthy()

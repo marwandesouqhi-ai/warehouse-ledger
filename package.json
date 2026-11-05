@@ -9,6 +9,7 @@
     "lint": "oxlint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:roles:db": "node tests/integration/departmentRoles.mjs",
     "typecheck": "tsc --noEmit",
     "seed:demo": "echo \"Demo seed script placeholder: add a Supabase demo seed command here.\""
   },
@@ -31,6 +32,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

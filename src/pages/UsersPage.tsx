@@ -853,7 +853,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     const activeUsersCount = allEmployeesDirectory.filter((u) => u.status === 'active').length
 
-    if (!isSystemAdmin && !isDepartmentAdmin) {
+    if (!isSystemAdmin) {
         return (
             <section className="page-stack users-page">
                 <header className="page-intro">

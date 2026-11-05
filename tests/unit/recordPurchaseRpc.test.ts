@@ -1,9 +1,11 @@
+import { prepareAccessContext } from '../../src/lib/accessContext'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { saveCustodyItemsToCloud, type CustodyItem } from '../../src/lib/custody'
 import { supabase } from '../../src/lib/supabase'
 
 describe('record_purchase RPC & Custody Overwrite Protection Suite', () => {
   beforeEach(() => {
+    prepareAccessContext({ user: { id: '00000000-0000-4000-8000-000000000001', app_metadata: { role: 'system_admin' } } } as any)
     vi.clearAllMocks()
   })
 

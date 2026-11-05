@@ -39,7 +39,7 @@ import {
   type TicketStatus,
 } from '../lib/supportTicketsRepository'
 import { checkIsSystemAdmin } from '../lib/supabase'
-import { isSystemAdmin } from '../lib/permissions'
+import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 
 type SupportPageProps = {
   session?: Session | null
@@ -72,6 +72,7 @@ const CATEGORIES = [
 ]
 
 export default function SupportPage({ session }: SupportPageProps) {
+  const canAdd = canAddDepartment(session, 'warehouse') || canAddDepartment(session, 'procurement')
   // مقتصر حصرياً على مدير النظام (System Admin) فقط - موثق عبر app_metadata الموقعة رسمياً من السيرفر
   const isSysAdmin = Boolean(
     isSystemAdmin(session) ||
@@ -277,6 +278,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
   }
 
   async function handleDirectSubmit() {
+    if (!canAdd) return
     if (!validateForm() || isSubmitting) return
 
     setIsSubmitting(true)
@@ -317,6 +319,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
   }
 
   async function handleSendWhatsApp() {
+    if (!canAdd) return
     if (!validateForm() || isSubmitting) return
 
     setIsSubmitting(true)
@@ -367,6 +370,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
   }
 
   async function handleSendEmail() {
+    if (!canAdd) return
     if (!validateForm() || isSubmitting) return
 
     setIsSubmitting(true)
@@ -1217,7 +1221,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                   {/* Direct Database Submit */}
-                  <button
+                  <button hidden={!canAdd}
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => void handleDirectSubmit()}
@@ -1240,7 +1244,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   </button>
 
                   {/* Send via WhatsApp */}
-                  <button
+                  <button hidden={!canAdd}
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => void handleSendWhatsApp()}
@@ -1265,7 +1269,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                   </button>
 
                   {/* Send via Email */}
-                  <button
+                  <button hidden={!canAdd}
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => void handleSendEmail()}
