@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { FixtureMovement } from './fixture'
 import { movementFingerprint } from './importRows'
+import { pushMovementToGoogleSheet } from './googleSheetsRealtimeSync'
 
 type MovementRow = {
     id: string
@@ -115,7 +116,9 @@ export async function createWarehouseIssue(movement: FixtureMovement, ownerId: s
         p_movement: { ...toRow(movement, ownerId), source_custody_id: movement.sourceCustodyId, new_location: movement.destinationLocation },
     })
     if (error || !data?.movement) throw new Error(error?.message || 'تعذر تسجيل الصرف.')
-    return fromRow(data.movement as MovementRow)
+    const saved = fromRow(data.movement as MovementRow)
+    void pushMovementToGoogleSheet(saved)
+    return saved
 }
 
 export async function saveMovements(movements: FixtureMovement[], ownerId?: string): Promise<FixtureMovement[]> {
@@ -172,7 +175,11 @@ export async function saveMovements(movements: FixtureMovement[], ownerId?: stri
         }
     }
 
-    return results.map(fromRow)
+    const saved = results.map(fromRow)
+    if (saved.length > 0) {
+        void pushMovementToGoogleSheet(saved)
+    }
+    return saved
 }
 
 export async function updateMovement(movement: FixtureMovement, _ownerId?: string): Promise<FixtureMovement> {
@@ -209,7 +216,9 @@ export async function updateMovement(movement: FixtureMovement, _ownerId?: strin
             }
             throw error
         }
-        return fromRow(data as MovementRow)
+        const updated = fromRow(data as MovementRow)
+        void pushMovementToGoogleSheet(updated)
+        return updated
     }
 
     return movement

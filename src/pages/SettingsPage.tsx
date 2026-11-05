@@ -11,6 +11,7 @@ import {
     Download,
     ExternalLink,
     FileCheck,
+    FileSpreadsheet,
     FileUp,
     HardDrive,
     ImagePlus,
@@ -54,6 +55,11 @@ import {
     ARABIC_DAYS_OF_WEEK,
     type AutoBackupScheduleConfig,
 } from '../lib/autoBackupEngine'
+import {
+    getGoogleSheetsWebhookUrl,
+    setGoogleSheetsWebhookUrl,
+    pushMovementToGoogleSheet,
+} from '../lib/googleSheetsRealtimeSync'
 
 type SettingsPageProps = {
     settings: AppSettings
@@ -167,6 +173,53 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         setScheduleConfig(updated)
         setScheduleSavedNotice('تم حفظ وتحديث جدول النسخ الاحتياطي التلقائي بنجاح.')
         setTimeout(() => setScheduleSavedNotice(''), 4000)
+    }
+
+    // Google Sheets Real-time sync state
+    const [sheetsWebhook, setSheetsWebhook] = useState(getGoogleSheetsWebhookUrl)
+    const [sheetsSavedNotice, setSheetsSavedNotice] = useState('')
+    const [isTestingSheet, setIsTestingSheet] = useState(false)
+    const [sheetTestOutcome, setSheetTestOutcome] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
+
+    function handleSaveSheetsWebhook() {
+        setGoogleSheetsWebhookUrl(sheetsWebhook)
+        setSheetsSavedNotice('✓ تم حفظ وتفعيل رابط المزامنة اللحظية مع Google Sheets بنجاح.')
+        setTimeout(() => setSheetsSavedNotice(''), 5000)
+    }
+
+    async function handleTestSheet() {
+        if (!sheetsWebhook || !sheetsWebhook.trim()) return
+        setIsTestingSheet(true)
+        setSheetTestOutcome(null)
+        try {
+            setGoogleSheetsWebhookUrl(sheetsWebhook)
+            const success = await pushMovementToGoogleSheet({
+                id: 'TEST-' + Date.now().toString().slice(-4),
+                item: 'تجربة اتصال المزامنة اللحظية مع شيت جوجل',
+                qin: 1,
+                price: 100,
+                notes: 'حركة اختبارية للتحقق من المزامنة اللحظية في شيت AppSheet_DB',
+            }, 'medicine_a')
+
+            if (success) {
+                setSheetTestOutcome({
+                    status: 'success',
+                    message: '✓ تم إرسال حركة اختبارية للشيت بنجاح! افتح تبويب AppSheet_DB في جوجل شيت لتراها فوراً.',
+                })
+            } else {
+                setSheetTestOutcome({
+                    status: 'error',
+                    message: 'تعذر الاتصال برابط الويبهوك. تأكد من نشر الـ Web app بصلاحية Anyone.',
+                })
+            }
+        } catch (err) {
+            setSheetTestOutcome({
+                status: 'error',
+                message: 'حدث خطأ أثناء الاتصال: ' + (err instanceof Error ? err.message : String(err)),
+            })
+        } finally {
+            setIsTestingSheet(false)
+        }
     }
 
     function toggleDayOfWeek(dayVal: number) {
@@ -1653,6 +1706,99 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                         )}
                     </section>
                 )}
+
+                {/* 5. Real-Time Google Sheets Sync Section */}
+                <section className="card-surface settings-section google-sheets-sync-section">
+                    <div className="section-head">
+                        <div>
+                            <h3>
+                                <FileSpreadsheet size={18} className="text-emerald-500" /> المزامنة اللحظية مع Google Sheets
+                            </h3>
+                            <span>
+                                تصدير حركات المخازن فور تسجيلها في المنظومة تلقائياً إلى شيت جوجل المركزي المعتمد (AppSheet_DB).
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`badge text-[10px] px-2.5 py-1 rounded-full font-bold ${sheetsWebhook.trim() ? 'badge-success bg-emerald-600 text-white' : 'badge-neutral'}`}>
+                                {sheetsWebhook.trim() ? '● المزامنة اللحظية مفعلة' : 'المزامنة متوقفة (أدخل الرابط)'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
+                        <div className="space-y-1">
+                            <label className="font-semibold text-sm block text-foreground">
+                                رابط تطبيق الويب للـ Google Apps Script (Webhook URL):
+                            </label>
+                            <span className="text-xs text-muted-foreground block">
+                                الرابط الذي حصلت عليه بعد نشر السكريبت داخل الشيت كـ Web App ينتهي بـ <code>/exec</code>:
+                            </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                                dir="ltr"
+                                type="url"
+                                value={sheetsWebhook}
+                                onChange={(e) => setSheetsWebhook(e.target.value)}
+                                placeholder="https://script.google.com/macros/s/.../exec"
+                                className="input-field flex-1 text-xs font-mono p-2.5 rounded-lg border border-border bg-background"
+                                disabled={!isSystemAdmin}
+                            />
+                            {isSystemAdmin && (
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveSheetsWebhook}
+                                        className="primary-btn nowrap px-4 py-2"
+                                    >
+                                        <Save size={16} /> حفظ الرابط
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleTestSheet}
+                                        disabled={isTestingSheet || !sheetsWebhook.trim()}
+                                        className="secondary-btn nowrap px-4 py-2"
+                                        title="إرسال حركة تجريبية للتأكد من وصولها إلى الشيت فوراً"
+                                    >
+                                        {isTestingSheet ? (
+                                            <>
+                                                <RefreshCw size={15} className="spin-animation" />
+                                                <span>جارٍ الاختبار...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ExternalLink size={15} />
+                                                <span>اختبار الربط</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {sheetsSavedNotice && (
+                            <div className="inline-message success font-xs my-1 flex items-center gap-2">
+                                <CheckCircle2 size={16} />
+                                <span>{sheetsSavedNotice}</span>
+                            </div>
+                        )}
+
+                        {sheetTestOutcome && (
+                            <div className={`inline-message ${sheetTestOutcome.status === 'success' ? 'success' : 'error'} font-xs my-1 flex items-center gap-2`}>
+                                {sheetTestOutcome.status === 'success' ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
+                                <span>{sheetTestOutcome.message}</span>
+                            </div>
+                        )}
+
+                        <div className="text-[11px] text-muted-foreground bg-surface p-3 rounded-lg border border-border/40 space-y-1">
+                            <strong className="block text-foreground">💡 كيف تعمل المزامنة اللحظية؟</strong>
+                            <p>
+                                بمجرد تسجيل أو حفظ أي حركة جديدة (إضافة رصيد، توريد، صرف إذن عهدة) في أي مخزن، يرسلها النظام في الخلفية خلال أجزاء من الثانية إلى تبويب <code>AppSheet_DB</code>، فتقوم معادلات الشيت بتحديث كشف الكلية المعنية والأرصدة ولوحة المؤشرات تلقائياً.
+                            </p>
+                        </div>
+                    </div>
+                </section>
             </form>
         </section>
     )
