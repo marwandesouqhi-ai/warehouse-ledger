@@ -1,5 +1,5 @@
 import { prepareAccessContext, getAccessSession } from './lib/accessContext'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, lazy, Suspense, type FormEvent } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import type { Session } from '@supabase/supabase-js'
@@ -92,27 +92,31 @@ import {
 } from './lib/localUsers'
 import { startAutoBackupWatcher } from './lib/autoBackupEngine'
 import { usePwaInstall } from './lib/pwa'
-import AuditLogPage from './pages/AuditLogPage'
 import AuthPage from './pages/AuthPage'
-import CustodyPage from './pages/CustodyPage'
-import ImportPage from './pages/ImportPage'
-import PurchasesPage from './pages/PurchasesPage'
-import SuppliersPage from './pages/procurement/SuppliersPage'
-import QuotesPage from './pages/procurement/QuotesPage'
-import QualityPage from './pages/QualityPage'
-import ReportsPage from './pages/ReportsPage'
-import SettingsPage from './pages/SettingsPage'
-import UsersPage from './pages/UsersPage'
-import SupportPage from './pages/SupportPage'
-import DisbursementRequestsPage from './pages/DisbursementRequestsPage'
-import NotificationsPage from './pages/NotificationsPage'
-import InventoryAnalyticsPage from './pages/InventoryAnalyticsPage'
-import ContractsPage from './pages/ContractsPage'
-import AssetHistoryPage from './pages/AssetHistoryPage'
-import FinancialReportsPage from './pages/FinancialReportsPage'
-import BudgetPage from './pages/BudgetPage'
-import TelegramBotPage from './pages/TelegramBotPage'
-import ChatbotAdminPage from './pages/ChatbotAdminPage'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { PageLoadingFallback } from './components/PageLoadingFallback'
+
+// Requirement #10: Lazy-load route pages with loading and error boundaries
+const AuditLogPage = lazy(() => import('./pages/AuditLogPage'))
+const CustodyPage = lazy(() => import('./pages/CustodyPage'))
+const ImportPage = lazy(() => import('./pages/ImportPage'))
+const PurchasesPage = lazy(() => import('./pages/PurchasesPage'))
+const SuppliersPage = lazy(() => import('./pages/procurement/SuppliersPage'))
+const QuotesPage = lazy(() => import('./pages/procurement/QuotesPage'))
+const QualityPage = lazy(() => import('./pages/QualityPage'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const UsersPage = lazy(() => import('./pages/UsersPage'))
+const SupportPage = lazy(() => import('./pages/SupportPage'))
+const DisbursementRequestsPage = lazy(() => import('./pages/DisbursementRequestsPage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+const InventoryAnalyticsPage = lazy(() => import('./pages/InventoryAnalyticsPage'))
+const ContractsPage = lazy(() => import('./pages/ContractsPage'))
+const AssetHistoryPage = lazy(() => import('./pages/AssetHistoryPage'))
+const FinancialReportsPage = lazy(() => import('./pages/FinancialReportsPage'))
+const BudgetPage = lazy(() => import('./pages/BudgetPage'))
+const TelegramBotPage = lazy(() => import('./pages/TelegramBotPage'))
+const ChatbotAdminPage = lazy(() => import('./pages/ChatbotAdminPage'))
 import WarehouseChatBot from './components/WarehouseChatBot'
 import { CustodyAnalyticsDashboard } from './components/CustodyAnalyticsDashboard'
 import { ProcurementAnalyticsDashboard } from './components/ProcurementAnalyticsDashboard'
@@ -122,13 +126,11 @@ import { getCairoDateString } from './lib/dateUtils'
 import type { CustodyItem } from './lib/custody'
 import { matchesSearch } from './lib/searchUtils'
 import { purgeLocalDemoData } from './lib/purgeDemoData'
+import { formatCurrency } from './lib/currency'
+import { getRouteMetadata } from './lib/routeMetadata'
 import './App.css'
 
 const storageKey = 'warehouse-ledger-movements'
-function formatCurrency(value: number, currency: AppSettings['currency']): string {
-  if (!Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
-}
 
 function normalizeMovementPrice(m: FixtureMovement): FixtureMovement {
   let price = m.price
@@ -247,7 +249,7 @@ function App() {
     prepareAccessContext(local)
     return local as unknown as Session | null
   })
-  const [movements, setMovements] = useState<FixtureMovement[]>([])
+  const [movements, setMovements] = useState<FixtureMovement[]>(() => loadMovements())
   const [authLoading, setAuthLoading] = useState(() => !getLocalSession() && Boolean(supabase))
   const [isSettingPassword, setIsSettingPassword] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -423,25 +425,26 @@ function App() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  const summary = deriveSummary(movements as Array<Record<string, unknown>>)
-  const netStockUnits = Math.max(0, summary.qty_in - summary.qty_out)
-  const turnoverRateNum = summary.qty_in > 0 ? (summary.qty_out / summary.qty_in) * 100 : 0
-  const turnoverRate = turnoverRateNum.toFixed(1)
-  const issuedValuePctNum = summary.total_value > 0 ? (summary.issued_value / summary.total_value) * 100 : 0
-  const issuedPercentage = `${issuedValuePctNum.toFixed(1)}%`
-  const remainingValuePctNum = summary.total_value > 0 ? (summary.remaining_value / summary.total_value) * 100 : 0
-  const remainingValuePercentage = `${remainingValuePctNum.toFixed(1)}%`
-  const avgUnitCost = summary.qty_in > 0 ? summary.total_value / summary.qty_in : 0
+  // Requirement #11: Memoize summary and quality calculations
+  const summary = useMemo(() => deriveSummary(movements as Array<Record<string, unknown>>), [movements])
+  const netStockUnits = useMemo(() => Math.max(0, summary.qty_in - summary.qty_out), [summary.qty_in, summary.qty_out])
+  const turnoverRateNum = useMemo(() => (summary.qty_in > 0 ? (summary.qty_out / summary.qty_in) * 100 : 0), [summary.qty_in, summary.qty_out])
+  const turnoverRate = useMemo(() => turnoverRateNum.toFixed(1), [turnoverRateNum])
+  const issuedValuePctNum = useMemo(() => (summary.total_value > 0 ? (summary.issued_value / summary.total_value) * 100 : 0), [summary.total_value, summary.issued_value])
+  const issuedPercentage = useMemo(() => `${issuedValuePctNum.toFixed(1)}%`, [issuedValuePctNum])
+  const remainingValuePctNum = useMemo(() => (summary.total_value > 0 ? (summary.remaining_value / summary.total_value) * 100 : 0), [summary.total_value, summary.remaining_value])
+  const remainingValuePercentage = useMemo(() => `${remainingValuePctNum.toFixed(1)}%`, [remainingValuePctNum])
+  const avgUnitCost = useMemo(() => (summary.qty_in > 0 ? summary.total_value / summary.qty_in : 0), [summary.total_value, summary.qty_in])
   const completedMovements = summary.status_counts.full ?? 0
   const partialMovements = summary.status_counts.part ?? 0
   const pendingMovements = summary.status_counts.pending ?? 0
-  const fulfillmentRatio = movements.length > 0 ? Math.round((completedMovements / movements.length) * 100) : 0
+  const fulfillmentRatio = useMemo(() => (movements.length > 0 ? Math.round((completedMovements / movements.length) * 100) : 0), [movements.length, completedMovements])
 
-  const qualitySummary = summarizeQuality(movements as Array<Record<string, unknown>>)
-  const totalQualityIssues = Object.values(qualitySummary).reduce((a, b) => a + b, 0)
-  const qualityHealthScore = movements.length > 0
+  const qualitySummary = useMemo(() => summarizeQuality(movements as Array<Record<string, unknown>>), [movements])
+  const totalQualityIssues = useMemo(() => Object.values(qualitySummary).reduce((a, b) => a + b, 0), [qualitySummary])
+  const qualityHealthScore = useMemo(() => (movements.length > 0
     ? Math.max(0, Math.min(100, Math.round(100 - (totalQualityIssues / movements.length) * 20)))
-    : 100
+    : 100), [movements.length, totalQualityIssues])
 
   const effectiveRole = getEffectiveRole(session)
   const isSystemAdmin = permsIsSystemAdmin(session)
@@ -601,12 +604,14 @@ function App() {
   }, [movements.length, summary.pending_rows, netStockUnits, totalQualityIssues])
 
   const navigate = useNavigate()
-  const qualityCards = qualityRules
-    .map(({ rule, level, text }) => ({ rule, level, text, count: qualitySummary[rule] ?? 0 }))
-    .filter(({ count }) => count > 0)
-    .slice(0, 5)
+  const qualityCards = useMemo(() => {
+    return qualityRules
+      .map(({ rule, level, text }) => ({ rule, level, text, count: qualitySummary[rule] ?? 0 }))
+      .filter(({ count }) => count > 0)
+      .slice(0, 5)
+  }, [qualitySummary])
 
-  const kpis = [
+  const kpis = useMemo(() => [
     {
       id: 'in_value',
       label: 'قيمة الوارد الإجمالية',
@@ -661,7 +666,7 @@ function App() {
       tone: 'purple',
       icon: Package,
     },
-  ]
+  ], [summary, settings.currency, settings.organization, settings.department, avgUnitCost, remainingValuePercentage, issuedPercentage, netStockUnits, movements.length, fulfillmentRatio, completedMovements, partialMovements])
 
   const visibleMovements = useMemo(() => {
     if (!searchTerm.trim()) return movements
@@ -694,9 +699,11 @@ function App() {
 
   const systemDisplayName = useMemo(() => getSystemDisplayName(settings), [settings])
 
+  const routeMetadata = useMemo(() => getRouteMetadata(location.pathname), [location.pathname])
+
   useEffect(() => {
-    document.title = `${systemDisplayName} | ${settings.organization || 'إدارة المخازن'}`
-  }, [systemDisplayName, settings.organization])
+    document.title = `${routeMetadata.title} | ${systemDisplayName}`
+  }, [routeMetadata.title, systemDisplayName])
 
   // مراقب النسخ الاحتياطي التلقائي: يربط كافة صفحات وتعديلات النظام تلقائياً بالنسخ الاحتياطي
   useEffect(() => {
@@ -792,86 +799,93 @@ function App() {
     setSyncStatus('loading')
     setSyncError('')
 
-    const syncTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('انتهت مهلة الاتصال بقاعدة البيانات السحابية (Timeout / 520).')), 8000)
-    )
+    function withTimeout<T>(promise: Promise<T>, ms: number, resourceName: string): Promise<T> {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`انتهت مهلة تحميل ${resourceName} (${ms}ms)`)), ms)
+        ),
+      ])
+    }
 
     void (async () => {
-      // 1. Fetch warehouse movements from Supabase
-      let remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
-      if (remoteMovements.length === 0 && isSystemAdmin) {
-        let initialMovements: FixtureMovement[] = []
-        try {
-          const cached = localStorage.getItem(storageKey)
-          if (cached) {
-            const parsed = JSON.parse(cached) as unknown
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              initialMovements = parsed as FixtureMovement[]
+      // Requirement #40: Load settings, custody, movements, and users concurrently with per-resource timeouts
+      const [movementsResult, settingsResult, custodyResult, _usersResult] = await Promise.allSettled([
+        withTimeout(fetchMovements(), 5000, 'سجل الحركات'),
+        withTimeout(fetchAppSettingsFromCloud(), 4000, 'إعدادات المؤسسة'),
+        getDashboardScope(session) !== 'purchases_only'
+          ? withTimeout(fetchCustodyItemsFromCloud(), 5000, 'عهدة المخازن')
+          : Promise.resolve(null),
+        isSystemAdmin
+          ? withTimeout(syncUsersWithCloud(), 4000, 'دليل المستخدمين')
+          : Promise.resolve(null),
+      ])
+
+      if (!active) return
+
+      // 1. Process movements result
+      if (movementsResult.status === 'fulfilled' && Array.isArray(movementsResult.value)) {
+        let remoteMovements = movementsResult.value
+        if (remoteMovements.length === 0 && isSystemAdmin) {
+          try {
+            const cached = localStorage.getItem(storageKey)
+            if (cached) {
+              const parsed = JSON.parse(cached) as unknown
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                await withTimeout(saveMovements(parsed as FixtureMovement[], session?.user?.id), 4000, 'حفظ الحركات الأولية')
+                remoteMovements = await withTimeout(fetchMovements(), 4000, 'إعادة قراءة الحركات')
+              }
             }
-          }
-        } catch {
-          // ignore
-        }
-
-        if (initialMovements.length > 0) {
-          await Promise.race([saveMovements(initialMovements, session?.user?.id), syncTimeout])
-          remoteMovements = await Promise.race([fetchMovements(), syncTimeout])
-        }
-      }
-
-      if (!active) return
-      setMovements(remoteMovements)
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(remoteMovements))
-      } catch {
-        // ignore
-      }
-
-      // 2. Fetch app settings from Supabase
-      try {
-        const cloudSettings = await fetchAppSettingsFromCloud()
-        if (cloudSettings) {
-          setSettings((current) => resolveSettingsWithCloud(current, cloudSettings))
-        }
-      } catch {
-        // ignore
-      }
-
-      // Read only the department-visible server snapshot. Reads never seed data.
-      if (getDashboardScope(session) !== 'purchases_only') {
-        try {
-          const cloudCustody = await fetchCustodyItemsFromCloud()
-          if (active) setCustodyItems(cloudCustody)
-        } catch { /* report the main synchronization outcome below */ }
-      }
-      if (isSystemAdmin) await syncUsersWithCloud().catch(() => undefined)
-
-      setSyncStatus('synced')
-    })().catch((error: unknown) => {
-      if (!active) return
-      try {
-        const cached = localStorage.getItem(storageKey)
-        if (cached) {
-          const parsed = JSON.parse(cached) as unknown
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setMovements(parsed as FixtureMovement[])
+          } catch {
+            // non-blocking
           }
         }
-      } catch {
-        // preserve current movements
+        if (active) {
+          setMovements(remoteMovements)
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(remoteMovements))
+          } catch {
+            // ignore localStorage quota
+          }
+        }
+      } else if (movementsResult.status === 'rejected') {
+        console.warn('Concurrent sync warning (movements):', movementsResult.reason)
       }
+
+      // 2. Process settings result
+      if (settingsResult.status === 'fulfilled' && settingsResult.value) {
+        if (active) {
+          setSettings((current) => resolveSettingsWithCloud(current, settingsResult.value || undefined))
+        }
+      }
+
+      // 3. Process custody result
+      if (custodyResult.status === 'fulfilled' && Array.isArray(custodyResult.value)) {
+        if (active) {
+          setCustodyItems(custodyResult.value)
+        }
+      }
+
+      // 4. Update synchronization status
+      const hasMovementsError = movementsResult.status === 'rejected'
+      if (active) {
+        if (hasMovementsError) {
+          setSyncStatus('error')
+          setSyncError('تعذرت مزامنة بعض البيانات السحابية في الوقت المحدد. يعمل النظام حالياً بالبيانات المخزنة محلياً.')
+        } else {
+          setSyncStatus('synced')
+        }
+      }
+    })().catch((err: unknown) => {
+      if (!active) return
       setSyncStatus('error')
-      setSyncError(
-        error instanceof Error && error.message.includes('Timeout')
-          ? 'تعذر الاتصال بـ Supabase (انتهت المهلة 520 / قد يكون المشروع متوقفاً أو هناك مشكلة شبكة). يعمل التطبيق حالياً بالبيانات المخزنة محلياً.'
-          : 'تعذرت مزامنة البيانات مع خادم السحابة. يعمل التطبيق حالياً بالبيانات المخزنة محلياً.'
-      )
+      setSyncError(err instanceof Error ? err.message : 'حدث خطأ أثناء مزامنة البيانات.')
     })
 
     return () => {
       active = false
     }
-  }, [session?.user?.id])
+  }, [session?.user?.id, isSystemAdmin])
 
   useEffect(() => {
     if (session?.user?.user_metadata?.app_settings) {
@@ -1464,10 +1478,6 @@ function App() {
     )
   }
 
-  if (supabase && syncStatus === 'loading') {
-    return <main className="auth-shell" dir="rtl"><p>جارٍ مزامنة سجل الحركات...</p></main>
-  }
-
   return (
     <div className={`app-shell ${mobileMenuOpen ? 'mobile-nav-active' : ''}`} dir="rtl">
       <a href="#main-content" className="skip-link">تخطي إلى المحتوى الرئيسي</a>
@@ -1626,16 +1636,25 @@ function App() {
           </div>
 
           <div className="topbar-meta">
-            <div className="eyebrow">
+            <nav aria-label="مسار التنقل" className="eyebrow breadcrumb-nav">
               {logoSource && failedLogoSource !== logoSource ? (
                 <img src={logoSource} alt="" className="topbar-mini-logo" />
               ) : (
                 <Warehouse size={14} />
               )}
-              {systemDisplayName} <span>›</span> {settings.organization} <span>›</span> {settings.department}
-            </div>
-            <h1>لوحة إدارة المخزن</h1>
-            <p className="topbar-subtitle">نظرة واضحة على الوارد والصرف وحالة الأصناف</p>
+              {routeMetadata.breadcrumbs.map((b, idx) => (
+                <span key={idx} className="breadcrumb-segment">
+                  {idx > 0 && <span className="breadcrumb-sep" aria-hidden="true">›</span>}
+                  {b.to ? (
+                    <Link to={b.to} className="breadcrumb-link">{b.label}</Link>
+                  ) : (
+                    <span className="breadcrumb-current" aria-current="page">{b.label}</span>
+                  )}
+                </span>
+              ))}
+            </nav>
+            <h1>{routeMetadata.title}</h1>
+            <p className="topbar-subtitle">{routeMetadata.subtitle}</p>
           </div>
 
           <div className="toolbar-actions">
@@ -1734,7 +1753,9 @@ function App() {
             exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
             transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Routes location={location}>
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Routes location={location}>
           <Route
             path="/"
             element={
@@ -3077,7 +3098,9 @@ function App() {
           />
           <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </motion.div>
+        </Suspense>
+      </ErrorBoundary>
+    </motion.div>
       </AnimatePresence>
 
         <AnimatePresence>

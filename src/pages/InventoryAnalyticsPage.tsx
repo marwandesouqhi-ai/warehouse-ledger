@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { formatCurrency } from '../lib/currency'
 import {
   BarChart3,
   TrendingUp,
@@ -23,9 +24,7 @@ export default function InventoryAnalyticsPage({
   currency = 'EGP',
 }: InventoryAnalyticsPageProps) {
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('ar-EG', { style: 'currency', currency: currency || 'EGP', maximumFractionDigits: 0 }).format(val)
-  }
+  const formatMoney = (val: number) => formatCurrency(val, currency)
 
   // 1. حساب إحصائيات عامة
   const stats = useMemo(() => {

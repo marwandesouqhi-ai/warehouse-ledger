@@ -34,6 +34,8 @@ import {
   type WarehouseDefinition,
 } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
+import { formatCurrency } from '../lib/currency'
+import { safePrint } from '../lib/printUtils'
 import type { FixtureMovement } from '../lib/fixture'
 import { getDashboardScope } from '../lib/permissions'
 import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
@@ -51,15 +53,6 @@ interface ReportsPageProps {
   session?: Session | null
   custodyItems?: CustodyItem[]
   onExportMovements?: () => void
-}
-
-function formatCurrency(value: number, currency: string): string {
-  if (!Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value)
 }
 
 export default function ReportsPage({
@@ -306,7 +299,7 @@ export default function ReportsPage({
                 <button
                   type="button"
                   className="secondary-btn reports-secondary-btn"
-                  onClick={() => window.print()}
+                  onClick={() => void safePrint()}
                   title="طباعة تقرير المشتريات الحالي"
                 >
                   <Printer size={17} />

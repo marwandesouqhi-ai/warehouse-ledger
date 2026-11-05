@@ -13,6 +13,8 @@ import {
 } from '../lib/custody'
 import type { AppSettings } from '../lib/settings'
 import { AccessibleDialog } from './AccessibleDialog'
+import { formatCurrency } from '../lib/currency'
+import { safePrint } from '../lib/printUtils'
 
 interface OfficialInventoryReportModalProps {
   warehouse: WarehouseDefinition
@@ -22,14 +24,7 @@ interface OfficialInventoryReportModalProps {
   onClose: () => void
 }
 
-function formatMoney(amount: number, currency: AppSettings['currency']): string {
-  if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(amount)
-}
+const formatMoney = (amount: number, currency: AppSettings['currency']): string => formatCurrency(amount, currency)
 
 export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModalProps> = ({
   warehouse,
@@ -55,10 +50,7 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
   }, [])
 
   function handlePrint() {
-    document.body.classList.add('printing-official-inventory')
-    setTimeout(() => {
-      window.print()
-    }, 50)
+    void safePrint({ bodyClass: 'printing-official-inventory' })
   }
 
   const logoUrl = settings.logoDataUrl || settings.logoUrl

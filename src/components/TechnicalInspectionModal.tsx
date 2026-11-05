@@ -20,6 +20,8 @@ import type { AppSettings } from '../lib/settings'
 import { supabase } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
 import { AccessibleDialog } from './AccessibleDialog'
+import { formatCurrency } from '../lib/currency'
+import { safePrint } from '../lib/printUtils'
 
 export interface InspectionItemRow {
   id: string
@@ -60,14 +62,7 @@ export interface InspectionReportData {
   finalNotes: string
 }
 
-function formatMoney(amount: number, currency: AppSettings['currency']): string {
-  if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(amount)
-}
+const formatMoney = (amount: number, currency: AppSettings['currency']): string => formatCurrency(amount, currency)
 
 function sanitizeExcelCell<T>(value: T): T {
   if (typeof value === 'string' && /^[=+\-@]/.test(value)) {
@@ -192,10 +187,7 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   }, [])
 
   function handlePrint() {
-    document.body.classList.add('printing-technical-inspection')
-    setTimeout(() => {
-      window.print()
-    }, 50)
+    void safePrint({ bodyClass: 'printing-technical-inspection' })
   }
 
   async function handleExportExcel() {

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { WAREHOUSES, getWarehouseStats, type CustodyItem } from '../lib/custody'
 import type { AppSettings } from '../lib/settings'
+import { formatCurrency } from '../lib/currency'
 
 interface CustodyAnalyticsDashboardProps {
   items: CustodyItem[]
@@ -24,14 +25,7 @@ interface CustodyAnalyticsDashboardProps {
   onExportAllExcel: () => void
 }
 
-function formatMoney(amount: number, currency: string) {
-  if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
+const formatMoney = (amount: number, currency: string) => formatCurrency(amount, currency)
 
 export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps> = ({
   items,

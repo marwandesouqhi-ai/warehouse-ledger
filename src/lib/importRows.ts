@@ -162,3 +162,50 @@ export function generateMovementErrorReportCsv(rejectedRows: RowValidationError[
     const lines = rejectedRows.map((r) => `${r.rowNumber},"${(r.itemName || '—').replace(/"/g, '""')}","${r.reason.replace(/"/g, '""')}"`)
     return [header, ...lines].join('\r\n')
 }
+
+/**
+ * Requirement #13: Asynchronous chunked parser with progress for large datasets.
+ * Prevents main thread jank and yields control between chunks.
+ */
+export async function validateAndClassifyMovementRowsAsync(
+    rows: Array<Record<string, unknown>>,
+    onProgress?: (progress: { processed: number; total: number; percent: number }) => void,
+    idBase = Date.now(),
+    chunkSize = 250
+): Promise<MovementImportValidationResult> {
+    const total = rows.length
+    if (total === 0) {
+        return { validMovements: [], rejectedRows: [], totalRows: 0 }
+    }
+
+    const validMovements: FixtureMovement[] = []
+    const rejectedRows: RowValidationError[] = []
+
+    for (let i = 0; i < total; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize)
+        const subResult = validateAndClassifyMovementRows(chunk, idBase + i)
+
+        // Adjust row numbers to match global position
+        subResult.rejectedRows.forEach((rej) => {
+            rej.rowNumber = rej.rowNumber + i
+        })
+
+        validMovements.push(...subResult.validMovements)
+        rejectedRows.push(...subResult.rejectedRows)
+
+        if (onProgress) {
+            const processed = Math.min(i + chunkSize, total)
+            onProgress({ processed, total, percent: Math.round((processed / total) * 100) })
+        }
+
+        if (i + chunkSize < total) {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+        }
+    }
+
+    return {
+        validMovements,
+        rejectedRows,
+        totalRows: total,
+    }
+}

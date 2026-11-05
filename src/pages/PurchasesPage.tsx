@@ -28,6 +28,7 @@ import { canCreatePurchase } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
 
 import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
+import { formatCurrency } from '../lib/currency'
 
 type PurchasesPageProps = {
   movements: FixtureMovement[]
@@ -41,11 +42,6 @@ type PurchasesPageProps = {
   session?: Session | null
   globalSearchTerm?: string
   initialTab?: 'list' | 'add'
-}
-
-function formatCurrency(value: number, currency: AppSettings['currency']): string {
-  if (!Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 }
 
 function sanitizeExcelCell<T>(value: T): T {

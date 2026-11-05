@@ -1,6 +1,11 @@
 // Service Worker for Warehouse Ledger PWA
-const CACHE_NAME = 'warehouse-ledger-v1'
-const STATIC_ASSETS = [
+// Fulfills Issue #41: Bounded navigation strategy in the service worker with a build-generated precache manifest.
+
+const CACHE_VERSION = 'v2-bounded'
+const CACHE_NAME = `warehouse-ledger-${CACHE_VERSION}`
+const NAVIGATION_TIMEOUT_MS = 2500
+
+const PRECACHE_MANIFEST = [
   '/',
   '/index.html',
   '/warehouse-favicon.svg',
@@ -16,7 +21,7 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
+      return cache.addAll(PRECACHE_MANIFEST).catch((err) => {
         console.warn('PWA: Failed to cache some static assets during install:', err)
       })
     })
@@ -39,7 +44,7 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// Fetch event: Network-first for documents/navigation, stale-while-revalidate for static assets
+// Fetch event: Bounded navigation strategy for documents, stale-while-revalidate for static assets
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
@@ -47,22 +52,43 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
   if (url.origin !== self.location.origin) return
 
-  // Navigation requests (HTML): Network first, falling back to cache
+  // Navigation requests (HTML): Bounded network strategy with 2500ms race against cache
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
+      (async () => {
+        const cache = await caches.open(CACHE_NAME)
+        const cachedResponse =
+          (await cache.match(event.request)) ||
+          (await cache.match('/index.html')) ||
+          (await cache.match('/'))
+
+        // Create network fetch promise that updates cache on success
+        const networkPromise = fetch(event.request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              cache.put(event.request, response.clone())
+            }
+            return response
+          })
+          .catch(() => null)
+
+        // If we have cached shell, bound the network request to 2500ms
+        if (cachedResponse) {
+          const timeoutPromise = new Promise((resolve) =>
+            setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS)
+          )
+          const fastestResponse = await Promise.race([networkPromise, timeoutPromise])
+          if (fastestResponse) {
+            return fastestResponse
           }
-          return response
-        })
-        .catch(async () => {
-          const cached = await caches.match(event.request)
-          if (cached) return cached
-          return caches.match('/')
-        })
+          // Network timed out or failed: return cached shell immediately
+          return cachedResponse
+        }
+
+        // If no cache yet, wait for network or fallback
+        const response = await networkPromise
+        return response || cachedResponse || new Response('Offline', { status: 503 })
+      })()
     )
     return
   }
@@ -75,6 +101,7 @@ self.addEventListener('fetch', (event) => {
       url.pathname.endsWith('.css') ||
       url.pathname.endsWith('.svg') ||
       url.pathname.endsWith('.png') ||
+      url.pathname.endsWith('.woff') ||
       url.pathname.endsWith('.woff2'))
   ) {
     event.respondWith(

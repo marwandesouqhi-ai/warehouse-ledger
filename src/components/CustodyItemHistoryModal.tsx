@@ -16,6 +16,7 @@ import { WAREHOUSES, type CustodyItem, type CustodyHistoryEvent } from '../lib/c
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { AccessibleDialog } from './AccessibleDialog'
+import { formatCurrency } from '../lib/currency'
 
 interface CustodyItemHistoryModalProps {
   item: CustodyItem
@@ -24,14 +25,7 @@ interface CustodyItemHistoryModalProps {
   onUpdateItem: (updatedItem: CustodyItem) => void
 }
 
-function formatMoney(amount: number, currency: string) {
-  if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
+const formatMoney = (amount: number, currency: string) => formatCurrency(amount, currency)
 
 export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = ({
   item,

@@ -16,6 +16,7 @@ import { WAREHOUSES, type CustodyItem } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { AccessibleDialog } from './AccessibleDialog'
+import { safePrint } from '../lib/printUtils'
 
 export interface OfficialDisbursementPermitModalProps {
   initialItems?: CustodyItem[]
@@ -175,10 +176,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
 
   function handlePrintPermit() {
     if (validationError) return
-    document.body.classList.add('printing-official-permit')
-    setTimeout(() => {
-      window.print()
-    }, 50)
+    void safePrint({ bodyClass: 'printing-official-permit' })
   }
 
   async function handleRecordAndExecute() {

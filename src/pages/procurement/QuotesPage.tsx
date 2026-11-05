@@ -38,15 +38,11 @@ import { ShoppingCart, Trash2 } from 'lucide-react'
 import { fetchActiveSuppliers, type Supplier } from '../../lib/suppliersRepository'
 import { logAuditEvent } from '../../lib/auditLogger'
 import type { AppSettings } from '../../lib/settings'
+import { formatCurrency } from '../../lib/currency'
 
 interface QuotesPageProps {
   session?: Session | null
   currency: AppSettings['currency']
-}
-
-function formatCurrency(value: number, currency: AppSettings['currency']): string {
-  if (!Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 }
 
 function sanitizeExcelCell<T>(value: T): T {

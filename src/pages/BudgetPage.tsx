@@ -20,6 +20,7 @@ import {
 } from '../lib/budgetRepository'
 import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
+import { formatCurrency } from '../lib/currency'
 
 type BudgetPageProps = {
   session?: Session | null
@@ -74,9 +75,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
 
   const isAdmin = isSystemAdmin(session)
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(val)
-  }
+  const formatMoney = (val: number) => formatCurrency(val, currency)
 
   const loadData = async () => {
     setIsLoading(true)

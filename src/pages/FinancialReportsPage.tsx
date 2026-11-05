@@ -20,6 +20,8 @@ import {
 } from '../lib/financialReportsRepository'
 import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
+import { formatCurrency } from '../lib/currency'
+import { safePrint } from '../lib/printUtils'
 
 type FinancialReportsPageProps = {
   session?: Session | null
@@ -61,9 +63,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
 
   const isAdmin = isSystemAdmin(session)
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('ar-EG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(val)
-  }
+  const formatMoney = (val: number) => formatCurrency(val, currency)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -589,7 +589,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
                 <button
                   type="button"
                   className="secondary-btn flex items-center gap-1.5"
-                  onClick={() => window.print()}
+                  onClick={() => void safePrint()}
                 >
                   <Printer size={16} /> طباعة التقرير (A4)
                 </button>
