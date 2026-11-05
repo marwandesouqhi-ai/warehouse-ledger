@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
   ClipboardList,
   Plus,
@@ -339,6 +340,7 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
             <input
               type="search"
               placeholder="ابحث برقم الطلب، اسم الصنف، مقدم الطلب أو الكلية..."
+              aria-label="ابحث في طلبات الصرف الداخلي"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input-field w-full"
@@ -493,18 +495,22 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
 
       {/* Modal: New Disbursement Request */}
       {isAddModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Plus size={18} />
-                </div>
-                <div>
-                  <h3>تقديم طلب صرف مستلزمات داخلي</h3>
-                  <span className="modal-subtitle">سيتم إرسال الطلب لأمين المخزن للمراجعة والاعتماد</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          titleId="new-disbursement-req-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Plus size={18} />
               </div>
+              <div>
+                <h3 id="new-disbursement-req-modal-title">تقديم طلب صرف مستلزمات داخلي</h3>
+                <span className="modal-subtitle">سيتم إرسال الطلب لأمين المخزن للمراجعة والاعتماد</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -650,24 +656,27 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: Details View */}
       {selectedRequest && (
-        <div className="modal-backdrop" onClick={() => setSelectedRequest(null)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <h3>تفاصيل طلب الصرف الداخلي</h3>
-                  <span className="modal-subtitle">{selectedRequest.request_number}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setSelectedRequest(null)}
+          titleId="disbursement-req-details-modal-title"
+          dialogClassName="modal-dialog"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <FileText size={18} />
               </div>
+              <div>
+                <h3 id="disbursement-req-details-modal-title">تفاصيل طلب الصرف الداخلي</h3>
+                <span className="modal-subtitle">{selectedRequest.request_number}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -773,24 +782,28 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
                 )}
               </div>
             </div>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: Rejection Reason */}
       {rejectionModalRequest && (
-        <div className="modal-backdrop" onClick={() => setRejectionModalRequest(null)}>
-          <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon modal-icon-danger">
-                  <XCircle size={18} />
-                </div>
-                <div>
-                  <h3>رفض طلب الصرف</h3>
-                  <span className="modal-subtitle">{rejectionModalRequest.request_number}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setRejectionModalRequest(null)}
+          titleId="reject-disbursement-req-modal-title"
+          role="alertdialog"
+          dialogClassName="modal-dialog modal-dialog-confirm"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon modal-icon-danger">
+                <XCircle size={18} />
               </div>
+              <div>
+                <h3 id="reject-disbursement-req-modal-title">رفض طلب الصرف</h3>
+                <span className="modal-subtitle">{rejectionModalRequest.request_number}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -828,8 +841,7 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

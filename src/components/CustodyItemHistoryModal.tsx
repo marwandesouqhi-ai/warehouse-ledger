@@ -1,5 +1,4 @@
-import React, { useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useState, useMemo } from 'react'
 import {
   X,
   History,
@@ -16,6 +15,7 @@ import {
 import { WAREHOUSES, type CustodyItem, type CustodyHistoryEvent } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
+import { AccessibleDialog } from './AccessibleDialog'
 
 interface CustodyItemHistoryModalProps {
   item: CustodyItem
@@ -46,7 +46,7 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
   const [isSaving, setIsSaving] = useState(false)
 
   // Render from structured history events if available, falling back to legacy note parsing
-  const historicalEvents = React.useMemo(() => {
+  const historicalEvents = useMemo(() => {
     const events: Array<{ date?: string; title: string; desc: string; type: 'creation' | 'transfer' | 'maintenance' | 'note' }> = []
 
     // 1. Initial registration event
@@ -138,33 +138,21 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
     setIsSaving(false)
   }
 
-  const shouldReduceMotion = useReducedMotion()
-
   return (
-    <motion.div
-      className="modal-backdrop"
-      onClick={onClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+    <AccessibleDialog
+      isOpen={true}
+      onClose={onClose}
+      titleId="custody-history-modal-title"
+      dialogClassName="modal-dialog modal-dialog-lg max-h-90vh"
     >
-      <motion.div
-        className="modal-dialog modal-dialog-lg max-h-90vh"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {/* Modal Header */}
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon modal-icon-accent">
-              <History size={20} />
-            </div>
-            <div>
-              <h3 className="m-0 text-md text-ink font-bold">سجل تاريخ وحركة الأصل</h3>
+      {/* Modal Header */}
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon modal-icon-accent">
+            <History size={20} />
+          </div>
+          <div>
+            <h3 id="custody-history-modal-title" className="m-0 text-md text-ink font-bold">سجل تاريخ وحركة الأصل</h3>
               <span className="modal-subtitle">
                 تتبع مسار الأصل وتاريخ القيد والصيانة والنقل بين القاعات
               </span>
@@ -311,7 +299,6 @@ export const CustodyItemHistoryModal: React.FC<CustodyItemHistoryModalProps> = (
             إغلاق
           </button>
         </div>
-      </motion.div>
-    </motion.div>
+    </AccessibleDialog>
   )
 }

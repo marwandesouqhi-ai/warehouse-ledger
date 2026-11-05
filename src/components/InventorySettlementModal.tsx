@@ -1,7 +1,6 @@
 import { canAddDepartment } from '../lib/permissions'
 import { getAccessSession } from '../lib/accessContext'
-import React, { useState, useMemo, useEffect } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   X,
   Printer,
@@ -19,6 +18,7 @@ import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { supabase } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
+import { AccessibleDialog } from './AccessibleDialog'
 
 interface InventorySettlementModalProps {
   allItems: CustodyItem[]
@@ -76,7 +76,6 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
   onClose,
   onSaveSettlement,
 }) => {
-  const shouldReduceMotion = useReducedMotion()
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(defaultWarehouseId)
 
   // Committee members state
@@ -326,23 +325,15 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
   const logoUrl = settings.logoDataUrl || settings.logoUrl
 
   return (
-    <motion.div
-      className="modal-backdrop"
-      onClick={handleSafeClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+    <AccessibleDialog
+      isOpen={true}
+      onClose={handleSafeClose}
+      titleId="settlement-modal-title"
+      dialogClassName="modal-dialog settlement-modal-dialog"
+      dialogStyle={{ maxWidth: '1100px', width: '96vw' }}
+      closeOnBackdropClick={!isSaving}
+      closeOnEscape={!isSaving}
     >
-      <motion.div
-        className="modal-dialog settlement-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-        style={{ maxWidth: '1100px', width: '96vw' }}
-      >
         {/* Top Header */}
         <div className="modal-header settlement-modal-header no-print">
           <div className="flex items-center gap-3">
@@ -391,7 +382,7 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
 
           <div className="text-end">
             <div className="flex items-center justify-end gap-2">
-              <h2 className="m-0 text-lg font-bold text-ink">
+              <h2 id="settlement-modal-title" className="m-0 text-lg font-bold text-ink">
                 محضر التسوية الجردية والمطابقة الفعلية للمخزون
               </h2>
               <div className="modal-title-icon" style={{ background: 'var(--accent-tint, #e0f2f1)', color: 'var(--accent, #006c67)' }}>
@@ -827,7 +818,6 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
             </div>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+    </AccessibleDialog>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../../components/AccessibleDialog'
 import {
   AlertTriangle,
   Building2,
@@ -612,18 +613,14 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
 
       {/* Add / Edit Supplier Modal */}
       {(isAddModalOpen || editingSupplier) && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setIsAddModalOpen(false)
-              setEditingSupplier(null)
-            }
-          }}
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => { setIsAddModalOpen(false); setEditingSupplier(null) }}
+          titleId="supplier-modal-title"
+          dialogClassName="modal-surface card-surface suppliers-modal-card"
         >
-          <div className="modal-surface card-surface suppliers-modal-card">
             <div className="flex justify-between items-center mb-5">
-              <h3 className="m-0 flex items-center gap-2 text-xl text-ink">
+              <h3 id="supplier-modal-title" className="m-0 flex items-center gap-2 text-xl text-ink">
                 <Building2 size={22} className="text-accent" />
                 {editingSupplier ? 'تعديل بيانات المورد' : 'إضافة مورد جديد'}
               </h3>
@@ -767,8 +764,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

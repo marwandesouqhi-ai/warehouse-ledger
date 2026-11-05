@@ -56,6 +56,7 @@ import {
 import { deriveMovement, deriveSummary } from './lib/derive'
 import { fixtureMovements, type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
+import { AccessibleDialog } from './components/AccessibleDialog'
 import { createWarehouseIssue, deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
 import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings, type PersistenceOutcome } from './lib/settings'
@@ -1932,9 +1933,19 @@ function App() {
                             return (
                               <div
                                 key={item.key}
+                                tabIndex={0}
+                                role="graphics-symbol"
+                                aria-label={`${item.label}: وارد ${chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : `${item.inQty} وحدة`}, منصرف ${chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : `${item.outQty} وحدة`}`}
                                 className={`chart-bar-group ${isHovered ? 'hovered' : ''}`}
                                 onMouseEnter={() => setHoveredMonthKey(item.key)}
                                 onMouseLeave={() => setHoveredMonthKey(null)}
+                                onFocus={() => setHoveredMonthKey(item.key)}
+                                onBlur={() => setHoveredMonthKey(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    setHoveredMonthKey((curr) => (curr === item.key ? null : item.key))
+                                  }
+                                }}
                               >
                                 {isHovered && (
                                   <div className="chart-tooltip">
@@ -1986,6 +1997,35 @@ function App() {
                           <span>المتبقي: {chartMetric === 'value' ? formatCurrency(summary.remaining_value, settings.currency) : `${netStockUnits.toLocaleString('ar-EG')} وحدة`}</span>
                         </div>
                       </div>
+
+                      {/* Accessible Data Table for Screen Readers & Keyboard users */}
+                      <details className="chart-accessible-table-wrap px-4 pb-3">
+                        <summary className="text-xs text-muted cursor-pointer hover:underline py-1">
+                          عرض بيانات المخطط كجدول نصي للقراءة والوصولية
+                        </summary>
+                        <div className="table-card mt-2">
+                          <table aria-label="بيانات حركة التوريد والصرف الشهرية">
+                            <thead>
+                              <tr>
+                                <th>الفترة</th>
+                                <th>الوارد ({chartMetric === 'value' ? settings.currency : 'وحدة'})</th>
+                                <th>المنصرف ({chartMetric === 'value' ? settings.currency : 'وحدة'})</th>
+                                <th>عدد العمليات</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {monthlyStats.map((item) => (
+                                <tr key={`table-summary-${item.key}`}>
+                                  <td>{item.label}</td>
+                                  <td>{chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : item.inQty.toLocaleString('ar-EG')}</td>
+                                  <td>{chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : item.outQty.toLocaleString('ar-EG')}</td>
+                                  <td>{item.count.toLocaleString('ar-EG')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
                     </div>
                   </div>
 
@@ -2387,9 +2427,19 @@ function App() {
                                 return (
                                   <div
                                     key={item.key}
+                                    tabIndex={0}
+                                    role="graphics-symbol"
+                                    aria-label={`${item.label}: وارد ${chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : `${item.inQty} وحدة`}, منصرف ${chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : `${item.outQty} وحدة`}`}
                                     className={`chart-bar-group ${isHovered ? 'hovered' : ''}`}
                                     onMouseEnter={() => setHoveredMonthKey(item.key)}
                                     onMouseLeave={() => setHoveredMonthKey(null)}
+                                    onFocus={() => setHoveredMonthKey(item.key)}
+                                    onBlur={() => setHoveredMonthKey(null)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        setHoveredMonthKey((curr) => (curr === item.key ? null : item.key))
+                                      }
+                                    }}
                                   >
                                     {isHovered && (
                                       <div className="chart-tooltip">
@@ -2441,6 +2491,35 @@ function App() {
                               <span>المتبقي: {chartMetric === 'value' ? formatCurrency(summary.remaining_value, settings.currency) : `${netStockUnits.toLocaleString('ar-EG')} وحدة`}</span>
                             </div>
                           </div>
+
+                          {/* Accessible Data Table for Screen Readers & Keyboard users */}
+                          <details className="chart-accessible-table-wrap px-4 pb-3">
+                            <summary className="text-xs text-muted cursor-pointer hover:underline py-1">
+                              عرض بيانات المخطط كجدول نصي للقراءة والوصولية
+                            </summary>
+                            <div className="table-card mt-2">
+                              <table aria-label="بيانات حركة التوريد والصرف عبر الأشهر">
+                                <thead>
+                                  <tr>
+                                    <th>الفترة</th>
+                                    <th>الوارد ({chartMetric === 'value' ? settings.currency : 'وحدة'})</th>
+                                    <th>المنصرف ({chartMetric === 'value' ? settings.currency : 'وحدة'})</th>
+                                    <th>عدد العمليات</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {monthlyStats.map((item) => (
+                                    <tr key={`table-view-${item.key}`}>
+                                      <td>{item.label}</td>
+                                      <td>{chartMetric === 'value' ? formatCurrency(item.inValue, settings.currency) : item.inQty.toLocaleString('ar-EG')}</td>
+                                      <td>{chartMetric === 'value' ? formatCurrency(item.outValue, settings.currency) : item.outQty.toLocaleString('ar-EG')}</td>
+                                      <td>{item.count.toLocaleString('ar-EG')}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
                         </div>
                       </div>
                     </>
@@ -3003,156 +3082,139 @@ function App() {
 
         <AnimatePresence>
           {canManageRecords && editingMovement && (
-            <motion.div
-              className="modal-backdrop"
-              onClick={() => !isUpdating && setEditingMovement(null)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+            <AccessibleDialog
+              isOpen={true}
+              onClose={() => !isUpdating && setEditingMovement(null)}
+              titleId="edit-movement-title"
+              dialogClassName="modal-dialog modal-dialog-form"
+              closeOnBackdropClick={!isUpdating}
+              closeOnEscape={!isUpdating}
             >
-              <motion.div
-                className="modal-dialog modal-dialog-form"
-                onClick={(e) => e.stopPropagation()}
-                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <div className="modal-header">
-                  <div className="modal-title-wrap">
-                    <div className="modal-title-icon"><Pencil size={18} /></div>
-                    <div>
-                      <h3>تعديل حركة المخزن</h3>
-                      <span className="modal-subtitle">{editingMovement.item}</span>
-                    </div>
+              <div className="modal-header">
+                <div className="modal-title-wrap">
+                  <div className="modal-title-icon"><Pencil size={18} /></div>
+                  <div>
+                    <h3 id="edit-movement-title">تعديل حركة المخزن</h3>
+                    <span className="modal-subtitle">{editingMovement.item}</span>
                   </div>
-                  <button type="button" className="modal-close-btn" onClick={() => !isUpdating && setEditingMovement(null)} disabled={isUpdating} aria-label="إغلاق">
-                    <X size={18} />
-                  </button>
                 </div>
-                <div className="modal-body">
-                  <MovementForm
-                    initialMovement={editingMovement}
-                    isModal
-                    onSave={async (updated) => {
-                      setIsUpdating(true)
-                      try {
-                        await updateExistingMovement(updated)
-                        setEditingMovement(null)
-                      } finally {
-                        setIsUpdating(false)
-                      }
-                    }}
-                    onCancel={() => !isUpdating && setEditingMovement(null)}
-                  />
-                </div>
-              </motion.div>
-            </motion.div>
+                <button type="button" className="modal-close-btn" onClick={() => !isUpdating && setEditingMovement(null)} disabled={isUpdating} aria-label="إغلاق">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <MovementForm
+                  initialMovement={editingMovement}
+                  isModal
+                  onSave={async (updated) => {
+                    setIsUpdating(true)
+                    try {
+                      await updateExistingMovement(updated)
+                      setEditingMovement(null)
+                    } finally {
+                      setIsUpdating(false)
+                    }
+                  }}
+                  onCancel={() => !isUpdating && setEditingMovement(null)}
+                />
+              </div>
+            </AccessibleDialog>
           )}
         </AnimatePresence>
 
         <AnimatePresence>
           {canManageRecords && deletingMovement && (
-            <motion.div
-              className="modal-backdrop"
-              onClick={() => !isDeleting && setDeletingMovement(null)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+            <AccessibleDialog
+              isOpen={true}
+              role="alertdialog"
+              onClose={() => !isDeleting && setDeletingMovement(null)}
+              titleId="delete-movement-title"
+              dialogClassName="modal-dialog modal-dialog-confirm"
+              closeOnBackdropClick={!isDeleting}
+              closeOnEscape={!isDeleting}
             >
-              <motion.div
-                className="modal-dialog modal-dialog-confirm"
-                onClick={(e) => e.stopPropagation()}
-                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <div className="modal-header">
-                  <div className="modal-title-wrap">
-                    <div className="modal-title-icon modal-icon-danger">
-                      <Trash2 size={18} />
-                    </div>
-                    <div>
-                      <h3>تأكيد حذف الحركة</h3>
-                      <span className="modal-subtitle">سيتم حذف الحركة نهائياً من السجل</span>
-                    </div>
+              <div className="modal-header">
+                <div className="modal-title-wrap">
+                  <div className="modal-title-icon modal-icon-danger">
+                    <Trash2 size={18} />
                   </div>
-                  <button type="button" className="modal-close-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)} aria-label="إغلاق">
-                    <X size={18} />
+                  <div>
+                    <h3 id="delete-movement-title">تأكيد حذف الحركة</h3>
+                    <span className="modal-subtitle">سيتم حذف الحركة نهائياً من السجل</span>
+                  </div>
+                </div>
+                <button type="button" className="modal-close-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)} aria-label="إغلاق">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="modal-confirm-body">
+                <div className="confirm-icon-wrap delete-tone">
+                  <Trash2 size={26} />
+                </div>
+                <h3>هل أنت متأكد من الحذف؟</h3>
+                <p>أنت على وشك حذف هذا السجل بشكل نهائي من قاعدة البيانات والسجلات المخزنية.</p>
+
+                <div className="confirm-details-card">
+                  <div className="confirm-detail-row">
+                    <span className="confirm-detail-label">الصنف:</span>
+                    <strong className="confirm-detail-val">{deletingMovement.item}</strong>
+                  </div>
+                  <div className="confirm-detail-row">
+                    <span className="confirm-detail-label">تاريخ الحركة:</span>
+                    <span className="confirm-detail-val">{deletingMovement.date || '—'}</span>
+                  </div>
+                  <div className="confirm-detail-row">
+                    <span className="confirm-detail-label">الكميات (وارد / منصرف):</span>
+                    <span className="confirm-detail-val">+{deletingMovement.qin} / -{deletingMovement.qout}</span>
+                  </div>
+                  {deletingMovement.from && (
+                    <div className="confirm-detail-row">
+                      <span className="confirm-detail-label">المورد:</span>
+                      <span className="confirm-detail-val">{deletingMovement.from}</span>
+                    </div>
+                  )}
+                  {deletingMovement.to && (
+                    <div className="confirm-detail-row">
+                      <span className="confirm-detail-label">المستلم:</span>
+                      <span className="confirm-detail-val">{deletingMovement.to}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="confirm-warning">
+                  ⚠️ تنبيه: لا يمكن استرجاع هذا السجل بعد إتمام عملية الحذف.
+                </div>
+
+                {deleteError && <div className="inline-message error w-full mb-3" role="alert">{deleteError}</div>}
+
+                <div className="modal-confirm-actions">
+                  <button type="button" className="secondary-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)}>
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-btn"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      setIsDeleting(true)
+                      setDeleteError('')
+                      try {
+                        await deleteExistingMovement(deletingMovement)
+                        setDeletingMovement(null)
+                      } catch (err) {
+                        setDeleteError(err instanceof Error ? err.message : 'تعذر حذف الحركة.')
+                      } finally {
+                        setIsDeleting(false)
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} />
+                    {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الحركة'}
                   </button>
                 </div>
-
-                <div className="modal-confirm-body">
-                  <div className="confirm-icon-wrap delete-tone">
-                    <Trash2 size={26} />
-                  </div>
-                  <h3>هل أنت متأكد من الحذف؟</h3>
-                  <p>أنت على وشك حذف هذا السجل بشكل نهائي من قاعدة البيانات والسجلات المخزنية.</p>
-
-                  <div className="confirm-details-card">
-                    <div className="confirm-detail-row">
-                      <span className="confirm-detail-label">الصنف:</span>
-                      <strong className="confirm-detail-val">{deletingMovement.item}</strong>
-                    </div>
-                    <div className="confirm-detail-row">
-                      <span className="confirm-detail-label">تاريخ الحركة:</span>
-                      <span className="confirm-detail-val">{deletingMovement.date || '—'}</span>
-                    </div>
-                    <div className="confirm-detail-row">
-                      <span className="confirm-detail-label">الكميات (وارد / منصرف):</span>
-                      <span className="confirm-detail-val">+{deletingMovement.qin} / -{deletingMovement.qout}</span>
-                    </div>
-                    {deletingMovement.from && (
-                      <div className="confirm-detail-row">
-                        <span className="confirm-detail-label">المورد:</span>
-                        <span className="confirm-detail-val">{deletingMovement.from}</span>
-                      </div>
-                    )}
-                    {deletingMovement.to && (
-                      <div className="confirm-detail-row">
-                        <span className="confirm-detail-label">المستلم:</span>
-                        <span className="confirm-detail-val">{deletingMovement.to}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="confirm-warning">
-                    ⚠️ تنبيه: لا يمكن استرجاع هذا السجل بعد إتمام عملية الحذف.
-                  </div>
-
-                  {deleteError && <div className="inline-message error w-full mb-3">{deleteError}</div>}
-
-                  <div className="modal-confirm-actions">
-                    <button type="button" className="secondary-btn" disabled={isDeleting} onClick={() => setDeletingMovement(null)}>
-                      إلغاء
-                    </button>
-                    <button
-                      type="button"
-                      className="danger-btn"
-                      disabled={isDeleting}
-                      onClick={async () => {
-                        setIsDeleting(true)
-                        setDeleteError('')
-                        try {
-                          await deleteExistingMovement(deletingMovement)
-                          setDeletingMovement(null)
-                        } catch (err) {
-                          setDeleteError(err instanceof Error ? err.message : 'تعذر حذف الحركة.')
-                        } finally {
-                          setIsDeleting(false)
-                        }
-                      }}
-                    >
-                      <Trash2 size={16} />
-                      {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الحركة'}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
+              </div>
+            </AccessibleDialog>
           )}
         </AnimatePresence>
 
@@ -3418,6 +3480,8 @@ function MovementForm({
         <button hidden={!canCreatePurchase(getAccessSession())}
           type="button"
           role="tab"
+          id="tab-movement-inward"
+          aria-controls="panel-movement-form"
           aria-selected={movementType === 'inward'}
           className={`movement-type-tab inward-tab ${movementType === 'inward' ? 'active' : ''}`}
           onClick={() => {
@@ -3438,6 +3502,8 @@ function MovementForm({
         <button hidden={!canCreateDisbursement(getAccessSession())}
           type="button"
           role="tab"
+          id="tab-movement-outward"
+          aria-controls="panel-movement-form"
           aria-selected={movementType === 'outward'}
           className={`movement-type-tab outward-tab ${movementType === 'outward' ? 'active' : ''}`}
           onClick={() => {
@@ -3456,7 +3522,13 @@ function MovementForm({
         </button>
       </div>
 
-      <form className="movement-form" onSubmit={handleSubmit}>
+      <form
+        id="panel-movement-form"
+        role="tabpanel"
+        aria-labelledby={movementType === 'inward' ? 'tab-movement-inward' : 'tab-movement-outward'}
+        className="movement-form"
+        onSubmit={handleSubmit}
+      >
         {/* إشعار توضيحي بحسب التاب المختار */}
         {movementType === 'inward' ? (
           <div className="movement-type-banner inward">
@@ -3708,7 +3780,16 @@ function MovementForm({
           </>
         )}
 
-        {error && <div className="inline-message error form-notes span-2" role="alert">{error}</div>}
+        {error && (
+          <div
+            id="movement-form-error"
+            className="inline-message error form-notes span-2"
+            role="alert"
+            aria-live="assertive"
+          >
+            {error}
+          </div>
+        )}
 
         <div className="form-actions span-2">
           <button type="button" className="secondary-btn" onClick={onCancel} disabled={isSaving}>إلغاء</button>

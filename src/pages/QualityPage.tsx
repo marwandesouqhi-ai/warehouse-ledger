@@ -171,6 +171,7 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث في التنبيهات والأصناف..."
+                aria-label="بحث في التنبيهات والأصناف"
                 className="search-input-field w-full"
               />
               {searchTerm && (

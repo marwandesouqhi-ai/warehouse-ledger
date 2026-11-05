@@ -589,10 +589,12 @@ export default function PurchasesPage({
             <div className="purchases-search-wrap">
               <Search size={15} className="purchases-search-icon" />
               <input
+                id="purchases-search-input"
                 type="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث باسم الصنف، المورد، رقم الفاتورة..."
+                aria-label="ابحث في فواتير المشتريات باسم الصنف أو المورد أو الفاتورة"
                 className="purchases-search-input"
               />
               {searchTerm && (

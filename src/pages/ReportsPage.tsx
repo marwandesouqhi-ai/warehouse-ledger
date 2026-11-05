@@ -425,6 +425,7 @@ export default function ReportsPage({
                   <input
                     type="search"
                     placeholder="ابحث برقم الفاتورة، المورد، أو الصنف..."
+                    aria-label="ابحث في فواتير التوريدات والمشتريات"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -724,6 +725,7 @@ export default function ReportsPage({
               <input
                 type="search"
                 placeholder="ابحث عن كلية أو مبنى..."
+                aria-label="ابحث عن كلية أو مبنى"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />

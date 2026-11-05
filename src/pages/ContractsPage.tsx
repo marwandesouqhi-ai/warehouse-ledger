@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent, type ChangeEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
   FileText,
   Plus,
@@ -327,6 +328,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
             <input
               type="text"
               placeholder="البحث برقم العقد، الموضوع، أو اسم المورد..."
+              aria-label="البحث في عقود التوريد"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pr-10 pl-4 py-2 border rounded-lg bg-background"
@@ -463,18 +465,22 @@ export default function ContractsPage({ session }: ContractsPageProps) {
 
       {/* Modal: New Contract */}
       {isAddModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-form max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Plus size={18} />
-                </div>
-                <div>
-                  <h3>تسجيل عقد توريد أو اتفاقية جديدة</h3>
-                  <span className="modal-subtitle">إدراج بيانات التعاقد والشروط والمواعيد الرسمية وإرفاق المستندات</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          titleId="new-contract-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form max-w-2xl"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Plus size={18} />
               </div>
+              <div>
+                <h3 id="new-contract-modal-title">تسجيل عقد توريد أو اتفاقية جديدة</h3>
+                <span className="modal-subtitle">إدراج بيانات التعاقد والشروط والمواعيد الرسمية وإرفاق المستندات</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -717,24 +723,27 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: View Details */}
       {selectedContract && (
-        <div className="modal-backdrop" onClick={() => setSelectedContract(null)}>
-          <div className="modal-dialog max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <h3>تفاصيل عقد المورد والوثائق</h3>
-                  <span className="modal-subtitle">{selectedContract.contract_number}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setSelectedContract(null)}
+          titleId="contract-details-modal-title"
+          dialogClassName="modal-dialog max-w-2xl"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <FileText size={18} />
               </div>
+              <div>
+                <h3 id="contract-details-modal-title">تفاصيل عقد المورد والوثائق</h3>
+                <span className="modal-subtitle">{selectedContract.contract_number}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -877,22 +886,20 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Lightbox Image Preview Modal */}
       {previewImage && (
-        <div
-          className="modal-backdrop z-50 flex items-center justify-center p-4 bg-black/75"
-          onClick={() => setPreviewImage(null)}
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setPreviewImage(null)}
+          titleId="preview-image-modal-title"
+          dialogClassName="relative max-w-4xl max-h-[90vh] bg-background p-3 rounded-xl shadow-2xl overflow-hidden flex flex-col items-center"
+          backdropClassName="modal-backdrop z-50 flex items-center justify-center p-4 bg-black/75"
         >
-          <div
-            className="relative max-w-4xl max-h-[90vh] bg-background p-3 rounded-xl shadow-2xl overflow-hidden flex flex-col items-center"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="w-full flex justify-between items-center pb-2 border-b mb-2">
-              <span className="text-xs font-semibold">معاينة الصورة المرفقة</span>
+              <span id="preview-image-modal-title" className="text-xs font-semibold">معاينة الصورة المرفقة</span>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -906,8 +913,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
               alt="معاينة المرفق"
               className="max-h-[75vh] w-auto object-contain rounded-lg shadow-sm"
             />
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

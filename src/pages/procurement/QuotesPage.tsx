@@ -2,6 +2,7 @@ import { canAddDepartment, isSystemAdmin } from '../../lib/permissions'
 import { getCairoDateString } from '../../lib/dateUtils'
 import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../../components/AccessibleDialog'
 import {
   AlertTriangle,
   Check,
@@ -853,10 +854,14 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
 
       {/* Add Supplier Quote Modal */}
       {isAddQuoteModalOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-surface card-surface quotes-modal-surface">
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddQuoteModalOpen(false)}
+          titleId="add-quote-modal-title"
+          dialogClassName="modal-surface card-surface quotes-modal-surface"
+        >
             <div className="flex justify-between items-center mb-4">
-              <h3 className="m-0 flex items-center gap-2">
+              <h3 id="add-quote-modal-title" className="m-0 flex items-center gap-2">
                 <Plus size={20} /> إضافة عرض سعر للمقارنة
               </h3>
               <button
@@ -979,24 +984,27 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: New Purchase Request */}
       {isCreateRequestModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsCreateRequestModalOpen(false)}>
-          <div className="modal-dialog max-w-3xl" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <ShoppingCart size={18} />
-                </div>
-                <div>
-                  <h3>إنشاء طلب شراء وتوريد جديد</h3>
-                  <span className="modal-subtitle">إدراج بيانات الاحتياج، البنود والمواصفات، والاعتمادات المالية</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsCreateRequestModalOpen(false)}
+          titleId="create-purchase-req-modal-title"
+          dialogClassName="modal-dialog max-w-3xl"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <ShoppingCart size={18} />
               </div>
+              <div>
+                <h3 id="create-purchase-req-modal-title">إنشاء طلب شراء وتوريد جديد</h3>
+                <span className="modal-subtitle">إدراج بيانات الاحتياج، البنود والمواصفات، والاعتمادات المالية</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -1223,8 +1231,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

@@ -1,5 +1,4 @@
 import React, { useMemo, useEffect } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
 import {
   X,
   Printer,
@@ -13,6 +12,7 @@ import {
   getWarehouseStats,
 } from '../lib/custody'
 import type { AppSettings } from '../lib/settings'
+import { AccessibleDialog } from './AccessibleDialog'
 
 interface OfficialInventoryReportModalProps {
   warehouse: WarehouseDefinition
@@ -38,8 +38,6 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
   currency,
   onClose,
 }) => {
-  const shouldReduceMotion = useReducedMotion()
-
   const whItems = useMemo(() => {
     return items.filter((i) => i.warehouseId === warehouse.id)
   }, [items, warehouse.id])
@@ -72,23 +70,13 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
   }).format(new Date())
 
   return (
-    <motion.div
-      className="modal-backdrop"
-      onClick={onClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+    <AccessibleDialog
+      isOpen={true}
+      onClose={onClose}
+      titleId="inventory-report-modal-title"
+      dialogClassName="modal-dialog official-inventory-modal-dialog"
+      dialogStyle={{ maxWidth: '1020px', width: '96vw' }}
     >
-      <motion.div
-        className="modal-dialog official-inventory-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-        style={{ maxWidth: '1020px', width: '96vw' }}
-      >
         {/* Top Header Controls (Hidden in Print) */}
         <div className="modal-header no-print flex items-center justify-between p-4 border-b border-line bg-surface">
           <div className="flex items-center gap-2">
@@ -122,7 +110,7 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
           </div>
 
           <div className="text-end">
-            <h2 className="m-0 text-lg font-bold text-ink">
+            <h2 id="inventory-report-modal-title" className="m-0 text-lg font-bold text-ink">
               معاينة محضر كشف حصر وجرد العهدة ({warehouse.name})
             </h2>
             <span className="text-muted font-xs block">
@@ -312,7 +300,6 @@ export const OfficialInventoryReportModal: React.FC<OfficialInventoryReportModal
             <span>طباعة المحضر (A4 معتمد)</span>
           </button>
         </div>
-      </motion.div>
-    </motion.div>
+    </AccessibleDialog>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
   CircleDollarSign,
   Plus,
@@ -288,6 +289,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
             <input
               type="search"
               placeholder="ابحث باسم الكلية، القسم، أو الفئة..."
+              aria-label="ابحث في اعتمادات الميزانية"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input-field w-full"
@@ -388,18 +390,22 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
 
       {/* Modal: Add Budget Item */}
       {isAddModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Plus size={18} />
-                </div>
-                <div>
-                  <h3>إضافة اعتماد ميزانية جديد</h3>
-                  <span className="modal-subtitle">تخصيص ميزانية لكلية أو قسم لعام {fiscalYear}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          titleId="add-budget-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Plus size={18} />
               </div>
+              <div>
+                <h3 id="add-budget-modal-title">إضافة اعتماد ميزانية جديد</h3>
+                <span className="modal-subtitle">تخصيص ميزانية لكلية أو قسم لعام {fiscalYear}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -480,24 +486,27 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: Edit Spent */}
       {editingPlan && (
-        <div className="modal-backdrop" onClick={() => setEditingPlan(null)}>
-          <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Pencil size={18} />
-                </div>
-                <div>
-                  <h3>تعديل منصرف الميزانية</h3>
-                  <span className="modal-subtitle">{editingPlan.department}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setEditingPlan(null)}
+          titleId="edit-budget-spent-modal-title"
+          dialogClassName="modal-dialog modal-dialog-confirm"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Pencil size={18} />
               </div>
+              <div>
+                <h3 id="edit-budget-spent-modal-title">تعديل منصرف الميزانية</h3>
+                <span className="modal-subtitle">{editingPlan.department}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -540,8 +549,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

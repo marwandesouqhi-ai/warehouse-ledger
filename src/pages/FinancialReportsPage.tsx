@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
   BarChart3,
   Plus,
@@ -249,6 +250,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
             <input
               type="search"
               placeholder="ابحث برقم التقرير، العنوان، أو المعتمد..."
+              aria-label="ابحث في التقارير المالية"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input-field w-full"
@@ -377,18 +379,22 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
 
       {/* Modal: Add Financial Report */}
       {isAddModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Plus size={18} />
-                </div>
-                <div>
-                  <h3>إصدار تقرير مالي دوري جديد</h3>
-                  <span className="modal-subtitle">إدراج أرقام التوريدات والمنصرف والموازنة للفترة</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          titleId="add-fin-report-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Plus size={18} />
               </div>
+              <div>
+                <h3 id="add-fin-report-modal-title">إصدار تقرير مالي دوري جديد</h3>
+                <span className="modal-subtitle">إدراج أرقام التوريدات والمنصرف والموازنة للفترة</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -506,24 +512,27 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Modal: View & Print Report */}
       {selectedReport && (
-        <div className="modal-backdrop" onClick={() => setSelectedReport(null)}>
-          <div className="modal-dialog modal-dialog-form max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <BarChart3 size={18} />
-                </div>
-                <div>
-                  <h3>بيان التقرير المالي المعتمد</h3>
-                  <span className="modal-subtitle">{selectedReport.report_number}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setSelectedReport(null)}
+          titleId="view-fin-report-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form max-w-2xl"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <BarChart3 size={18} />
               </div>
+              <div>
+                <h3 id="view-fin-report-modal-title">بيان التقرير المالي المعتمد</h3>
+                <span className="modal-subtitle">{selectedReport.report_number}</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -606,8 +615,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

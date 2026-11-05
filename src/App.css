@@ -116,7 +116,14 @@
 .secondary-btn:focus-visible,
 .filter-chip:focus-visible,
 .toolbar-search input:focus-visible,
-.pwa-install-action:focus-visible {
+.pwa-install-action:focus-visible,
+select:focus-visible,
+.filter-select:focus-visible,
+.form-input-themed:focus-visible,
+.sort-select:focus-visible,
+.page-size-select:focus-visible,
+.filter-select-label select:focus-visible,
+.chart-bar-group:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -142,9 +149,15 @@
   background: rgba(15, 143, 124, 0.03);
 }
 
-.toolbar-search:focus-within {
+.toolbar-search:focus-within,
+.search-input-wrap:focus-within,
+.permit-search-bar:focus-within,
+.custody-search-bar:focus-within,
+.filter-select-label:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(15, 143, 124, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 143, 124, 0.16);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .mini-card,

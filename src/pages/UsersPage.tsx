@@ -27,6 +27,7 @@ import {
 import { matchesSearch } from '../lib/searchUtils'
 import { supabase, checkIsSystemAdmin } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
     isProtectedUsername,
     canDeleteUser,
@@ -936,7 +937,12 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
                 </div>
 
-                <div className="kpi-item tone-warn" onClick={() => setMainTab('requests')} role="button" tabIndex={0} aria-label="عرض طلبات تيليجرام بانتظار الاعتماد">
+                <button
+                    type="button"
+                    className="kpi-item tone-warn text-start w-full cursor-pointer"
+                    onClick={() => setMainTab('requests')}
+                    aria-label="عرض طلبات تيليجرام بانتظار الاعتماد"
+                >
                     <span className="kpi-icon"><Send size={18} /></span>
                     <div className="kpi-data">
                         <span className="kpi-label">طلبات تيليجرام بانتظار الاعتماد</span>
@@ -945,7 +951,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         </strong>
                         <span className="kpi-sub">اضغط لعرض الطلبات واعتمادها</span>
                     </div>
-                </div>
+                </button>
 
                 <div className="kpi-item tone-neutral">
                     <span className="kpi-icon"><ShieldCheck size={18} /></span>
@@ -1876,22 +1882,26 @@ export default function UsersPage({ session }: UsersPageProps) {
 
             {/* Edit User Modal */}
             {editingUser && (
-                <div className="modal-backdrop" onClick={() => setEditingUser(null)}>
-                    <div className="modal-dialog modal-dialog-form modal-dialog-md" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-accent">
-                                    <Edit2 size={18} />
-                                </div>
-                                <div>
-                                    <h3>تعديل بيانات المستخدم: {editingUser.username}</h3>
-                                    <span className="modal-subtitle">تعديل الصلاحيات أو كلمة المرور</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => setEditingUser(null)}
+                    titleId="edit-user-modal-title"
+                    dialogClassName="modal-dialog modal-dialog-form modal-dialog-md"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-accent">
+                                <Edit2 size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setEditingUser(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
-                            </button>
+                            <div>
+                                <h3 id="edit-user-modal-title">تعديل بيانات المستخدم: {editingUser.username}</h3>
+                                <span className="modal-subtitle">تعديل الصلاحيات أو كلمة المرور</span>
+                            </div>
                         </div>
+                        <button type="button" className="modal-close-btn" onClick={() => setEditingUser(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
 
                         <div className="modal-body">
                             <form onSubmit={handleSaveEdit} className="form-label-block">
@@ -2000,448 +2010,472 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 </div>
                             </form>
                         </div>
-                    </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Delete Confirmation Modal */}
             {deletingUser && (
-                <div className="modal-backdrop" onClick={() => setDeletingUser(null)}>
-                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-danger">
-                                    <Trash2 size={18} />
-                                </div>
-                                <div>
-                                    <h3>تأكيد حذف المستخدم</h3>
-                                    <span className="modal-subtitle">إلغاء وصول المستخدم للنظام</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    role="alertdialog"
+                    onClose={() => setDeletingUser(null)}
+                    titleId="delete-user-modal-title"
+                    dialogClassName="modal-dialog modal-dialog-sm"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-danger">
+                                <Trash2 size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setDeletingUser(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                            <div>
+                                <h3 id="delete-user-modal-title">تأكيد حذف المستخدم</h3>
+                                <span className="modal-subtitle">إلغاء وصول المستخدم للنظام</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => setDeletingUser(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="modal-body modal-body-pad">
+                        <p className="modal-lead-text">
+                            هل أنت متأكد من رغبتك في حذف حساب المستخدم <strong>"{deletingUser.username}"</strong>؟
+                        </p>
+                        <p className="modal-help-text">
+                            لن يتمكن هذا المستخدم من تسجيل الدخول إلى النظام بعد الحذف.
+                        </p>
+
+                        <div className="form-actions mt-4">
+                            <button type="button" className="secondary-btn" onClick={() => setDeletingUser(null)}>
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                className="primary-btn btn-danger-action"
+                                onClick={() => handleDelete(deletingUser)}
+                            >
+                                تأكيد الحذف
                             </button>
                         </div>
-
-                        <div className="modal-body modal-body-pad">
-                            <p className="modal-lead-text">
-                                هل أنت متأكد من رغبتك في حذف حساب المستخدم <strong>"{deletingUser.username}"</strong>؟
-                            </p>
-                            <p className="modal-help-text">
-                                لن يتمكن هذا المستخدم من تسجيل الدخول إلى النظام بعد الحذف.
-                            </p>
-
-                            <div className="form-actions mt-4">
-                                <button type="button" className="secondary-btn" onClick={() => setDeletingUser(null)}>
-                                    إلغاء
-                                </button>
-                                <button
-                                    type="button"
-                                    className="primary-btn btn-danger-action"
-                                    onClick={() => handleDelete(deletingUser)}
-                                >
-                                    تأكيد الحذف
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Quick Admin Password Change Modal */}
             {pwdModalUser && (
-                <div className="modal-backdrop" onClick={() => setPwdModalUser(null)}>
-                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-accent">
-                                    <KeyRound size={18} />
-                                </div>
-                                <div>
-                                    <h3>تغيير كلمة مرور المستخدم</h3>
-                                    <span className="modal-subtitle">المستخدم: {pwdModalUser.username} ({pwdModalUser.displayName})</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => setPwdModalUser(null)}
+                    titleId="pwd-user-modal-title"
+                    dialogClassName="modal-dialog modal-dialog-sm"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-accent">
+                                <KeyRound size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setPwdModalUser(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
-                            </button>
+                            <div>
+                                <h3 id="pwd-user-modal-title">تغيير كلمة مرور المستخدم</h3>
+                                <span className="modal-subtitle">المستخدم: {pwdModalUser.username} ({pwdModalUser.displayName})</span>
+                            </div>
                         </div>
+                        <button type="button" className="modal-close-btn" onClick={() => setPwdModalUser(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
 
-                        <div className="modal-body modal-body-pad">
-                            <form onSubmit={handleSaveUserPassword} className="form-label-block">
-                                <label className="form-label-block">
-                                    <div className="flex justify-between items-center">
-                                        <span>كلمة المرور الجديدة</span>
-                                        <button
-                                            type="button"
-                                            onClick={handleGenerateModalPassword}
-                                         className="text-link-btn font-xs">
-                                            <Sparkles size={13} />
-                                            توليد كلمة مرور
-                                        </button>
-                                    </div>
-                                    <div className="input-icon-wrapper">
-                                        <input
-                                            type={showModalNewPassword ? 'text' : 'password'}
-                                            value={modalNewPassword}
-                                            onChange={(e) => setModalNewPassword(e.target.value)}
-                                            required
-                                            placeholder="أدخل كلمة المرور الجديدة"
-                                            className="form-input-themed input-with-end-padding"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowModalNewPassword(!showModalNewPassword)}
-                                            className="input-action-btn"
-                                            aria-label={showModalNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                                        >
-                                            {showModalNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                        </button>
-                                    </div>
-                                </label>
-
-                                {pwdModalError && <div className="inline-message error">{pwdModalError}</div>}
-                                {pwdModalSuccess && (
-                                    <div className="inline-message success flex items-center gap-1">
-                                        <Check size={16} />
-                                        {pwdModalSuccess}
-                                    </div>
-                                )}
-
-                                <div className="form-actions mt-2">
-                                    <button type="button" className="secondary-btn" onClick={() => setPwdModalUser(null)}>
-                                        إلغاء
-                                    </button>
-                                    <button type="submit" className="primary-btn" disabled={pwdModalSaving}>
-                                        {pwdModalSaving ? 'جاري الحفظ...' : 'تحديث كلمة المرور'}
+                    <div className="modal-body modal-body-pad">
+                        <form onSubmit={handleSaveUserPassword} className="form-label-block">
+                            <label className="form-label-block">
+                                <div className="flex justify-between items-center">
+                                    <span>كلمة المرور الجديدة</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateModalPassword}
+                                        className="text-link-btn font-xs">
+                                        <Sparkles size={13} />
+                                        توليد كلمة مرور
                                     </button>
                                 </div>
-                            </form>
-                        </div>
+                                <div className="input-icon-wrapper">
+                                    <input
+                                        type={showModalNewPassword ? 'text' : 'password'}
+                                        value={modalNewPassword}
+                                        onChange={(e) => setModalNewPassword(e.target.value)}
+                                        required
+                                        placeholder="أدخل كلمة المرور الجديدة"
+                                        className="form-input-themed input-with-end-padding"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowModalNewPassword(!showModalNewPassword)}
+                                        className="input-action-btn"
+                                        aria-label={showModalNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                                    >
+                                        {showModalNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </label>
+
+                            {pwdModalError && <div className="inline-message error">{pwdModalError}</div>}
+                            {pwdModalSuccess && (
+                                <div className="inline-message success flex items-center gap-1">
+                                    <Check size={16} />
+                                    {pwdModalSuccess}
+                                </div>
+                            )}
+
+                            <div className="form-actions mt-2">
+                                <button type="button" className="secondary-btn" onClick={() => setPwdModalUser(null)}>
+                                    إلغاء
+                                </button>
+                                <button type="submit" className="primary-btn" disabled={pwdModalSaving}>
+                                    {pwdModalSaving ? 'جاري الحفظ...' : 'تحديث كلمة المرور'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Approve Registration Request Modal */}
             {approvingReq && (
-                <div className="modal-backdrop" onClick={() => !isActionLoading && setApprovingReq(null)}>
-                    <div className="modal-dialog modal-dialog-md" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-success">
-                                    <CheckCircle2 size={18} />
-                                </div>
-                                <div>
-                                    <h3>اعتماد طلب تسجيل الموظف</h3>
-                                    <span className="modal-subtitle">المتقدم: {approvingReq.fullName}</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => !isActionLoading && setApprovingReq(null)}
+                    titleId="approve-req-modal-title"
+                    dialogClassName="modal-dialog modal-dialog-md"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-success">
+                                <CheckCircle2 size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setApprovingReq(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                            <div>
+                                <h3 id="approve-req-modal-title">اعتماد طلب تسجيل الموظف</h3>
+                                <span className="modal-subtitle">المتقدم: {approvingReq.fullName}</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setApprovingReq(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="modal-body modal-body-pad">
+                        <div className="info-grid-box mb-4 font-sm">
+                            <div className="info-grid-row">
+                                <span className="text-muted">البريد الإلكتروني:</span>
+                                <strong className="text-ltr">{approvingReq.email}</strong>
+
+                                <span className="text-muted">القسم المطلوب:</span>
+                                <span>{approvingReq.requestedDepartment}</span>
+
+                                <span className="text-muted">الدور المطلوب:</span>
+                                <span className="text-accent font-semibold">
+                                    {ROLE_LABELS[approvingReq.requestedRole as EffectiveRole] || approvingReq.requestedRole}
+                                </span>
+
+                                <span className="text-muted">حالة التحقق:</span>
+                                <span>
+                                    {approvingReq.verificationStatus === 'verified'
+                                        ? 'تم التحقق من البريد الإلكتروني بنجاح'
+                                        : 'بانتظار رمز OTP'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <label className="form-label-block mb-4">
+                            <span>الدور النهائي المُعتمد للموظف <span className="req-star">*</span></span>
+                            <select
+                                value={selectedApprovedRole}
+                                onChange={(e) => setSelectedApprovedRole(e.target.value)}
+                                className="form-input-themed"
+                            >
+                                {ASSIGNABLE_ROLES.filter((r) => r.value !== 'system_admin').map((r) => (
+                                    <option key={r.value} value={r.value}>{r.label}</option>
+                                ))}
+                            </select>
+                            <span className="modal-help-text">
+                                سيتم توليد الرقم الوظيفي الموحد (Unique ID) فورياً، وإنشاء ملف الموظف بحالة بانتظار التفعيل، وإرسال رابط دعوة إلى بريده الإلكتروني ({approvingReq.email}) عبر Google SMTP لاختيار اسم المستخدم وكلمة المرور.
+                            </span>
+                        </label>
+
+                        <div className="form-actions mt-3">
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => setApprovingReq(null)}
+                                disabled={isActionLoading}
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                className="primary-btn"
+                                onClick={handleApproveRequest}
+                                disabled={isActionLoading}
+                            >
+                                {isActionLoading ? 'جارٍ الاعتماد وإرسال الدعوة...' : 'قبول وإرسال الدعوة'}
                             </button>
                         </div>
-
-                        <div className="modal-body modal-body-pad">
-                            <div className="info-grid-box mb-4 font-sm">
-                                <div className="info-grid-row">
-                                    <span className="text-muted">البريد الإلكتروني:</span>
-                                    <strong className="text-ltr">{approvingReq.email}</strong>
-
-                                    <span className="text-muted">القسم المطلوب:</span>
-                                    <span>{approvingReq.requestedDepartment}</span>
-
-                                    <span className="text-muted">الدور المطلوب:</span>
-                                    <span className="text-accent font-semibold">
-                                        {ROLE_LABELS[approvingReq.requestedRole as EffectiveRole] || approvingReq.requestedRole}
-                                    </span>
-
-                                    <span className="text-muted">حالة التحقق:</span>
-                                    <span>
-                                        {approvingReq.verificationStatus === 'verified'
-                                            ? 'تم التحقق من البريد الإلكتروني بنجاح'
-                                            : 'بانتظار رمز OTP'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <label className="form-label-block mb-4">
-                                <span>الدور النهائي المُعتمد للموظف <span className="req-star">*</span></span>
-                                <select
-                                    value={selectedApprovedRole}
-                                    onChange={(e) => setSelectedApprovedRole(e.target.value)}
-                                    className="form-input-themed"
-                                >
-                                    {ASSIGNABLE_ROLES.filter((r) => r.value !== 'system_admin').map((r) => (
-                                        <option key={r.value} value={r.value}>{r.label}</option>
-                                    ))}
-                                </select>
-                                <span className="modal-help-text">
-                                    سيتم توليد الرقم الوظيفي الموحد (Unique ID) فورياً، وإنشاء ملف الموظف بحالة بانتظار التفعيل، وإرسال رابط دعوة إلى بريده الإلكتروني ({approvingReq.email}) عبر Google SMTP لاختيار اسم المستخدم وكلمة المرور.
-                                </span>
-                            </label>
-
-                            <div className="form-actions mt-3">
-                                <button
-                                    type="button"
-                                    className="secondary-btn"
-                                    onClick={() => setApprovingReq(null)}
-                                    disabled={isActionLoading}
-                                >
-                                    إلغاء
-                                </button>
-                                <button
-                                    type="button"
-                                    className="primary-btn"
-                                    onClick={handleApproveRequest}
-                                    disabled={isActionLoading}
-                                >
-                                    {isActionLoading ? 'جارٍ الاعتماد وإرسال الدعوة...' : 'قبول وإرسال الدعوة'}
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Reject Registration Request Modal */}
             {rejectingReq && (
-                <div className="modal-backdrop" onClick={() => !isActionLoading && setRejectingReq(null)}>
-                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-danger">
-                                    <UserX size={18} />
-                                </div>
-                                <div>
-                                    <h3>رفض طلب التسجيل</h3>
-                                    <span className="modal-subtitle">المتقدم: {rejectingReq.fullName}</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => !isActionLoading && setRejectingReq(null)}
+                    titleId="reject-req-modal-title"
+                    role="alertdialog"
+                    dialogClassName="modal-dialog modal-dialog-sm"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-danger">
+                                <UserX size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setRejectingReq(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                            <div>
+                                <h3 id="reject-req-modal-title">رفض طلب التسجيل</h3>
+                                <span className="modal-subtitle">المتقدم: {rejectingReq.fullName}</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setRejectingReq(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="modal-body modal-body-pad">
+                        <p className="modal-lead-text">
+                            هل أنت متأكد من رغبتك في رفض طلب التسجيل للمتقدم <strong>"{rejectingReq.fullName}"</strong>؟
+                        </p>
+
+                        <label className="form-label-block mb-4">
+                            <span>سبب الرفض (سيتم حفظه في السجل وإبلاغ المتقدم):</span>
+                            <textarea
+                                value={rejectionReasonInput}
+                                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                                placeholder="مثال: لم يتم استيفاء شروط الانضمام، أو بيانات الاتصال غير مطابقة..."
+                                rows={3}
+                                className="form-input-themed"
+                            />
+                        </label>
+
+                        <div className="form-actions mt-3">
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => setRejectingReq(null)}
+                                disabled={isActionLoading}
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                className="primary-btn btn-danger-action"
+                                onClick={handleRejectRequest}
+                                disabled={isActionLoading}
+                            >
+                                {isActionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
                             </button>
                         </div>
-
-                        <div className="modal-body modal-body-pad">
-                            <p className="modal-lead-text">
-                                هل أنت متأكد من رغبتك في رفض طلب التسجيل للمتقدم <strong>"{rejectingReq.fullName}"</strong>؟
-                            </p>
-
-                            <label className="form-label-block mb-4">
-                                <span>سبب الرفض (سيتم حفظه في السجل وإبلاغ المتقدم):</span>
-                                <textarea
-                                    value={rejectionReasonInput}
-                                    onChange={(e) => setRejectionReasonInput(e.target.value)}
-                                    placeholder="مثال: لم يتم استيفاء شروط الانضمام، أو بيانات الاتصال غير مطابقة..."
-                                    rows={3}
-                                    className="form-input-themed"
-                                />
-                            </label>
-
-                            <div className="form-actions mt-3">
-                                <button
-                                    type="button"
-                                    className="secondary-btn"
-                                    onClick={() => setRejectingReq(null)}
-                                    disabled={isActionLoading}
-                                >
-                                    إلغاء
-                                </button>
-                                <button
-                                    type="button"
-                                    className="primary-btn btn-danger-action"
-                                    onClick={handleRejectRequest}
-                                    disabled={isActionLoading}
-                                >
-                                    {isActionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Cancel Invitation Modal */}
             {cancellingReq && (
-                <div className="modal-backdrop" onClick={() => !isActionLoading && setCancellingReq(null)}>
-                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-danger">
-                                    <UserX size={18} />
-                                </div>
-                                <div>
-                                    <h3>إلغاء دعوة الموظف</h3>
-                                    <span className="modal-subtitle">{cancellingReq.fullName} ({cancellingReq.email})</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => !isActionLoading && setCancellingReq(null)}
+                    titleId="cancel-req-modal-title"
+                    role="alertdialog"
+                    dialogClassName="modal-dialog modal-dialog-sm"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-danger">
+                                <UserX size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setCancellingReq(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                            <div>
+                                <h3 id="cancel-req-modal-title">إلغاء دعوة الموظف</h3>
+                                <span className="modal-subtitle">{cancellingReq.fullName} ({cancellingReq.email})</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setCancellingReq(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="modal-body modal-body-pad">
+                        <p className="modal-lead-text">
+                            هل أنت متأكد من إلغاء دعوة الموظف <strong>"{cancellingReq.fullName}"</strong>؟
+                        </p>
+                        <p className="modal-help-text">
+                            سيتم إبطال رابط الدعوة فورياً ووضع الحساب في حالة تعليق، مع الحفاظ على كافة السجلات والأكواد في قاعدة البيانات بصورة آمنة ودون حذف أي بيانات.
+                        </p>
+                        <div className="form-actions mt-4">
+                            <button type="button" className="secondary-btn" onClick={() => setCancellingReq(null)} disabled={isActionLoading}>
+                                تراجع
+                            </button>
+                            <button type="button" className="primary-btn btn-danger-action" onClick={handleConfirmCancelInvite} disabled={isActionLoading}>
+                                {isActionLoading ? 'جارٍ الإلغاء...' : 'تأكيد إلغاء الدعوة'}
                             </button>
                         </div>
-                        <div className="modal-body modal-body-pad">
-                            <p className="modal-lead-text">
-                                هل أنت متأكد من إلغاء دعوة الموظف <strong>"{cancellingReq.fullName}"</strong>؟
-                            </p>
-                            <p className="modal-help-text">
-                                سيتم إبطال رابط الدعوة فورياً ووضع الحساب في حالة تعليق، مع الحفاظ على كافة السجلات والأكواد في قاعدة البيانات بصورة آمنة ودون حذف أي بيانات.
-                            </p>
-                            <div className="form-actions mt-4">
-                                <button type="button" className="secondary-btn" onClick={() => setCancellingReq(null)} disabled={isActionLoading}>
-                                    تراجع
-                                </button>
-                                <button type="button" className="primary-btn btn-danger-action" onClick={handleConfirmCancelInvite} disabled={isActionLoading}>
-                                    {isActionLoading ? 'جارٍ الإلغاء...' : 'تأكيد إلغاء الدعوة'}
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Consistency Report Modal */}
             {consistencyModalOpen && (
-                <div className="modal-backdrop" onClick={() => setConsistencyModalOpen(false)}>
-                    <div className="modal-dialog modal-dialog-lg" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-accent">
-                                    <ShieldCheck size={18} />
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => setConsistencyModalOpen(false)}
+                    titleId="consistency-modal-title"
+                    dialogClassName="modal-dialog modal-dialog-lg"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-accent">
+                                <ShieldCheck size={18} />
+                            </div>
+                            <div>
+                                <h3 id="consistency-modal-title">تقرير مطابقة وتكامل الهويات الوظيفية</h3>
+                                <span className="modal-subtitle">فحص تشخيصي للقراءة فقط — لا يتم تعديل أو حذف أي سجلات</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => setConsistencyModalOpen(false)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="modal-body modal-body-pad modal-scroll-body">
+                        {consistencyLoading ? (
+                            <div className="text-center p-5 text-muted">
+                                جارٍ فحص ومطابقة جداول المصادقة والهويات...
+                            </div>
+                        ) : consistencyReport ? (
+                            <div className="grid gap-3 font-sm">
+                                <div className={`info-grid-box flex items-center gap-2 ${consistencyReport.has_issues ? 'status-warn-box' : 'status-ok-box'}`}>
+                                    {consistencyReport.has_issues ? <ShieldAlert size={20} color="var(--warn)" /> : <CheckCircle2 size={20} color="var(--ok)" />}
+                                    <div>
+                                        <strong>{consistencyReport.has_issues ? 'تم رصد حالات تباين تتطلب مراجعة الإدارة' : 'كافة الهويات متطابقة ومنتظمة بالكامل'}</strong>
+                                        <span className="block font-xs text-muted">
+                                            تاريخ الفحص: {new Date(consistencyReport.generated_at).toLocaleString('ar-EG')}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3>تقرير مطابقة وتكامل الهويات الوظيفية</h3>
-                                    <span className="modal-subtitle">فحص تشخيصي للقراءة فقط — لا يتم تعديل أو حذف أي سجلات</span>
+
+                                <div className="info-grid-box">
+                                    <strong>حسابات Auth بدون سجل app_users:</strong>
+                                    <p className="mt-1 m-0 text-muted font-xs">
+                                        {consistencyReport.missing_app_users.length === 0
+                                            ? 'لا يوجد أي تباين (0)'
+                                            : `${consistencyReport.missing_app_users.length} حساب: ${consistencyReport.missing_app_users.map(u => u.email).join(', ')}`}
+                                    </p>
+                                </div>
+
+                                <div className="info-grid-box">
+                                    <strong>سجلات app_users بدون حساب Auth:</strong>
+                                    <p className="mt-1 m-0 text-muted font-xs">
+                                        {consistencyReport.missing_auth_users.length === 0
+                                            ? 'لا يوجد أي تباين (0)'
+                                            : `${consistencyReport.missing_auth_users.length} سجل: ${consistencyReport.missing_auth_users.map(u => u.email).join(', ')}`}
+                                    </p>
+                                </div>
+
+                                <div className="info-grid-box">
+                                    <strong>طلبات تسجيل معتمدة بدون إرسال دعوة:</strong>
+                                    <p className="mt-1 m-0 text-muted font-xs">
+                                        {consistencyReport.approved_without_invitation.length === 0
+                                            ? 'لا توجد طلبات معلقة بدون دعوة (0)'
+                                            : `${consistencyReport.approved_without_invitation.length} طلب: ${consistencyReport.approved_without_invitation.map(r => r.email).join(', ')}`}
+                                    </p>
+                                </div>
+
+                                <div className="info-grid-box">
+                                    <strong>حسابات نشطة بدون اسم مستخدم:</strong>
+                                    <p className="mt-1 m-0 text-muted font-xs">
+                                        {consistencyReport.active_without_username.length === 0
+                                            ? 'جميع الحسابات النشطة تمتلك أسماء مستخدمين صحيحة (0)'
+                                            : `${consistencyReport.active_without_username.length} حساب`}
+                                    </p>
+                                </div>
+
+                                <div className="info-grid-box">
+                                    <strong>عناوين بريد إلكتروني مكررة:</strong>
+                                    <p className="mt-1 m-0 text-muted font-xs">
+                                        {consistencyReport.duplicate_emails.length === 0
+                                            ? 'لا يوجد أي بريد إلكتروني مكرر (0)'
+                                            : `${consistencyReport.duplicate_emails.length} مكرر`}
+                                    </p>
                                 </div>
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => setConsistencyModalOpen(false)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                        ) : null}
+
+                        <div className="form-actions mt-4">
+                            <button type="button" className="secondary-btn" onClick={() => setConsistencyModalOpen(false)}>
+                                إغلاق التقرير
+                            </button>
+                            <button type="button" className="primary-btn" onClick={handleOpenConsistencyReport} disabled={consistencyLoading}>
+                                <RefreshCw size={14} className={consistencyLoading ? 'animate-spin' : ''} /> إعادة الفحص
                             </button>
                         </div>
-                        <div className="modal-body modal-body-pad modal-scroll-body">
-                            {consistencyLoading ? (
-                                <div className="text-center p-5 text-muted">
-                                    جارٍ فحص ومطابقة جداول المصادقة والهويات...
-                                </div>
-                            ) : consistencyReport ? (
-                                <div className="grid gap-3 font-sm">
-                                    <div className={`info-grid-box flex items-center gap-2 ${consistencyReport.has_issues ? 'status-warn-box' : 'status-ok-box'}`}>
-                                        {consistencyReport.has_issues ? <ShieldAlert size={20} color="var(--warn)" /> : <CheckCircle2 size={20} color="var(--ok)" />}
-                                        <div>
-                                            <strong>{consistencyReport.has_issues ? 'تم رصد حالات تباين تتطلب مراجعة الإدارة' : 'كافة الهويات متطابقة ومنتظمة بالكامل'}</strong>
-                                            <span className="block font-xs text-muted">
-                                                تاريخ الفحص: {new Date(consistencyReport.generated_at).toLocaleString('ar-EG')}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="info-grid-box">
-                                        <strong>حسابات Auth بدون سجل app_users:</strong>
-                                        <p className="mt-1 m-0 text-muted font-xs">
-                                            {consistencyReport.missing_app_users.length === 0
-                                                ? 'لا يوجد أي تباين (0)'
-                                                : `${consistencyReport.missing_app_users.length} حساب: ${consistencyReport.missing_app_users.map(u => u.email).join(', ')}`}
-                                        </p>
-                                    </div>
-
-                                    <div className="info-grid-box">
-                                        <strong>سجلات app_users بدون حساب Auth:</strong>
-                                        <p className="mt-1 m-0 text-muted font-xs">
-                                            {consistencyReport.missing_auth_users.length === 0
-                                                ? 'لا يوجد أي تباين (0)'
-                                                : `${consistencyReport.missing_auth_users.length} سجل: ${consistencyReport.missing_auth_users.map(u => u.email).join(', ')}`}
-                                        </p>
-                                    </div>
-
-                                    <div className="info-grid-box">
-                                        <strong>طلبات تسجيل معتمدة بدون إرسال دعوة:</strong>
-                                        <p className="mt-1 m-0 text-muted font-xs">
-                                            {consistencyReport.approved_without_invitation.length === 0
-                                                ? 'لا توجد طلبات معلقة بدون دعوة (0)'
-                                                : `${consistencyReport.approved_without_invitation.length} طلب: ${consistencyReport.approved_without_invitation.map(r => r.email).join(', ')}`}
-                                        </p>
-                                    </div>
-
-                                    <div className="info-grid-box">
-                                        <strong>حسابات نشطة بدون اسم مستخدم:</strong>
-                                        <p className="mt-1 m-0 text-muted font-xs">
-                                            {consistencyReport.active_without_username.length === 0
-                                                ? 'جميع الحسابات النشطة تمتلك أسماء مستخدمين صحيحة (0)'
-                                                : `${consistencyReport.active_without_username.length} حساب`}
-                                        </p>
-                                    </div>
-
-                                    <div className="info-grid-box">
-                                        <strong>عناوين بريد إلكتروني مكررة:</strong>
-                                        <p className="mt-1 m-0 text-muted font-xs">
-                                            {consistencyReport.duplicate_emails.length === 0
-                                                ? 'لا يوجد أي بريد إلكتروني مكرر (0)'
-                                                : `${consistencyReport.duplicate_emails.length} مكرر`}
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            <div className="form-actions mt-4">
-                                <button type="button" className="secondary-btn" onClick={() => setConsistencyModalOpen(false)}>
-                                    إغلاق التقرير
-                                </button>
-                                <button type="button" className="primary-btn" onClick={handleOpenConsistencyReport} disabled={consistencyLoading}>
-                                    <RefreshCw size={14} className={consistencyLoading ? 'animate-spin' : ''} /> إعادة الفحص
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
 
             {/* Suspend Confirmation Modal */}
             {suspendingUser && (
-                <div className="modal-backdrop" onClick={() => !isActionLoading && setSuspendingUser(null)}>
-                    <div className="modal-dialog modal-dialog-sm" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div className="modal-title-wrap">
-                                <div className="modal-title-icon modal-icon-warning">
-                                    <UserX size={18} />
-                                </div>
-                                <div>
-                                    <h3>تعليق حساب الموظف</h3>
-                                    <span className="modal-subtitle">المستخدم: {suspendingUser.username}</span>
-                                </div>
+                <AccessibleDialog
+                    isOpen={true}
+                    onClose={() => !isActionLoading && setSuspendingUser(null)}
+                    titleId="suspend-user-modal-title"
+                    role="alertdialog"
+                    dialogClassName="modal-dialog modal-dialog-sm"
+                >
+                    <div className="modal-header">
+                        <div className="modal-title-wrap">
+                            <div className="modal-title-icon modal-icon-warning">
+                                <UserX size={18} />
                             </div>
-                            <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setSuspendingUser(null)} aria-label="إغلاق النافذة">
-                                <X size={18} />
+                            <div>
+                                <h3 id="suspend-user-modal-title">تعليق حساب الموظف</h3>
+                                <span className="modal-subtitle">المستخدم: {suspendingUser.username}</span>
+                            </div>
+                        </div>
+                        <button type="button" className="modal-close-btn" onClick={() => !isActionLoading && setSuspendingUser(null)} aria-label="إغلاق النافذة">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="modal-body modal-body-pad">
+                        <p className="modal-lead-text">
+                            هل أنت متأكد من رغبتك في إيقاف وتعليق حساب الموظف <strong>"{suspendingUser.displayName || suspendingUser.username}"</strong>؟
+                        </p>
+                        <p className="modal-help-text">
+                            لن يتمكن الموظف من تسجيل الدخول إلى النظام أو إجراء أي عمليات حتى يتم رفع التعليق وإعادة تنشيطه من قِبل مدير النظام.
+                        </p>
+
+                        <div className="form-actions mt-4">
+                            <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => setSuspendingUser(null)}
+                                disabled={isActionLoading}
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                className="primary-btn btn-warning-action"
+                                onClick={() => handleSetStatus(suspendingUser, 'suspended')}
+                                disabled={isActionLoading}
+                            >
+                                {isActionLoading ? 'جارٍ التعليق...' : 'تأكيد إيقاف الحساب'}
                             </button>
                         </div>
-
-                        <div className="modal-body modal-body-pad">
-                            <p className="modal-lead-text">
-                                هل أنت متأكد من رغبتك في إيقاف وتعليق حساب الموظف <strong>"{suspendingUser.displayName || suspendingUser.username}"</strong>؟
-                            </p>
-                            <p className="modal-help-text">
-                                لن يتمكن الموظف من تسجيل الدخول إلى النظام أو إجراء أي عمليات حتى يتم رفع التعليق وإعادة تنشيطه من قِبل مدير النظام.
-                            </p>
-
-                            <div className="form-actions mt-4">
-                                <button
-                                    type="button"
-                                    className="secondary-btn"
-                                    onClick={() => setSuspendingUser(null)}
-                                    disabled={isActionLoading}
-                                >
-                                    إلغاء
-                                </button>
-                                <button
-                                    type="button"
-                                    className="primary-btn btn-warning-action"
-                                    onClick={() => handleSetStatus(suspendingUser, 'suspended')}
-                                    disabled={isActionLoading}
-                                >
-                                    {isActionLoading ? 'جارٍ التعليق...' : 'تأكيد إيقاف الحساب'}
-                                </button>
-                            </div>
-                        </div>
                     </div>
-                </div>
+                </AccessibleDialog>
             )}
         </section>
     )

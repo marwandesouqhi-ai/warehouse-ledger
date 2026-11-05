@@ -1,7 +1,6 @@
 import { canAddDepartment } from '../lib/permissions'
 import { getAccessSession } from '../lib/accessContext'
-import React, { useState, useMemo, useEffect } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   X,
   Printer,
@@ -20,6 +19,7 @@ import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { supabase } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
+import { AccessibleDialog } from './AccessibleDialog'
 
 export interface InspectionItemRow {
   id: string
@@ -86,8 +86,6 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   onClose,
   onSave,
 }) => {
-  const shouldReduceMotion = useReducedMotion()
-
   const [inspectionNo] = useState(() => {
     return `INSP-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
   })
@@ -328,23 +326,15 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   }, [isSaving, isDirty])
 
   return (
-    <motion.div
-      className="modal-backdrop"
-      onClick={handleSafeClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
+    <AccessibleDialog
+      isOpen={true}
+      onClose={handleSafeClose}
+      titleId="inspection-modal-title"
+      dialogClassName="modal-dialog inspection-modal-dialog"
+      dialogStyle={{ maxWidth: '1100px', width: '96vw' }}
+      closeOnBackdropClick={!isSaving}
+      closeOnEscape={!isSaving}
     >
-      <motion.div
-        className="modal-dialog inspection-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
-        style={{ maxWidth: '1100px', width: '96vw' }}
-      >
         {/* Modal Header */}
         <div className="modal-header inspection-modal-header no-print">
           <div className="flex items-center gap-3">
@@ -393,7 +383,7 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
 
           <div className="text-end">
             <div className="flex items-center justify-end gap-2">
-              <h2 className="m-0 text-lg font-bold text-ink">
+              <h2 id="inspection-modal-title" className="m-0 text-lg font-bold text-ink">
                 محضر الفحص والاستلام الفني للواردات ({inspectionNo})
               </h2>
               <div className="modal-title-icon" style={{ background: 'var(--accent-tint, #e0f2f1)', color: 'var(--accent, #006c67)' }}>
@@ -896,7 +886,6 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
             </div>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+    </AccessibleDialog>
   )
 }

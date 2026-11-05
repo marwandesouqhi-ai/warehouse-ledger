@@ -70,6 +70,7 @@ import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursem
 import { InventorySettlementModal } from '../components/InventorySettlementModal'
 import { TechnicalInspectionModal } from '../components/TechnicalInspectionModal'
 import { OfficialInventoryReportModal } from '../components/OfficialInventoryReportModal'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import { logAuditEvent } from '../lib/auditLogger'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
 import { matchesSearch } from '../lib/searchUtils'
@@ -953,13 +954,14 @@ export default function CustodyPage({
                     key={wh.id}
                     type="button"
                     role="tab"
+                    id={`tab-warehouse-${wh.id}`}
+                    aria-controls="panel-custody-warehouse"
                     aria-selected={isActive}
                     className={`warehouse-tab-btn ${isActive ? 'active' : ''}`}
                     onClick={() => {
                       setActiveWarehouseId(wh.id)
                       setSearchTerm('')
                     }}
-                    id={`tab-warehouse-${wh.id}`}
                   >
                     <div className="tab-icon-wrap">
                       <Icon size={18} />
@@ -1032,6 +1034,7 @@ export default function CustodyPage({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={`ابحث في عهدة ${activeWarehouse.name} (الصنف، الكود، أمين العهدة، المعمل)...`}
                 id="input-custody-search"
+                aria-label={`ابحث في عهدة ${activeWarehouse.name}`}
               />
               {searchTerm && (
                 <button type="button" className="clear-search-btn" onClick={() => setSearchTerm('')}>
@@ -1091,7 +1094,12 @@ export default function CustodyPage({
           </div>
 
           {/* 5. Main Custody Table */}
-          <div className="custody-table-card card-surface">
+          <div
+            id="panel-custody-warehouse"
+            role="tabpanel"
+            aria-labelledby={`tab-warehouse-${activeWarehouseId}`}
+            className="custody-table-card card-surface"
+          >
             <div className="table-scroll-container">
               <table className="custody-table">
                 <thead>
@@ -1368,6 +1376,7 @@ export default function CustodyPage({
                 onChange={(e) => setDisbursementSearch(e.target.value)}
                 placeholder="ابحث في حركات المنصرف (الصنف، المستلم، المخزن المصدر، إذن الصرف)..."
                 id="input-disbursement-search"
+                aria-label="ابحث في حركات المنصرف"
               />
               {disbursementSearch && (
                 <button type="button" className="clear-search-btn" onClick={() => setDisbursementSearch('')}>
@@ -1561,64 +1570,68 @@ export default function CustodyPage({
 
       {/* 9. Delete Confirmation Modal */}
       {isSystemAdmin && deletingItem && (
-        <div className="modal-backdrop" onClick={() => setDeletingItem(null)}>
-          <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon modal-icon-danger">
-                  <Trash2 size={18} />
-                </div>
-                <div>
-                  <h3>تأكيد إسقاط / حذف العهدة</h3>
-                  <span className="modal-subtitle">{activeWarehouse.name}</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          role="alertdialog"
+          onClose={() => setDeletingItem(null)}
+          titleId="custody-delete-modal-title"
+          dialogClassName="modal-dialog modal-dialog-confirm"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon modal-icon-danger">
+                <Trash2 size={18} />
               </div>
-              <button type="button" className="modal-close-btn" onClick={() => setDeletingItem(null)} aria-label="إغلاق">
-                <X size={18} />
+              <div>
+                <h3 id="custody-delete-modal-title">تأكيد إسقاط / حذف العهدة</h3>
+                <span className="modal-subtitle">{activeWarehouse.name}</span>
+              </div>
+            </div>
+            <button type="button" className="modal-close-btn" onClick={() => setDeletingItem(null)} aria-label="إغلاق">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="modal-confirm-body">
+            <div className="confirm-icon-wrap delete-tone">
+              <Trash2 size={26} />
+            </div>
+            <h3>هل أنت متأكد من حذف هذا الصنف من العهدة؟</h3>
+            <p>سيتم إزالة هذا القيد نهائياً من سجلات عهدة {activeWarehouse.name}.</p>
+
+            <div className="confirm-details-card">
+              <div className="confirm-detail-row">
+                <span className="confirm-detail-label">الصنف:</span>
+                <strong className="confirm-detail-val">{deletingItem.name}</strong>
+              </div>
+              <div className="confirm-detail-row">
+                <span className="confirm-detail-label">كود العهدة:</span>
+                <span className="confirm-detail-val">{deletingItem.code}</span>
+              </div>
+              <div className="confirm-detail-row">
+                <span className="confirm-detail-label">أمين العهدة:</span>
+                <span className="confirm-detail-val">{deletingItem.custodian}</span>
+              </div>
+              <div className="confirm-detail-row">
+                <span className="confirm-detail-label">الكمية:</span>
+                <span className="confirm-detail-val">{deletingItem.quantity} {deletingItem.unit}</span>
+              </div>
+            </div>
+
+            <div className="confirm-warning">
+              ⚠️ تنبيه: هذه العملية ستُسجل في سجل التدقيق والعمليات.
+            </div>
+
+            <div className="modal-confirm-actions">
+              <button type="button" className="secondary-btn" onClick={() => setDeletingItem(null)}>
+                إلغاء
+              </button>
+              <button type="button" className="danger-btn" onClick={() => handleDeleteItem(deletingItem)}>
+                <Trash2 size={16} /> تأكيد الحذف
               </button>
             </div>
-
-            <div className="modal-confirm-body">
-              <div className="confirm-icon-wrap delete-tone">
-                <Trash2 size={26} />
-              </div>
-              <h3>هل أنت متأكد من حذف هذا الصنف من العهدة؟</h3>
-              <p>سيتم إزالة هذا القيد نهائياً من سجلات عهدة {activeWarehouse.name}.</p>
-
-              <div className="confirm-details-card">
-                <div className="confirm-detail-row">
-                  <span className="confirm-detail-label">الصنف:</span>
-                  <strong className="confirm-detail-val">{deletingItem.name}</strong>
-                </div>
-                <div className="confirm-detail-row">
-                  <span className="confirm-detail-label">كود العهدة:</span>
-                  <span className="confirm-detail-val">{deletingItem.code}</span>
-                </div>
-                <div className="confirm-detail-row">
-                  <span className="confirm-detail-label">أمين العهدة:</span>
-                  <span className="confirm-detail-val">{deletingItem.custodian}</span>
-                </div>
-                <div className="confirm-detail-row">
-                  <span className="confirm-detail-label">الكمية:</span>
-                  <span className="confirm-detail-val">{deletingItem.quantity} {deletingItem.unit}</span>
-                </div>
-              </div>
-
-              <div className="confirm-warning">
-                ⚠️ تنبيه: هذه العملية ستُسجل في سجل التدقيق والعمليات.
-              </div>
-
-              <div className="modal-confirm-actions">
-                <button type="button" className="secondary-btn" onClick={() => setDeletingItem(null)}>
-                  إلغاء
-                </button>
-                <button type="button" className="danger-btn" onClick={() => handleDeleteItem(deletingItem)}>
-                  <Trash2 size={16} /> تأكيد الحذف
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Import Custody Excel Modal */}
@@ -1999,22 +2012,26 @@ function CustodyItemModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon">
-              {initialItem ? <Pencil size={18} /> : <Plus size={18} />}
-            </div>
-            <div>
-              <h3>{initialItem ? 'تعديل بيانات صنف العهدة' : 'إضافة صنف عهدة جديد'}</h3>
-              <span className="modal-subtitle">سجل عهدة المخازن والأصول</span>
-            </div>
+    <AccessibleDialog
+      isOpen={true}
+      onClose={onClose}
+      titleId="custody-item-modal-title"
+      dialogClassName="modal-dialog modal-dialog-form"
+    >
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon">
+            {initialItem ? <Pencil size={18} /> : <Plus size={18} />}
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 id="custody-item-modal-title">{initialItem ? 'تعديل بيانات صنف العهدة' : 'إضافة صنف عهدة جديد'}</h3>
+            <span className="modal-subtitle">سجل عهدة المخازن والأصول</span>
+          </div>
         </div>
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+          <X size={18} />
+        </button>
+      </div>
 
         <div className="modal-body">
           <form className="movement-form custody-form-grid" onSubmit={handleSubmit}>
@@ -2213,8 +2230,7 @@ function CustodyItemModal({
             </div>
           </form>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -2263,22 +2279,26 @@ function TransferCustodyModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon modal-icon-accent">
-              <ArrowLeftRight size={18} />
-            </div>
-            <div>
-              <h3>نقل عهدة بين المخازن والكليات</h3>
-              <span className="modal-subtitle">نقل صنف مع تحويل المسؤولية الإدارية</span>
-            </div>
+    <AccessibleDialog
+      isOpen={true}
+      onClose={onClose}
+      titleId="custody-transfer-modal-title"
+      dialogClassName="modal-dialog modal-dialog-form"
+    >
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon modal-icon-accent">
+            <ArrowLeftRight size={18} />
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 id="custody-transfer-modal-title">نقل عهدة بين المخازن والكليات</h3>
+            <span className="modal-subtitle">نقل صنف مع تحويل المسؤولية الإدارية</span>
+          </div>
         </div>
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+          <X size={18} />
+        </button>
+      </div>
 
         <div className="modal-body">
           <form className="movement-form custody-transfer-form" onSubmit={handleFormSubmit}>
@@ -2347,7 +2367,7 @@ function TransferCustodyModal({
               />
             </label>
 
-            {error && <div className="inline-message error span-2">{error}</div>}
+            {error && <div className="inline-message error span-2" role="alert">{error}</div>}
 
             <div className="form-actions span-2">
               <button type="button" className="secondary-btn" onClick={onClose}>
@@ -2359,8 +2379,7 @@ function TransferCustodyModal({
             </div>
           </form>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -2437,22 +2456,28 @@ function SupplyFromMainModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleSafeClose}>
-      <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon modal-icon-success">
-              <ArrowLeftRight size={18} />
-            </div>
-            <div>
-              <h3>صرف وتغذية عهدة من المخزن الرئيسي</h3>
-              <span className="modal-subtitle">إمداد المخازن الفرعية والكليات من المخزن المركزي المغذي</span>
-            </div>
+    <AccessibleDialog
+      isOpen={true}
+      onClose={handleSafeClose}
+      titleId="supply-main-modal-title"
+      dialogClassName="modal-dialog modal-dialog-form"
+      closeOnBackdropClick={!isSubmitting}
+      closeOnEscape={!isSubmitting}
+    >
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon modal-icon-success">
+            <ArrowLeftRight size={18} />
           </div>
-          <button type="button" className="modal-close-btn" onClick={handleSafeClose} disabled={isSubmitting} aria-label="إغلاق">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 id="supply-main-modal-title">صرف وتغذية عهدة من المخزن الرئيسي</h3>
+            <span className="modal-subtitle">إمداد المخازن الفرعية والكليات من المخزن المركزي المغذي</span>
+          </div>
         </div>
+        <button type="button" className="modal-close-btn" onClick={handleSafeClose} disabled={isSubmitting} aria-label="إغلاق">
+          <X size={18} />
+        </button>
+      </div>
 
         <div className="modal-body">
           {mainItems.length === 0 ? (
@@ -2555,21 +2580,20 @@ function SupplyFromMainModal({
                 />
               </label>
 
-              {error && <div className="inline-message error span-2">{error}</div>}
+              {error && <div className="inline-message error span-2" role="alert">{error}</div>}
 
               <div className="form-actions span-2">
-                <button type="button" className="secondary-btn" onClick={onClose}>
+                <button type="button" className="secondary-btn" onClick={onClose} disabled={isSubmitting}>
                   إلغاء
                 </button>
-                <button type="submit" className="primary-btn">
-                  <ArrowLeftRight size={16} /> اعتماد الصرف والتغذية
+                <button type="submit" className="primary-btn" disabled={isSubmitting}>
+                  <ArrowLeftRight size={16} /> {isSubmitting ? 'جارٍ الاعتماد...' : 'اعتماد الصرف والتغذية'}
                 </button>
               </div>
             </form>
           )}
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -2694,22 +2718,26 @@ function ImportCustodyModal({
   }, [parsedRows])
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-dialog modal-dialog-import" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon modal-icon-accent">
-              <FileUp size={18} />
-            </div>
-            <div>
-              <h3>استيراد كشف العهدة والأصول من Excel / CSV</h3>
-              <span className="modal-subtitle">مطابق لقالب النموذج الرسمي للعهدة الحكومية والمخزنية (13 عموداً)</span>
-            </div>
+    <AccessibleDialog
+      isOpen={true}
+      onClose={onClose}
+      titleId="custody-import-modal-title"
+      dialogClassName="modal-dialog modal-dialog-import"
+    >
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon modal-icon-accent">
+            <FileUp size={18} />
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 id="custody-import-modal-title">استيراد كشف العهدة والأصول من Excel / CSV</h3>
+            <span className="modal-subtitle">مطابق لقالب النموذج الرسمي للعهدة الحكومية والمخزنية (13 عموداً)</span>
+          </div>
         </div>
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="إغلاق">
+          <X size={18} />
+        </button>
+      </div>
 
         <div className="modal-body-scroll modal-body-padded">
           {/* 1. Template Download & Instructions Strip */}
@@ -2765,7 +2793,8 @@ function ImportCustodyModal({
 
           {/* 3. Drag and Drop Zone or File Summary */}
           {!file ? (
-            <div
+            <button
+              type="button"
               className={`custody-import-dropzone ${isDragging ? 'drag-active' : ''}`}
               onDragOver={(e) => {
                 e.preventDefault()
@@ -2779,8 +2808,6 @@ function ImportCustodyModal({
                 if (droppedFile) void handleFileSelected(droppedFile)
               }}
               onClick={() => fileInputRef.current?.click()}
-              role="button"
-              tabIndex={0}
             >
               <div className="custody-import-icon-wrap">
                 <Upload size={28} />
@@ -2798,7 +2825,7 @@ function ImportCustodyModal({
                 className="hidden"
                 id="input-custody-excel-file"
               />
-            </div>
+            </button>
           ) : (
             <div className="custody-import-file-card">
               <div className="custody-import-file-info">
@@ -2987,8 +3014,7 @@ function ImportCustodyModal({
             </span>
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -3144,26 +3170,33 @@ function NewDisbursementModal({
   }
 
   return (
-    <div className="disbursement-modal-backdrop" onClick={() => { if (!isSubmitting) onClose() }}>
-      <div className="disbursement-modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-wrap">
-            <div className="modal-title-icon modal-icon-accent">
-              <ArrowLeftRight size={20} />
-            </div>
-            <div>
-              <h3 className="m-0 text-md text-ink font-bold">
-                إنشاء إذن صرف / تحويل عهدة جديد
-              </h3>
-              <span className="modal-subtitle">
-                خصم الكمية من المخزن المصدر وتحويلها ذرياً إلى الوجهة المستهدفة
-              </span>
-            </div>
+    <AccessibleDialog
+      isOpen={true}
+      onClose={() => { if (!isSubmitting) onClose() }}
+      titleId="new-disbursement-modal-title"
+      backdropClassName="disbursement-modal-backdrop"
+      dialogClassName="disbursement-modal-dialog"
+      closeOnBackdropClick={!isSubmitting}
+      closeOnEscape={!isSubmitting}
+    >
+      <div className="modal-header">
+        <div className="modal-title-wrap">
+          <div className="modal-title-icon modal-icon-accent">
+            <ArrowLeftRight size={20} />
           </div>
-          <button type="button" className="modal-close-btn" onClick={() => { if (!isSubmitting) onClose() }} disabled={isSubmitting} aria-label="إغلاق">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 id="new-disbursement-modal-title" className="m-0 text-md text-ink font-bold">
+              إنشاء إذن صرف / تحويل عهدة جديد
+            </h3>
+            <span className="modal-subtitle">
+              خصم الكمية من المخزن المصدر وتحويلها ذرياً إلى الوجهة المستهدفة
+            </span>
+          </div>
         </div>
+        <button type="button" className="modal-close-btn" onClick={() => { if (!isSubmitting) onClose() }} disabled={isSubmitting} aria-label="إغلاق">
+          <X size={18} />
+        </button>
+      </div>
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body-scroll modal-body-padded">
@@ -3358,8 +3391,7 @@ function NewDisbursementModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 

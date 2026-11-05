@@ -1,6 +1,7 @@
 import { canAddDepartment, isSystemAdmin } from '../lib/permissions'
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { AccessibleDialog } from '../components/AccessibleDialog'
 import {
   History,
   Search,
@@ -220,6 +221,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
             <input
               type="search"
               placeholder="ابحث بكود الأصل (مثال: ZNU-IT-001)، اسم الجهاز، أو الكلية..."
+              aria-label="ابحث في سجلات الأصول والمعدات"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input-field w-full"
@@ -346,18 +348,22 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
 
       {/* Modal: Add Movement */}
       {isAddModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-form" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <div className="modal-title-icon">
-                  <Plus size={18} />
-                </div>
-                <div>
-                  <h3>تسجيل حركة أصل أو معدة</h3>
-                  <span className="modal-subtitle">توثيق نقل العهدة أو إرسال للصيانة أو تغيير الحالة</span>
-                </div>
+        <AccessibleDialog
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          titleId="asset-movement-modal-title"
+          dialogClassName="modal-dialog modal-dialog-form"
+        >
+          <div className="modal-header">
+            <div className="modal-title-wrap">
+              <div className="modal-title-icon">
+                <Plus size={18} />
               </div>
+              <div>
+                <h3 id="asset-movement-modal-title">تسجيل حركة أصل أو معدة</h3>
+                <span className="modal-subtitle">توثيق نقل العهدة أو إرسال للصيانة أو تغيير الحالة</span>
+              </div>
+            </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -506,8 +512,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </section>
   )

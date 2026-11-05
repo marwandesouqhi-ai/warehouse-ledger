@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   X,
   Printer,
@@ -16,6 +15,7 @@ import {
 import { WAREHOUSES, type CustodyItem } from '../lib/custody'
 import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
+import { AccessibleDialog } from './AccessibleDialog'
 
 export interface OfficialDisbursementPermitModalProps {
   initialItems?: CustodyItem[]
@@ -249,36 +249,27 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
   }
 
   const logoUrl = settings.logoDataUrl || settings.logoUrl
-  const shouldReduceMotion = useReducedMotion()
 
   return (
-    <motion.div
-      className="modal-backdrop"
-      onClick={handleSafeClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+    <AccessibleDialog
+      isOpen={true}
+      onClose={handleSafeClose}
+      titleId="official-permit-modal-title"
+      dialogClassName="modal-dialog official-permit-dialog"
+      closeOnBackdropClick={!isSubmitting}
+      closeOnEscape={!isSubmitting}
     >
-      <motion.div
-        className="modal-dialog official-permit-dialog"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {/* Modal Controls Header (Hidden in Print) */}
-        <div className="modal-header no-print permit-controls-header">
-          <div className="modal-title-wrap flex items-center gap-3">
-            <div className="modal-title-icon permit-title-icon">
-              <FileCheck2 size={22} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="m-0 text-lg font-bold text-ink">
-                  إصدار وطباعة إذن صرف / تسليم عهدة رسمي
-                </h3>
+      {/* Modal Controls Header (Hidden in Print) */}
+      <div className="modal-header no-print permit-controls-header">
+        <div className="modal-title-wrap flex items-center gap-3">
+          <div className="modal-title-icon permit-title-icon">
+            <FileCheck2 size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 id="official-permit-modal-title" className="m-0 text-lg font-bold text-ink">
+                إصدار وطباعة إذن صرف / تسليم عهدة رسمي
+              </h3>
                 <span className={`permit-badge-tag ${isRecorded ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-bold' : ''}`}>
                   {isRecorded ? '✓ إذن رسمي معتمد ومسجل بالدفاتر' : 'مسودة إذن (غير مسجلة بالدفاتر)'}
                 </span>
@@ -483,7 +474,9 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                 <div className="permit-search-bar">
                   <Search size={14} className="text-muted" />
                   <input
+                    id="permit-item-search-input"
                     type="search"
+                    aria-label="ابحث في أصناف إذن الصرف بالاسم أو الكود أو السيريال"
                     placeholder="ابحث بالاسم، الكود، أو السيريال..."
                     value={itemSearchTerm}
                     onChange={(e) => setItemSearchTerm(e.target.value)}
@@ -831,7 +824,6 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
             </button>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+    </AccessibleDialog>
   )
 }
