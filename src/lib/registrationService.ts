@@ -366,6 +366,11 @@ export async function sendPasswordRecovery(target: {
         body: { action: 'send_password_recovery', ...target },
       })
       if (!error && data?.success) {
+        // If the backend returns the generic unconfirmed fallback, treat it as not found
+        if (typeof data.message === 'string' && data.message.includes('إذا كان الحساب مسجلاً')) {
+          const notFoundMsg = 'لم يتم العثور على أي حساب مسجل بهذا الاسم أو الرقم الوظيفي أو البريد الإلكتروني. يُرجى التحقق من صحة البيانات المدخلة.'
+          return { success: false, message: notFoundMsg, error: notFoundMsg }
+        }
         return { success: true, message: data.message }
       }
       if (error || (data && !data.success)) {
@@ -388,7 +393,31 @@ export async function sendPasswordRecovery(target: {
     }
   }
 
-  return { success: true, message: 'إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.' }
+  // Local fallback: verify against local users directory
+  try {
+    const rawUsers = localStorage.getItem('warehouse-ledger-local-users')
+    if (rawUsers) {
+      const users = JSON.parse(rawUsers) as Array<{ username?: string; email?: string; employeeId?: string }>
+      const query = (target.identifier || target.email || target.username || '').trim().toLowerCase()
+      const found = users.some(
+        (u) =>
+          (u.username && u.username.toLowerCase() === query) ||
+          (u.email && u.email.toLowerCase() === query) ||
+          (u.employeeId && u.employeeId.toLowerCase() === query)
+      )
+      if (found) {
+        return {
+          success: true,
+          message: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل في النظام بنجاح.',
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const notFoundMsg = 'لم يتم العثور على أي حساب مسجل بهذا الاسم أو الرقم الوظيفي أو البريد الإلكتروني. يُرجى التحقق من صحة البيانات المدخلة.'
+  return { success: false, message: notFoundMsg, error: notFoundMsg }
 }
 
 export async function resendRegistrationInvitation(

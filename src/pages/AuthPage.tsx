@@ -338,13 +338,16 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 if (!identifier) {
                     throw new Error('يرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني.')
                 }
+                if (identifier.length < 3) {
+                    throw new Error('البيانات المدخلة قصيرة جداً. يرجى إدخال اسم مستخدم أو رقم وظيفي أو بريد إلكتروني مسجل بالمنظومة.')
+                }
 
                 const res = await sendPasswordRecovery({ identifier })
                 if (!res.success) {
-                    throw new Error(res.error || res.message || 'تعذر إرسال رابط تعيين كلمة المرور.')
+                    throw new Error(res.error || res.message || 'تعذر إرسال رابط تعيين كلمة المرور. يرجى التحقق من البيانات المدخلة.')
                 }
 
-                setNotice(res.message || 'إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح. يُرجى مراجعة صندوق الوارد والبريد غير الهام (Spam).')
+                setNotice(res.message || 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل في النظام بنجاح. يُرجى مراجعة صندوق الوارد والبريد غير الهام (Spam).')
                 return
             }
 

@@ -19,11 +19,11 @@ describe('Password recovery flow', () => {
         vi.clearAllMocks()
     })
 
-    it('calls the public self-service recovery action for registered users', async () => {
+    it('calls the public self-service recovery action for registered users and returns success', async () => {
         mockInvoke.mockResolvedValue({
             data: {
                 success: true,
-                message: 'إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+                message: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل في النظام بنجاح.',
             },
             error: null,
         })
@@ -39,5 +39,35 @@ describe('Password recovery flow', () => {
 
         expect(result.success).toBe(true)
         expect(result.message).toContain('تم إرسال رابط إعادة تعيين كلمة المرور')
+    })
+
+    it('rejects non-existent users or gibberish and returns clear Arabic not found error', async () => {
+        // Simulates unconfirmed / non-matching user returned from backend
+        mockInvoke.mockResolvedValue({
+            data: {
+                success: true,
+                message: 'إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+            },
+            error: null,
+        })
+
+        const result = await sendPasswordRecovery({ identifier: 'نتسيبنسثتتلا' })
+
+        expect(result.success).toBe(false)
+        expect(result.error).toContain('لم يتم العثور على أي حساب مسجل')
+    })
+
+    it('handles HTTP error responses from edge function gracefully', async () => {
+        mockInvoke.mockResolvedValue({
+            data: null,
+            error: {
+                message: 'لم يتم العثور على أي حساب مسجل بهذا الاسم أو الرقم الوظيفي أو البريد الإلكتروني.',
+            },
+        })
+
+        const result = await sendPasswordRecovery({ identifier: 'unknown_emp' })
+
+        expect(result.success).toBe(false)
+        expect(result.error).toContain('لم يتم العثور على أي حساب مسجل')
     })
 })
