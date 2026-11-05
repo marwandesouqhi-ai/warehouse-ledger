@@ -7,7 +7,9 @@ import type { FixtureMovement } from './fixture'
 import { WAREHOUSES, guessCategory } from './custody'
 import { getCairoDateString } from './dateUtils'
 
-const DEFAULT_WEBHOOK_URL = import.meta.env?.VITE_GOOGLE_SHEETS_WEBHOOK_URL || ''
+const DEFAULT_WEBHOOK_URL =
+  import.meta.env?.VITE_GOOGLE_SHEETS_WEBHOOK_URL ||
+  'https://script.google.com/macros/s/AKfycbxqwUjJAaxEKoweSjDtdGTZvfda9AJbj1THAgIk8PWyPdE6nZL8BpIxmHg26inpeAWg/exec'
 const STORAGE_KEY = 'google_sheets_webhook_url'
 const QUEUE_KEY = 'google_sheets_pending_sync_queue'
 
