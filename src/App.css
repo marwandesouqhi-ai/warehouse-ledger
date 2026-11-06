@@ -1193,6 +1193,9 @@ select:focus-visible,
 
 .breadcrumb-sep {
   opacity: 0.5;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   user-select: none;
   font-size: 0.85em;
 }

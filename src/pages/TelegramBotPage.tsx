@@ -313,7 +313,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => setShowChatIdGuide((p) => !p)}
+                  onClick={() => setShowChatIdGuide((prev) => !prev)}
                   className="text-xs text-primary hover:underline flex items-center gap-1.5 min-h-[32px] px-2.5 py-1 rounded-md hover:bg-primary/10 transition-colors"
                 >
                   <Info size={14} />
