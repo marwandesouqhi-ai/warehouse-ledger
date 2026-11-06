@@ -39,6 +39,8 @@ export function extractAuthTokensFromUrl(): ExtractedTokens | null {
     const type = params.get('type') || undefined
 
     if (access_token && refresh_token) {
+      // Strip tokens from browser address bar immediately to prevent Referer leakage (CWE-598)
+      stripAuthTokensFromUrl()
       return { access_token, refresh_token, type }
     }
   } catch {
@@ -46,6 +48,33 @@ export function extractAuthTokensFromUrl(): ExtractedTokens | null {
   }
 
   return null
+}
+
+/**
+ * Strips access_token and refresh_token from the browser address bar
+ * to prevent token leakage via Referer headers, browser history, or logs (CWE-598).
+ */
+export function stripAuthTokensFromUrl(): void {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return
+  try {
+    const hash = window.location.hash || ''
+    const search = window.location.search || ''
+    let cleanSearch = search
+    if (search.includes('access_token=')) {
+      const sp = new URLSearchParams(search)
+      sp.delete('access_token')
+      sp.delete('refresh_token')
+      cleanSearch = sp.toString() ? `?${sp.toString()}` : ''
+    }
+    let cleanHash = ''
+    if (hash && !hash.includes('access_token=')) {
+      cleanHash = hash
+    }
+    const cleanUrl = window.location.pathname + cleanSearch + cleanHash
+    window.history.replaceState(null, '', cleanUrl)
+  } catch {
+    // ignore
+  }
 }
 
 /**

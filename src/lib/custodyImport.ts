@@ -40,9 +40,20 @@ export type CustodyRowValidationError = {
   rawData?: Record<string, unknown>
 }
 
+function sanitizeCsvCell(text: string): string {
+  const escaped = text.replace(/"/g, '""')
+  // Prevent CSV Formula Injection (CWE-1236) in Excel/Google Sheets
+  if (/^[=+\-@\t\r]/.test(escaped)) {
+    return `'${escaped}`
+  }
+  return escaped
+}
+
 export function generateCustodyErrorReportCsv(rejectedRows: CustodyRowValidationError[]): string {
   const header = '\uFEFFرقم الصف في الملف,اسم الصنف,سبب الرفض'
-  const lines = rejectedRows.map((r) => `${r.rowNumber},"${(r.itemName || '—').replace(/"/g, '""')}","${r.reason.replace(/"/g, '""')}"`)
+  const lines = rejectedRows.map(
+    (r) => `${r.rowNumber},"${sanitizeCsvCell(r.itemName || '—')}","${sanitizeCsvCell(r.reason)}"`
+  )
   return [header, ...lines].join('\r\n')
 }
 
