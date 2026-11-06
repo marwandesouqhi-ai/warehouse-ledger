@@ -78,7 +78,7 @@ export function parseMovementRows(rows: Array<Record<string, unknown>>, idBase =
 
 export function movementFingerprint(movement: FixtureMovement): string {
     return [movement.date, movement.inv, movement.from, movement.to, movement.permit, movement.issue,
-        movement.item, movement.price, movement.qin, movement.qout, movement.notes]
+    movement.item, movement.price, movement.qin, movement.qout, movement.notes]
         .map((value) => String(value ?? '').trim().toLocaleLowerCase())
         .join('\u001f')
 }
