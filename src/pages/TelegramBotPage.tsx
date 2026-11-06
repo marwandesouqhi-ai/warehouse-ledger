@@ -43,6 +43,10 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
       session.user?.email?.split('@')[0]
     )) || 'مدير النظام'
 
+  const [previewTime] = useState(() =>
+    new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+  )
+
   // Load settings on mount
   useEffect(() => {
     let mounted = true
@@ -460,7 +464,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                     <div className="self-end max-w-[70%] bg-[#005c4b] text-white p-2.5 rounded-2xl rounded-bl-sm shadow text-xs">
                       <p className="m-0 font-mono">/start</p>
                       <span className="text-[9px] text-emerald-200 block text-left mt-0.5">
-                        {new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                        {previewTime}
                       </span>
                     </div>
 
@@ -479,7 +483,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                           )}
 
                           <span className="text-[9px] text-slate-400 block text-left">
-                            {new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            {previewTime}
                           </span>
 
                           {/* Telegram Inline Button */}

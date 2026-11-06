@@ -1,5 +1,19 @@
 {
-  "extends": [
-    "development"
+  "connector": {
+    "name": "local"
+  },
+  "hints": {
+    "compat-api/css": [
+      "default",
+      {
+        "ignore": [
+          "user-select"
+        ]
+      }
+    ]
+  },
+  "browserslist": [
+    "defaults",
+    "not IE 11"
   ]
 }
