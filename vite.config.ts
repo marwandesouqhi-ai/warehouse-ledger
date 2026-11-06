@@ -4,6 +4,10 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    sourcemap: false,
+    chunkSizeWarningLimit: 2000,
+  },
   server: {
     host: true,
     open: true,

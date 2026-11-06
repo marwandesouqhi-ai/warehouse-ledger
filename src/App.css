@@ -45,20 +45,22 @@
 
 .skip-link {
   position: absolute;
-  top: -40px;
+  top: -120px;
+  transform: translateY(-100%);
   inset-inline-start: 16px;
   background: var(--accent);
   color: #ffffff;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-sm);
-  z-index: 1000;
-  transition: top 0.2s ease;
+  z-index: 10000;
+  transition: transform 0.2s ease, top 0.2s ease;
   font-weight: 600;
   text-decoration: none;
 }
 
 .skip-link:focus {
   top: 16px;
+  transform: translateY(0);
 }
 
 .nav {
@@ -1198,12 +1200,18 @@ select:focus-visible,
 .breadcrumb-link {
   color: var(--muted);
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
 }
 
 .breadcrumb-link:hover {
   color: var(--accent);
-  text-decoration: underline;
+  background: var(--accent-wash);
+  text-decoration: none;
 }
 
 .breadcrumb-current {
@@ -2793,12 +2801,22 @@ select:focus-visible,
 .text-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   border: 0;
   background: transparent;
   color: var(--accent);
   cursor: pointer;
   white-space: nowrap;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.text-action:hover {
+  background: var(--accent-wash);
 }
 
 .quality-empty {
@@ -4767,9 +4785,10 @@ select:focus-visible,
   gap: 9px;
   flex: 1;
   min-width: 260px;
+  min-height: 44px;
   background: var(--bg);
   border: 1px solid var(--line);
-  padding: 8px 14px;
+  padding: 4px 14px;
   border-radius: var(--r-sm);
   color: var(--muted);
   transition: border-color 0.18s ease;
@@ -4785,6 +4804,7 @@ select:focus-visible,
   background: transparent;
   outline: none;
   width: 100%;
+  min-height: 36px;
   font-family: inherit;
   font-size: var(--text-sm);
   color: var(--ink);
@@ -4816,6 +4836,7 @@ select:focus-visible,
   border-radius: var(--r-sm);
   font-size: var(--text-sm);
   color: var(--muted);
+  min-height: 44px;
 }
 
 .filter-select-group select {
@@ -4826,6 +4847,8 @@ select:focus-visible,
   font-family: inherit;
   font-size: var(--text-sm);
   cursor: pointer;
+  min-height: 40px;
+  height: 100%;
 }
 
 /* Table styles */
@@ -12095,7 +12118,7 @@ a {
     flex-direction: column !important;
     margin-inline-start: var(--sidebar-width) !important;
     width: calc(100% - var(--sidebar-width)) !important;
-    max-width: calc(100% - var(--sidebar-width)) !important;
+    max-width: min(calc(100% - var(--sidebar-width)), 1920px) !important;
     min-height: 100vh !important;
     padding: clamp(24px, 2.5vw, 44px) clamp(24px, 3vw, 48px) 64px !important;
     box-sizing: border-box !important;
@@ -13203,3 +13226,14 @@ a {
 
 /* Operation controls must remain hidden even when button styles set display. */
 [hidden] { display: none !important; }
+
+/* Ultrawide 2K & 4K display constraints */
+@media screen and (min-width: 2400px) {
+  .app-shell,
+  .auth-shell,
+  .auth-wrapper {
+    max-width: 2000px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}

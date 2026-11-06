@@ -12,6 +12,7 @@
     "test:roles:db": "node tests/integration/departmentRoles.mjs",
     "typecheck": "tsc --noEmit",
     "audit:uiux": "node scripts/audit-uiux.mjs",
+    "audit:responsive": "node scripts/responsive-full-audit.mjs",
     "seed:demo": "echo \"Demo seed script placeholder: add a Supabase demo seed command here.\""
   },
   "dependencies": {

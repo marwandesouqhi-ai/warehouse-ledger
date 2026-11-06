@@ -302,6 +302,22 @@ select::placeholder {
   }
 }
 
+/* Prevent horizontal viewport leakage on ultra-compact screens */
+html,
+body,
+#root {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+@media (max-width: 360px) {
+  .hero-overview-card,
+  .metric-card,
+  .auth-panel {
+    padding: 12px 10px !important;
+  }
+}
+
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,
