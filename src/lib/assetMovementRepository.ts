@@ -118,29 +118,10 @@ export async function createAssetMovement(
   return newRecord
 }
 
-export async function deleteAssetMovement(id: string): Promise<boolean> {
-  assertDepartmentWrite('warehouse', 'delete')
-  if (supabase) {
-    try {
-      await supabase.from('asset_movement_log').delete().eq('id', id)
-    } catch {
-      // fallback
-    }
-  }
-
-  const local = getLocalAssetMovements()
-  const updated = local.filter((m) => m.id !== id)
-  saveLocalAssetMovements(updated)
-  return true
+export async function deleteAssetMovement(_id: string): Promise<boolean> {
+  throw new Error('سجل حركات الأصول محفوظ بشكل دائم وغير قابل للحذف نهائياً لضمان النزاهة والامتثال الرقابي.')
 }
 
 export async function clearAllAssetMovements(): Promise<void> {
-  if (supabase) {
-    try {
-      await supabase.rpc('purge_demo_test_data')
-    } catch {
-      // fallback
-    }
-  }
-  localStorage.removeItem(LOCAL_STORAGE_KEY)
+  throw new Error('سجل حركات الأصول محفوظ بشكل دائم وغير قابل للمسح الجماعي.')
 }

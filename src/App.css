@@ -1196,7 +1196,7 @@ select:focus-visible,
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  user-select: none;
+  user-select: none; /* hint-disable-line compat-api/css */
   font-size: 0.85em;
 }
 
@@ -5250,7 +5250,7 @@ select:focus-visible,
   z-index: 0;
   opacity: 0.05;
   -webkit-user-select: none;
-  user-select: none;
+  user-select: none; /* hint-disable-line compat-api/css */
 }
 
 .print-watermark img {
@@ -6474,7 +6474,7 @@ select:focus-visible,
   color: var(--ink);
   cursor: pointer;
   -webkit-user-select: none;
-  user-select: none;
+  user-select: none; /* hint-disable-line compat-api/css */
 }
 
 .restore-checkbox-label input[type="checkbox"] {

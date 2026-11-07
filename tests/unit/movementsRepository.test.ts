@@ -31,7 +31,7 @@ describe('movementsRepository update and delete fallback tests', () => {
         expect(result).toEqual(sampleMovement)
     })
 
-    it('handles delete without error when supabase is not connected', async () => {
-        await expect(deleteMovement('mock-uuid-1', 'owner-123')).resolves.toBeUndefined()
+    it('rejects delete because operation ledger is immutable', async () => {
+        await expect(deleteMovement('mock-uuid-1', 'owner-123')).rejects.toThrow('سجل العمليات')
     })
 })

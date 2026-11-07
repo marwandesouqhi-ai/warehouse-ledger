@@ -32,8 +32,13 @@ export function getLocalAuditLogs(): AuditLogEntry[] {
 function saveLocalAuditLog(entry: AuditLogEntry) {
     try {
         const current = getLocalAuditLogs()
-        const updated = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 1000)
-        localStorage.setItem(localAuditLogsKey, JSON.stringify(updated))
+        const updated = [entry, ...current.filter((item) => item.id !== entry.id)]
+        try {
+            localStorage.setItem(localAuditLogsKey, JSON.stringify(updated))
+        } catch {
+            // If localStorage reaches browser quota, preserve the maximum safe history without failing
+            localStorage.setItem(localAuditLogsKey, JSON.stringify(updated.slice(0, 10000)))
+        }
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('audit-logs-changed', { detail: entry }))
         }
@@ -142,7 +147,7 @@ export async function logAuditEvent(params: {
 /**
  * Fetch all audit logs for the audit view (from Supabase with local fallback, permanently merging records)
  */
-export async function fetchAuditLogs(limit = 1000): Promise<AuditLogEntry[]> {
+export async function fetchAuditLogs(limit = 10000): Promise<AuditLogEntry[]> {
     const localLogs = getLocalAuditLogs()
 
     if (!supabase) {
@@ -178,9 +183,13 @@ export async function fetchAuditLogs(limit = 1000): Promise<AuditLogEntry[]> {
         )
 
         try {
-            localStorage.setItem(localAuditLogsKey, JSON.stringify(merged.slice(0, 1000)))
+            localStorage.setItem(localAuditLogsKey, JSON.stringify(merged))
         } catch {
-            // ignore
+            try {
+                localStorage.setItem(localAuditLogsKey, JSON.stringify(merged.slice(0, 10000)))
+            } catch {
+                // ignore
+            }
         }
 
         return merged.slice(0, limit)

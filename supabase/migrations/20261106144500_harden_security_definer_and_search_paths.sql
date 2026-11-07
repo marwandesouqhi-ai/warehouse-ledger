@@ -86,3 +86,4 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.app_effective_role() TO authenticated, service_role;
   END IF;
 END $$;
+
