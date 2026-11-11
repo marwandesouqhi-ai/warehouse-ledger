@@ -32,3 +32,11 @@ verify_jwt = false
 # Token is validated internally against a time-limited one-time code.
 [functions.verify-email]
 verify_jwt = false
+
+# daily-report & critical-alerts: Scheduled via pg_cron + pg_net without user JWT.
+# Caller identity is strictly verified internally via SUPABASE_SERVICE_ROLE_KEY or CRON_WEBHOOK_SECRET.
+[functions.daily-report]
+verify_jwt = false
+
+[functions.critical-alerts]
+verify_jwt = false

@@ -73,7 +73,7 @@ import {
   userMustChangePassword,
   ROLE_LABELS,
 } from './lib/permissions'
-import { fetchAuditLogs, logAuditEvent, type AuditLogEntry } from './lib/auditLogger'
+import { fetchAuditLogs, logAuditEvent, recordSecurityEvent, type AuditLogEntry } from './lib/auditLogger'
 import {
   loadCustodyItems,
   saveCustodyItems,
@@ -211,7 +211,31 @@ const qualityRules = [
   { rule: 'noinv', level: 'info', text: 'بدون رقم فاتورة' },
 ]
 
+const loggedRestrictedRoutes = new Map<string, number>()
+
 function RestrictedScreen({ title, subtitle, message }: { title: string; subtitle: string; message: string }) {
+  const location = useLocation()
+
+  useEffect(() => {
+    const activeSess = getAccessSession()
+    const actorKey = activeSess?.user?.id || 'anon'
+    const routeKey = `${actorKey}:${location.pathname}`
+    const now = Date.now()
+    const prev = loggedRestrictedRoutes.get(routeKey) || 0
+    if (now - prev > 10_000) {
+      loggedRestrictedRoutes.set(routeKey, now)
+      void recordSecurityEvent({
+        event_type: 'unauthorized_page_access',
+        action: `محاولة فتح صفحة غير مصرح بها (${location.pathname})`,
+        severity: 'warning',
+        table_name: 'route',
+        record_id: location.pathname,
+        details: { path: location.pathname, title },
+        user: activeSess?.user ? { id: activeSess.user.id, email: activeSess.user.email } : null,
+      })
+    }
+  }, [location.pathname, title])
+
   return (
     <section className="page-stack">
       <header className="page-intro">
@@ -771,13 +795,6 @@ function App() {
       }
       if ((window.location.hash.includes('type=invite') || window.location.search.includes('type=invite')) && !window.location.hash.includes('error=')) {
         setIsInviteFlow(true)
-      }
-      if (event === 'SIGNED_IN' && nextSession?.user) {
-        void logAuditEvent({
-          action: 'تسجيل دخول إلى النظام',
-          entity_type: 'auth',
-          user: nextSession.user,
-        })
       }
       if (nextSession) {
         updateAccessSession(nextSession)
@@ -1393,18 +1410,48 @@ function App() {
     return list.slice(-6).reverse()
   }, [visibleMovements, tableFilter])
 
-  function signOut() {
-    if (session?.user) {
-      void logAuditEvent({
-        action: 'تسجيل خروج من النظام',
-        entity_type: 'auth',
-        user: session.user,
+  useEffect(() => {
+    const onApiDenial = (event: Event) => {
+      const detail = (event as CustomEvent<{ method?: string; path?: string; status?: number }>).detail
+      if (!detail) return
+      void recordSecurityEvent({
+        event_type: 'unauthorized_api_access',
+        action: `رفض وصول API/RLS (${detail.status || 403}): ${detail.method || 'GET'} ${detail.path || ''}`,
+        severity: 'warning',
+        table_name: 'api_rls',
+        record_id: detail.path || '',
+        details: { method: detail.method, path: detail.path, status: detail.status },
+        user: session?.user ? { id: session.user.id, email: session.user.email } : null,
       })
+    }
+    window.addEventListener('znu-security-api-denial', onApiDenial)
+    return () => window.removeEventListener('znu-security-api-denial', onApiDenial)
+  }, [session?.user])
+
+  function signOut() {
+    const currentUser = session?.user
+    const finishSignOut = () => {
+      if (supabase) void supabase.auth.signOut()
+    }
+    if (currentUser) {
+      const auditPromise = recordSecurityEvent({
+        event_type: 'logout',
+        action: 'تسجيل خروج من النظام',
+        severity: 'info',
+        table_name: 'auth',
+        record_id: currentUser.id,
+        user: currentUser,
+      })
+      void Promise.race([
+        auditPromise,
+        new Promise((resolve) => setTimeout(resolve, 1200)),
+      ]).finally(finishSignOut)
+    } else {
+      finishSignOut()
     }
     clearLocalSession()
     updateAccessSession(null)
     navigate('/', { replace: true })
-    if (supabase) void supabase.auth.signOut()
   }
 
   if (authLoading) {

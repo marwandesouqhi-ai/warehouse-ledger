@@ -30,7 +30,9 @@ export function getAccessIdentity(): string {
   return currentSession ? `${currentSession.user.id}:${getEffectiveRole(currentSession)}` : 'signed-out'
 }
 
-/** Discard a response belonging to the previous account, including in-flight cache fills. */
+const recentSecurityDenialCache = new Map<string, number>()
+
+/** Discard a response belonging to the previous account, including in-flight cache fills, and surface RLS/API 401/403 denials. */
 export async function accessScopedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const identity = getAccessIdentity()
   const response = await globalThis.fetch(input, init)
@@ -41,6 +43,38 @@ export async function accessScopedFetch(input: RequestInfo | URL, init?: Request
       status: 409, headers: { 'Content-Type': 'application/json' },
     })
   }
+
+  // Capture PostgREST RLS (401/403) and Edge API denials when authenticated without causing recursion
+  if (
+    typeof window !== 'undefined' &&
+    currentSession &&
+    (response.status === 401 || response.status === 403) &&
+    /\/(rest|functions)\/v1\//.test(url) &&
+    !/\/(audit_logs|login_attempts|rpc\/record_security_event|functions\/v1\/(login-bridge|admin-users|invite-user|migrate-users))/.test(url)
+  ) {
+    try {
+      const parsedPath = new URL(url, window.location.origin).pathname
+      const method = (init?.method || 'GET').toUpperCase()
+      const cacheKey = `${method}:${parsedPath}:${response.status}`
+      const now = Date.now()
+      const lastSent = recentSecurityDenialCache.get(cacheKey) || 0
+      if (now - lastSent > 10_000) {
+        recentSecurityDenialCache.set(cacheKey, now)
+        window.dispatchEvent(
+          new CustomEvent('znu-security-api-denial', {
+            detail: {
+              method,
+              path: parsedPath,
+              status: response.status,
+            },
+          })
+        )
+      }
+    } catch {
+      // ignore URL parse issues
+    }
+  }
+
   return response
 }
 export function canReadCurrentDepartment(department: BusinessDepartment): boolean {

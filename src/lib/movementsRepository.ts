@@ -225,46 +225,9 @@ export async function updateMovement(movement: FixtureMovement, _ownerId?: strin
 }
 
 export async function deleteMovement(
-    movementId: string | number,
+    _movementId: string | number,
     _ownerId?: string,
-    movementData?: Partial<FixtureMovement>
+    _movementData?: Partial<FixtureMovement>
 ): Promise<void> {
-    if (!supabase) return
-
-    const client = getClient()
-    const idStr = String(movementId)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr)
-
-    if (isUuid) {
-        const { error } = await client
-            .from('movements')
-            .delete()
-            .eq('id', movementId)
-
-        if (error) throw error
-        return
-    }
-
-    // Fallback deletion when movement was loaded without a UUID or by local fingerprint
-    if (movementData) {
-        try {
-            const fp = movementFingerprint(movementData as FixtureMovement)
-            const { error: fpError } = await client
-                .from('movements')
-                .delete()
-                .eq('fingerprint', fp)
-
-            if (!fpError) return
-        } catch {
-            // ignore fingerprint calc error and proceed to attribute fallback
-        }
-    }
-
-    // Attempt deletion by fingerprint matching idStr
-    const { error } = await client
-        .from('movements')
-        .delete()
-        .eq('fingerprint', idStr)
-
-    if (error) throw error
+    throw new Error('سجل العمليات وحركات المخزون محفوظ بشكل دائم وغير قابل للحذف نهائياً لضمان النزاهة والامتثال المحاسبي.')
 }

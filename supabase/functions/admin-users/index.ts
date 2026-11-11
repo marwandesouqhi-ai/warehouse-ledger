@@ -7,6 +7,80 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
+function getRequestIp(req: Request): string {
+  return (
+    req.headers.get("cf-connecting-ip")?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  )
+}
+
+async function logAdminSecurityEvent(
+  supabaseAdmin: any,
+  req: Request,
+  params: {
+    caller?: { id?: string; email?: string; app_metadata?: Record<string, any> } | null
+    action: string
+    eventType: string
+    severity: "info" | "warning" | "critical"
+    entityType?: string
+    entityId?: string
+    tableName?: string
+    oldData?: Record<string, any> | null
+    newData?: Record<string, any> | null
+    details?: Record<string, any>
+  }
+): Promise<void> {
+  try {
+    const reqIp = getRequestIp(req)
+    const payload = {
+      user_id: params.caller?.id || null,
+      actor_id: params.caller?.id || null,
+      actor_role: (params.caller?.app_metadata?.role as string) || "anon",
+      user_email: params.caller?.email || "anonymous",
+      action: params.action,
+      event_type: params.eventType,
+      entity_type: params.entityType || "security_violation",
+      entity_id: params.entityId || params.caller?.id || "",
+      table_name: params.tableName || params.entityType || "edge_function:admin-users",
+      record_id: params.entityId || params.caller?.id || "",
+      old_data: params.oldData || null,
+      new_data: params.newData || null,
+      ip: reqIp,
+      ip_address: reqIp,
+      user_agent: req.headers.get("user-agent") || "",
+      severity: params.severity,
+      details: params.details || {},
+    }
+
+    // For 401/403 authorization denials, emit directly to PostgREST so rejected requests
+    // never invoke business/directory client abstractions and stay completely non-blocking.
+    if (params.eventType === "unauthorized_api_access") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      if (supabaseUrl && supabaseServiceKey && typeof fetch === "function") {
+        await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/audit_logs`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify(payload),
+          signal: typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(1500) : undefined,
+        }).catch(() => undefined)
+      }
+      return
+    }
+
+    await supabaseAdmin.from("audit_logs").insert(payload)
+  } catch {
+    // Non-blocking audit logging
+  }
+}
+
 function normalizeUsername(input: string | null | undefined): string {
   if (!input) return ""
   let normalized = String(input).trim().toLowerCase().normalize("NFKC")
@@ -415,6 +489,13 @@ serve(async (req: Request) => {
 
     // Password recovery is self-service; all other actions require a verified caller.
     if (!caller && action !== "send_password_recovery") {
+      await logAdminSecurityEvent(supabaseAdmin, req, {
+        action: `محاولة استدعاء وظيفة الإدارة (${action}) بدون مصادقة صالحة`,
+        eventType: "unauthorized_api_access",
+        severity: "warning",
+        entityId: action,
+        details: { action, reason: "missing_or_invalid_jwt" },
+      })
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -435,12 +516,13 @@ serve(async (req: Request) => {
 
       if (authUserErr || !verifiedAuthUser || !isEmailVerified || !isEmailMatch) {
         // Record security denial in audit_logs
-        await supabaseAdmin.from("audit_logs").insert({
-          user_id: caller.id,
-          user_email: verifiedAuthUser?.email || caller.email || "unknown",
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller: { id: caller.id, email: verifiedAuthUser?.email || caller.email || "unknown", app_metadata: caller.app_metadata },
           action: "محاولة تهيئة مدير نظام مرفوضة (Bootstrap Denied)",
-          entity_type: "security_violation",
-          entity_id: caller.id,
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityType: "security_violation",
+          entityId: caller.id,
           details: { outcome: "denied", reason: "identity_or_verification_mismatch" },
         })
 
@@ -719,6 +801,14 @@ ${recoveryLink}
     const isDepartmentAdmin = caller.app_metadata?.role === "admin"
 
     if (!isSystemAdmin) {
+      await logAdminSecurityEvent(supabaseAdmin, req, {
+        caller,
+        action: `محاولة وصول غير مصرح لإجراء إداري (${action}) من غير مدير النظام`,
+        eventType: "unauthorized_api_access",
+        severity: "warning",
+        entityId: action,
+        details: { action, reason: "forbidden_non_system_admin" },
+      })
       return new Response(JSON.stringify({
         error: "غير مصرح لك: إجراءات إدارة الحسابات مقتصرة حصرياً على مدراء النظام والأقسام.",
       }), {
@@ -1030,6 +1120,14 @@ ${recoveryLink}
 
       // Strictly forbid changing marwan-desouky's password via admin-users Edge Function
       if (isTargetProtected) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: `محاولة غير مصرح بها لإعادة تعيين كلمة مرور الحساب المحمي (${targetUsername})`,
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityId: targetUsername,
+          details: { action: "reset_password", targetUsername, reason: "protected_account_violation" },
+        })
         return new Response(JSON.stringify({
           error: "غير مصرح: لا يمكن إعادة تعيين كلمة مرور مدير النظام الرئيسي من لوحة الإدارة. يتم تغيير كلمة المرور حصرياً من قِبل صاحب الحساب من داخل جلسته الشخصية.",
         }), {
@@ -1128,6 +1226,14 @@ ${recoveryLink}
       // 1. Protected System Admin constraints
       if (isTargetProtected) {
         if (!isCallerProtected) {
+          await logAdminSecurityEvent(supabaseAdmin, req, {
+            caller,
+            action: `محاولة غير مصرح بها لتعديل بيانات الحساب المحمي (${targetUsername})`,
+            eventType: "unauthorized_api_access",
+            severity: "critical",
+            entityId: userId,
+            details: { action: "update_user", targetUsername, reason: "protected_account_violation" },
+          })
           return new Response(JSON.stringify({
             error: "غير مصرح: بيانات وهوية حساب مدير النظام الرئيسي محمية بالكامل ولا يمكن تعديلها إلا من قِبل صاحب الحساب نفسه.",
           }), {
@@ -1167,12 +1273,15 @@ ${recoveryLink}
         })
       }
 
-      const newRole = isTargetProtected ? "system_admin" : (role || targetUser.user.app_metadata?.role || "viewer")
+      const oldRole = targetUser.user.app_metadata?.role || "viewer"
+      const oldPermissions = targetUser.user.app_metadata?.permissions ?? []
+      const oldDepartment = targetUser.user.app_metadata?.department
+      const newRole = isTargetProtected ? "system_admin" : (role || oldRole)
       const newPermissions = isTargetProtected
         ? ["view_audit", "view_settings", "manage_records"]
-        : (permissions ?? targetUser.user.app_metadata?.permissions ?? [])
+        : (permissions ?? oldPermissions)
 
-      const newDepartment = body.department || targetUser.user.app_metadata?.department
+      const newDepartment = body.department || oldDepartment
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: {
           ...targetUser.user.user_metadata,
@@ -1197,13 +1306,43 @@ ${recoveryLink}
         permissions: newPermissions,
       }).eq("username", targetUsername.toLowerCase())
 
-      await supabaseAdmin.from("audit_logs").insert({
-        user_id: caller.id,
-        user_email: caller.email,
-        action: `تحديث بيانات المستخدم: ${targetUsername}`,
-        entity_type: "user_management",
-        entity_id: userId,
-        details: { target_username: targetUsername, newRole, newPermissions },
+      const roleChanged = oldRole !== newRole
+      const permsChanged = JSON.stringify(oldPermissions) !== JSON.stringify(newPermissions)
+      const isSelfChange = caller.id === userId || (caller.email && targetUser.user.email && caller.email.toLowerCase() === targetUser.user.email.toLowerCase())
+      const isPrivilegeChange = roleChanged || permsChanged
+
+      await logAdminSecurityEvent(supabaseAdmin, req, {
+        caller,
+        action: isPrivilegeChange
+          ? (isSelfChange
+            ? `⚠️ تنبيه أمني حرج: محاولة تعديل صلاحيات أو دور الحساب الشخصي (${targetUsername})`
+            : `تعديل الصلاحيات أو الدور للمستخدم (${targetUsername}): ${oldRole} ➔ ${newRole}`)
+          : `تحديث بيانات المستخدم: ${targetUsername}`,
+        eventType: isPrivilegeChange
+          ? (isSelfChange ? "self_role_permission_change" : "role_permission_change")
+          : "update_user",
+        severity: isPrivilegeChange ? "critical" : "info",
+        entityType: "user_management",
+        entityId: userId,
+        tableName: "app_users",
+        oldData: {
+          role: oldRole,
+          permissions: oldPermissions,
+          department: oldDepartment,
+        },
+        newData: {
+          role: newRole,
+          permissions: newPermissions,
+          department: newDepartment,
+        },
+        details: {
+          target_username: targetUsername,
+          oldRole,
+          newRole,
+          oldPermissions,
+          newPermissions,
+          is_self_change: Boolean(isSelfChange && isPrivilegeChange),
+        },
       })
 
       return new Response(JSON.stringify({ success: true, message: "تم تحديث المستخدم بنجاح." }), {
@@ -1281,6 +1420,14 @@ ${recoveryLink}
         (targetAuthId && caller.id === targetAuthId && isCallerProtected)
 
       if (isTargetProtected) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: `محاولة غير مصرح بها لحذف الحساب المحمي (${targetUsername})`,
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityId: targetAuthId || userId || targetUsername,
+          details: { action: "delete_user", targetUsername, reason: "protected_account_violation" },
+        })
         return new Response(JSON.stringify({
           error: "غير مصرح: حساب مدير النظام الرئيسي (marwan-desouky) محمي بشكل دائم ولا يمكن حذفه نهائياً من النظام.",
         }), {
@@ -1373,6 +1520,14 @@ ${recoveryLink}
     // ─── ACTION: purge_demo_data ─────────────────────────────────────────────
     if (action === "purge_demo_data") {
       if (!isSystemAdmin) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: "محاولة وصول غير مصرح لإجراء مسح البيانات التجريبية",
+          eventType: "unauthorized_api_access",
+          severity: "warning",
+          entityId: "purge_demo_data",
+          details: { action: "purge_demo_data" },
+        })
         return new Response(JSON.stringify({
           error: "إجراء مسح البيانات التجريبية مقتصر على مدير النظام الرئيسي (System Admin).",
         }), {
@@ -1559,6 +1714,14 @@ ${recoveryLink}
     // ─── ACTION: set_department_delegation ───────────────────────────────────
     if (action === "set_department_delegation") {
       if (!isSystemAdmin) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: "محاولة غير مصرح بها لتعديل إعدادات تفويض اعتماد الأقسام",
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityId: "set_department_delegation",
+          details: { action: "set_department_delegation" },
+        })
         return new Response(JSON.stringify({
           error: "تعديل تفويض اعتماد طلبات الأقسام مقتصر حصرياً على مدير النظام الرئيسي.",
         }), {
@@ -1688,6 +1851,14 @@ ${recoveryLink}
 
       // Strictly block self-approval
       if (caller.email && regReq.email && caller.email.trim().toLowerCase() === regReq.email.trim().toLowerCase()) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: `محاولة غير مصرح بها للاعتماد الذاتي لطلب تسجيل (${regReq.email})`,
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityId: requestId,
+          details: { action: "approve_registration_request", reason: "self_approval_blocked" },
+        })
         return new Response(JSON.stringify({
           error: "غير مصرح: لا يجوز للمشرف اعتماد طلب التسجيل الخاص به.",
         }), {
@@ -1730,6 +1901,14 @@ ${recoveryLink}
       // Department admin specific safeguards
       if (!isSystemAdmin) {
         if (roleToAssign === "admin" || roleToAssign === "warehouse_admin" || roleToAssign === "procurement_admin") {
+          await logAdminSecurityEvent(supabaseAdmin, req, {
+            caller,
+            action: `محاولة تصعيد صلاحيات مرفوضة: محاولة مدير قسم منح دور إداري (${roleToAssign})`,
+            eventType: "unauthorized_api_access",
+            severity: "critical",
+            entityId: requestId,
+            details: { action: "approve_registration_request", roleToAssign, reason: "privilege_escalation_blocked" },
+          })
           return new Response(JSON.stringify({
             error: "غير مصرح: لا يمكن لمدير القسم تعيين دور إداري. فقط مدير النظام الرئيسي يمتلك هذه الصلاحية.",
           }), {
@@ -1739,6 +1918,14 @@ ${recoveryLink}
         }
         const callerDept = caller.app_metadata?.department
         if (!callerDept || callerDept !== regReq.requested_department) {
+          await logAdminSecurityEvent(supabaseAdmin, req, {
+            caller,
+            action: `محاولة اعتماد طلب تسجيل خارج القسم (${regReq.requested_department})`,
+            eventType: "unauthorized_api_access",
+            severity: "warning",
+            entityId: requestId,
+            details: { action: "approve_registration_request", callerDept, requestedDept: regReq.requested_department },
+          })
           return new Response(JSON.stringify({
             error: "غير مصرح: لا يمكنك اعتماد طلبات خارج قسمك.",
           }), {
@@ -2301,6 +2488,14 @@ ${recoveryLink}
     // ─── ACTION: consistency_report ──────────────────────────────────────────
     if (action === "consistency_report") {
       if (!isSystemAdmin) {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: "محاولة غير مصرح بها لعرض تقرير مطابقة الهويات",
+          eventType: "unauthorized_api_access",
+          severity: "warning",
+          entityId: "consistency_report",
+          details: { action: "consistency_report" },
+        })
         return new Response(JSON.stringify({ error: "تقرير مطابقة وتكامل الهويات مقتصر حصرياً على مدير النظام الرئيسي." }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2496,6 +2691,14 @@ ${recoveryLink}
       const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser?.user?.email)
 
       if (isTargetProtected && status === "suspended") {
+        await logAdminSecurityEvent(supabaseAdmin, req, {
+          caller,
+          action: `محاولة غير مصرح بها لتعليق حساب مدير النظام الرئيسي (${targetUsername})`,
+          eventType: "unauthorized_api_access",
+          severity: "critical",
+          entityId: userId,
+          details: { action: "set_user_status", targetUsername, status },
+        })
         return new Response(JSON.stringify({
           error: "غير مصرح: لا يمكن تعليق أو تعطيل حساب مدير النظام الرئيسي.",
         }), {
@@ -2504,6 +2707,7 @@ ${recoveryLink}
         })
       }
 
+      const previousStatus = targetUser?.user?.app_metadata?.status || "unknown"
       if (targetUser?.user) {
         // Enforce Auth ban_duration when suspended, and clear ban when active
         const banDuration = status === "suspended" ? "876000h" : "none"
@@ -2522,13 +2726,18 @@ ${recoveryLink}
         .update({ status })
         .or(`auth_user_id.eq.${userId},id.eq.${userId}`)
 
-      await supabaseAdmin.from("audit_logs").insert({
-        user_id: caller.id,
-        user_email: caller.email,
+      const isSelfStatusChange = caller.id === userId
+      await logAdminSecurityEvent(supabaseAdmin, req, {
+        caller,
         action: `تعديل حالة حساب المستخدم إلى (${status}): ${targetUsername || userId}`,
-        entity_type: "user_management",
-        entity_id: userId,
-        details: { target_id: userId, status },
+        eventType: isSelfStatusChange ? "self_role_permission_change" : "role_permission_change",
+        severity: "critical",
+        entityType: "user_management",
+        entityId: userId,
+        tableName: "app_users",
+        oldData: { status: previousStatus },
+        newData: { status },
+        details: { target_id: userId, target_username: targetUsername, previousStatus, status, is_self_change: isSelfStatusChange },
       })
 
       return new Response(JSON.stringify({

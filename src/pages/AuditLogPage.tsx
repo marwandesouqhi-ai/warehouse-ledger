@@ -34,6 +34,10 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
     const [error, setError] = useState('')
     const [searchTerm, setSearchTerm] = useState('')
     const [filterType, setFilterType] = useState('all')
+    const [filterSeverity, setFilterSeverity] = useState<'all' | 'info' | 'warning' | 'critical'>('all')
+    const [filterUser, setFilterUser] = useState('all')
+    const [dateFrom, setDateFrom] = useState('')
+    const [dateTo, setDateTo] = useState('')
 
     async function loadLogs() {
         if (!isSystemAdmin) return
@@ -86,37 +90,101 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         }
     }, [isSystemAdmin])
 
+    const distinctUsers = Array.from(
+        new Set(
+            logs
+                .map((l) => (l.user_email || l.user_id || l.actor_id || '').trim())
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b))
+
+    function getLogDateYmd(createdAt?: string): string {
+        if (!createdAt) return ''
+        const parsed = new Date(createdAt)
+        if (Number.isNaN(parsed.getTime())) return createdAt.slice(0, 10)
+        return getCairoDateString(parsed)
+    }
+
     const filteredLogs = logs.filter((log) => {
+        const ev = (log.event_type || '').toLowerCase()
+        const act = (log.action || '').toLowerCase()
+        const ent = (log.entity_type || '').toLowerCase()
+        const sev = (log.severity || 'info').toLowerCase()
+
         const matchesType =
             filterType === 'all' ||
-            (filterType === 'movement' && (log.entity_type === 'movement' || log.entity_type === 'disbursement' || log.action.includes('حركة') || log.action.includes('صرف') || log.action.includes('إذن'))) ||
-            (filterType === 'procurement' && (log.entity_type === 'procurement' || log.entity_type === 'purchase_request' || log.entity_type === 'contract' || log.entity_type === 'quote' || log.action.includes('شراء') || log.action.includes('مورد') || log.action.includes('عقد') || log.action.includes('عرض أسعار'))) ||
-            (filterType === 'repair' && (log.entity_type === 'repair' || log.entity_type === 'quality' || log.action.includes('إصلاح') || log.action.includes('جودة') || log.action.includes('تنظيف'))) ||
-            (filterType === 'backup' && (log.entity_type === 'backup' || log.action.includes('نسخ') || log.action.includes('استعادة'))) ||
-            (filterType === 'invitation' && (log.entity_type === 'invitation' || log.entity_type === 'user' || log.action.includes('دعوة') || log.action.includes('مستخدم'))) ||
-            (filterType === 'import' && (log.entity_type === 'import' || log.action.includes('استيراد'))) ||
-            (filterType === 'auth' && (log.entity_type === 'auth' || log.action.includes('دخول') || log.action.includes('خروج')))
+            (filterType === 'movement' && (ent === 'movement' || ent === 'disbursement' || ev.includes('movements') || ev.includes('disbursement') || act.includes('حركة') || act.includes('صرف') || act.includes('إذن'))) ||
+            (filterType === 'procurement' && (ent === 'procurement' || ent === 'purchase_request' || ent === 'contract' || ent === 'quote' || ev.includes('purchase') || ev.includes('supplier') || act.includes('شراء') || act.includes('مورد') || act.includes('عقد') || act.includes('عرض أسعار'))) ||
+            (filterType === 'repair' && (ent === 'repair' || ent === 'quality' || act.includes('إصلاح') || act.includes('جودة') || act.includes('تنظيف'))) ||
+            (filterType === 'backup' && (ent === 'backup' || act.includes('نسخ') || act.includes('استعادة'))) ||
+            (filterType === 'invitation' && (ent === 'invitation' || ent === 'user' || ent === 'user_management' || ev.includes('app_users') || act.includes('دعوة') || act.includes('مستخدم'))) ||
+            (filterType === 'import' && (ent === 'import' || act.includes('استيراد'))) ||
+            (filterType === 'auth' && (ent === 'auth' || ev.includes('login') || ev.includes('logout') || act.includes('دخول') || act.includes('خروج'))) ||
+            (filterType === 'failed_login' && (ev.includes('failed_login') || ev.includes('brute_force') || act.includes('دخول فاشل') || act.includes('تخمين'))) ||
+            (filterType === 'role_change' && (ev.includes('role_permission') || ev.includes('delegation_setting') || act.includes('صلاحيات') || act.includes('دور'))) ||
+            (filterType === 'unauthorized' && (ev.includes('unauthorized') || ev.includes('cross_user') || act.includes('غير مصرح') || act.includes('مرفوض'))) ||
+            (filterType === 'mass_delete' && (ev === 'mass_delete' || ev.startsWith('delete_') || act.includes('حذف')))
 
         if (!matchesType) return false
+
+        if (filterSeverity !== 'all' && sev !== filterSeverity) return false
+
+        const actorValue = (log.user_email || log.user_id || log.actor_id || '').trim()
+        if (filterUser !== 'all' && actorValue !== filterUser) return false
+
+        if (dateFrom || dateTo) {
+            const logDay = getLogDateYmd(log.created_at)
+            if (dateFrom && (!logDay || logDay < dateFrom)) return false
+            if (dateTo && (!logDay || logDay > dateTo)) return false
+        }
+
         if (!searchTerm.trim()) return true
 
         return matchesSearch(
             [
                 log.user_email,
+                log.user_id ?? '',
+                log.actor_id ?? '',
+                log.actor_role ?? '',
+                log.event_type ?? '',
+                log.table_name ?? '',
+                log.record_id ?? '',
                 log.action,
-                log.ip_address,
+                log.ip || log.ip_address,
                 log.entity_type,
+                log.severity ?? '',
                 JSON.stringify(log.details ?? {}),
+                JSON.stringify(log.old_data ?? {}),
+                JSON.stringify(log.new_data ?? {}),
             ],
             searchTerm
         )
     })
 
+    const hasActiveFilters = Boolean(
+        searchTerm.trim() ||
+        filterType !== 'all' ||
+        filterSeverity !== 'all' ||
+        filterUser !== 'all' ||
+        dateFrom ||
+        dateTo
+    )
+
+    function resetFilters() {
+        setSearchTerm('')
+        setFilterType('all')
+        setFilterSeverity('all')
+        setFilterUser('all')
+        setDateFrom('')
+        setDateTo('')
+    }
+
     const todayStr = getCairoDateString()
-    const todayCount = logs.filter((l) => l.created_at?.slice(0, 10) === todayStr).length
+    const todayCount = logs.filter((l) => getLogDateYmd(l.created_at) === todayStr).length
     const movementsCount = logs.filter((l) => l.entity_type === 'movement' || l.entity_type === 'disbursement' || l.action.includes('حركة') || l.action.includes('صرف')).length
     const procurementCount = logs.filter((l) => l.entity_type === 'procurement' || l.entity_type === 'purchase_request' || l.entity_type === 'contract' || l.action.includes('شراء') || l.action.includes('عقد')).length
     const backupRepairCount = logs.filter((l) => l.entity_type === 'backup' || l.entity_type === 'repair' || l.action.includes('نسخ') || l.action.includes('إصلاح')).length
+    const criticalCount = logs.filter((l) => (l.severity || '').toLowerCase() === 'critical').length
 
     function formatTime(isoString: string) {
         try {
@@ -144,11 +212,24 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         return 'متصفح ويب'
     }
 
-    function getActionTone(action: string, entityType: string) {
+    function getActionTone(action: string, entityType: string, severity?: string) {
+        if (severity === 'critical') return 'bad'
+        if (severity === 'warning') return 'warn'
         if (action.includes('حذف')) return 'bad'
         if (action.includes('إضافة') || action.includes('دعوة') || entityType === 'invitation') return 'good'
         if (action.includes('تعديل') || action.includes('استيراد')) return 'warn'
         return 'neutral'
+    }
+
+    function getSeverityLabel(severity?: string) {
+        switch ((severity || 'info').toLowerCase()) {
+            case 'critical':
+                return { text: 'حرج', tone: 'bad' }
+            case 'warning':
+                return { text: 'تحذير', tone: 'warn' }
+            default:
+                return { text: 'عادي', tone: 'info' }
+        }
     }
 
     if (!isSystemAdmin) {
@@ -223,6 +304,11 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                     <span className="kpi-label">النسخ الاحتياطي والإصلاح</span>
                     <strong>{backupRepairCount.toLocaleString('ar-EG')}</strong>
                 </div>
+                <div className="kpi-item tone-warning">
+                    <span className="kpi-icon"><ShieldAlert size={18} /></span>
+                    <span className="kpi-label">أحداث أمنية حرجة</span>
+                    <strong>{criticalCount.toLocaleString('ar-EG')}</strong>
+                </div>
             </div>
 
             <div className="card-surface audit-table-wrapper p-5">
@@ -234,7 +320,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                 type="search"
                                 value={searchTerm}
                                 onChange={(event) => setSearchTerm(event.target.value)}
-                                placeholder="ابحث بالمستخدم، العملية، أو عنوان الـ IP..."
+                                placeholder="ابحث بالمستخدم، العملية، الجدول، أو عنوان الـ IP..."
                                 aria-label="ابحث في سجل العمليات"
                             />
                             {searchTerm && (
@@ -253,16 +339,76 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                             value={filterType}
                             onChange={(event) => setFilterType(event.target.value)}
                             className="audit-type-select"
+                            aria-label="تصفية حسب نوع الحدث"
                         >
-                            <option value="all">كل العمليات المسجلة</option>
+                            <option value="all">كل العمليات والأحداث</option>
+                            <option value="auth">تسجيل الدخول والخروج</option>
+                            <option value="failed_login">محاولات الدخول الفاشلة</option>
+                            <option value="role_change">تغييرات الأدوار والصلاحيات</option>
+                            <option value="unauthorized">محاولات الوصول غير المصرح</option>
+                            <option value="mass_delete">عمليات الحذف</option>
                             <option value="movement">حركات المخزن وأذونات الصرف</option>
                             <option value="procurement">إدارة المشتريات والعروض والعقود</option>
                             <option value="repair">الإصلاح الذاتي وفحص الجودة</option>
                             <option value="backup">النسخ الاحتياطي والاستعادة</option>
                             <option value="invitation">المستخدمون والدعوات</option>
                             <option value="import">استيراد البيانات</option>
-                            <option value="auth">تسجيل الدخول والأمان</option>
                         </select>
+
+                        <select
+                            value={filterSeverity}
+                            onChange={(event) => setFilterSeverity(event.target.value as 'all' | 'info' | 'warning' | 'critical')}
+                            className="audit-type-select"
+                            aria-label="تصفية حسب درجة الخطورة"
+                        >
+                            <option value="all">كل درجات الخطورة</option>
+                            <option value="critical">حرج (Critical)</option>
+                            <option value="warning">تحذير (Warning)</option>
+                            <option value="info">عادي (Info)</option>
+                        </select>
+
+                        <select
+                            value={filterUser}
+                            onChange={(event) => setFilterUser(event.target.value)}
+                            className="audit-type-select"
+                            aria-label="تصفية حسب المستخدم"
+                        >
+                            <option value="all">كل المستخدمين</option>
+                            {distinctUsers.map((u) => (
+                                <option key={u} value={u}>
+                                    {u}
+                                </option>
+                            ))}
+                        </select>
+
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(event) => setDateFrom(event.target.value)}
+                            className="audit-type-select"
+                            aria-label="من تاريخ"
+                            title="من تاريخ"
+                        />
+
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={(event) => setDateTo(event.target.value)}
+                            className="audit-type-select"
+                            aria-label="إلى تاريخ"
+                            title="إلى تاريخ"
+                        />
+
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="secondary-btn btn-sm inline-flex items-center gap-1"
+                            >
+                                <X size={14} />
+                                مسح الفلاتر
+                            </button>
+                        )}
                     </div>
 
                     <button
@@ -295,18 +441,33 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                 <tr>
                                     <th>الوقت والتاريخ</th>
                                     <th>المستخدم</th>
-                                    <th>العملية</th>
+                                    <th>درجة الخطورة</th>
+                                    <th>العملية / الحدث</th>
                                     <th>عنوان IP الجهاز</th>
                                     <th>الجهاز</th>
-                                    <th>التفاصيل</th>
+                                    <th>التفاصيل والبيانات</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredLogs.map((log) => {
-                                    const tone = getActionTone(log.action, log.entity_type)
+                                    const tone = getActionTone(log.action, log.entity_type, log.severity)
+                                    const sevBadge = getSeverityLabel(log.severity)
                                     const isAdmin =
                                         log.user_email === 'marwan-desouky' ||
-                                        log.user_email.includes('admin')
+                                        log.user_email.includes('admin') ||
+                                        log.actor_role === 'system_admin'
+                                    const displayIp = log.ip || log.ip_address || '—'
+                                    const summaryParts: string[] = []
+                                    if (log.event_type) summaryParts.push(`type=${log.event_type}`)
+                                    if (log.table_name) summaryParts.push(`table=${log.table_name}`)
+                                    if (log.record_id) summaryParts.push(`id=${log.record_id}`)
+                                    if (log.details && Object.keys(log.details).length > 0) {
+                                        for (const [k, v] of Object.entries(log.details)) {
+                                            summaryParts.push(`${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+                                        }
+                                    }
+                                    if (log.old_data) summaryParts.push(`old: ${JSON.stringify(log.old_data)}`)
+                                    if (log.new_data) summaryParts.push(`new: ${JSON.stringify(log.new_data)}`)
 
                                     return (
                                         <tr key={log.id}>
@@ -320,16 +481,24 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                             <td>
                                                 <div className="flex items-center gap-1">
                                                     <User size={15} color="var(--accent)" />
-                                                    <strong>{log.user_email || 'غير مسجل'}</strong>
+                                                    <strong>{log.user_email || log.user_id || 'غير مسجل'}</strong>
+                                                    {log.actor_role && (
+                                                        <span className="text-muted font-xs">({log.actor_role})</span>
+                                                    )}
                                                     {isAdmin && (
                                                         <span className="self-badge">مدير</span>
                                                     )}
                                                 </div>
                                             </td>
 
+                                            <td className="nowrap">
+                                                <span className={`quality-item ${sevBadge.tone} audit-action-pill`}>
+                                                    {sevBadge.text}
+                                                </span>
+                                            </td>
+
                                             <td>
-                                                <span
-                                                 className={`quality-item ${tone} quality-item ${tone} audit-action-pill`}>
+                                                <span className={`quality-item ${tone} audit-action-pill`}>
                                                     {log.action}
                                                 </span>
                                             </td>
@@ -337,7 +506,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                             <td className="text-ltr">
                                                 <span className="audit-ip-tag">
                                                     <Globe size={13} color="var(--accent)" />
-                                                    {log.ip_address || '—'}
+                                                    {displayIp}
                                                 </span>
                                             </td>
 
@@ -351,12 +520,10 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                                             <td className="truncate-cell">
                                                 <div
                                                     className="audit-details-text"
-                                                    title={JSON.stringify(log.details)}
+                                                    title={summaryParts.join(' | ')}
                                                 >
-                                                    {log.details && Object.keys(log.details).length > 0 ? (
-                                                        Object.entries(log.details)
-                                                            .map(([k, v]) => `${k}: ${String(v)}`)
-                                                            .join(' | ')
+                                                    {summaryParts.length > 0 ? (
+                                                        summaryParts.join(' | ')
                                                     ) : (
                                                         <span className="text-muted">—</span>
                                                     )}
