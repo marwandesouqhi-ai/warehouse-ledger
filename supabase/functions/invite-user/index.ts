@@ -6,6 +6,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
+function getReqIp(req: Request): string {
+  return (
+    req.headers.get("cf-connecting-ip")?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  )
+}
+
+async function logUnauthorizedInviteAttempt(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  req: Request,
+  reason: string,
+  caller?: { id?: string; email?: string; app_metadata?: Record<string, any> } | null
+): Promise<void> {
+  if (!supabaseUrl || !supabaseServiceKey || typeof fetch !== "function") return
+  try {
+    const reqIp = getReqIp(req)
+    await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/audit_logs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        user_id: caller?.id || null,
+        actor_id: caller?.id || null,
+        actor_role: (caller?.app_metadata?.role as string) || "anon",
+        user_email: caller?.email || "anonymous",
+        action: `محاولة وصول غير مصرح إلى وظيفة invite-user (${reason})`,
+        event_type: "unauthorized_api_access",
+        entity_type: "edge_function",
+        entity_id: "invite-user",
+        table_name: "edge_function:invite-user",
+        ip: reqIp,
+        ip_address: reqIp,
+        user_agent: req.headers.get("user-agent") || "",
+        severity: "warning",
+        details: { function: "invite-user", reason },
+      }),
+      signal: typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(1500) : undefined,
+    }).catch(() => undefined)
+  } catch {
+    // non-blocking
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -20,6 +70,7 @@ serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization")
     if (!authHeader) {
+      await logUnauthorizedInviteAttempt(supabaseUrl, supabaseServiceKey, req, "missing_auth_header")
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -33,6 +84,7 @@ serve(async (req: Request) => {
 
     const { data: { user }, error: userError } = await supabaseCaller.auth.getUser()
     if (userError || !user) {
+      await logUnauthorizedInviteAttempt(supabaseUrl, supabaseServiceKey, req, "invalid_jwt")
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -45,6 +97,7 @@ serve(async (req: Request) => {
       user.app_metadata?.role === "system_admin"
 
     if (!isCallerAdmin) {
+      await logUnauthorizedInviteAttempt(supabaseUrl, supabaseServiceKey, req, "forbidden_non_system_admin", user)
       return new Response(JSON.stringify({
         error: "غير مصرح لك: فقط مدير النظام (System Admin) يملك صلاحية دعوة المستخدمين وإدارة الحسابات",
       }), {

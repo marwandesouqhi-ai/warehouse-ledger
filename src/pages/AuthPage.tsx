@@ -16,7 +16,7 @@ import {
 
 import { supabase } from '../lib/supabase'
 import type { AppSettings } from '../lib/settings'
-import { logAuditEvent } from '../lib/auditLogger'
+import { logAuditEvent, recordSecurityEvent } from '../lib/auditLogger'
 import { isSupabaseConfigured } from '../lib/authMode'
 import { validateChosenUsername, validateChosenPassword, validateChosenPasswordAsync } from '../lib/employeeIdentity'
 import { getInviteProfile, completeAccountActivation, sendPasswordRecovery, type InviteProfile } from '../lib/registrationService'
@@ -386,26 +386,13 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
             let signInData: any = null
             let signInError: any = null
+            let auditedByServerBridge = false
 
-            // 1. Direct sign-in: If user entered an email OR a username, attempt direct Supabase Auth sign-in
-            const targetAuthEmail = cleanUser.includes('@')
-                ? cleanUser.toLowerCase()
-                : `${cleanUser.toLowerCase()}@warehouse.local`
-
-            const directRes = await supabase.auth.signInWithPassword({
-                email: targetAuthEmail,
-                password,
-            })
-
-            if (!directRes.error && directRes.data?.session) {
-                signInData = directRes.data
-                signInError = null
-            } else {
-                signInError = directRes.error
-            }
-
-            // 2. If direct sign-in failed (e.g. employee-id entered like SYS-ADM-000001 or needs server bridge), invoke secure login-bridge
-            if (!signInData && supabase) {
+            // 1. Primary path: authenticate via hardened server login-bridge first so both successful
+            //    and failed attempts are logged authoritatively with IP, User-Agent, brute-force,
+            //    new-IP, and unusual-hour detection rules.
+            if (supabase) {
+                let bridgeUnavailable = false
                 try {
                     const { data: bridgeData, error: bridgeError } = await supabase.functions.invoke('login-bridge', {
                         body: {
@@ -416,45 +403,82 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     })
 
                     if (bridgeError) {
-                        let parsedMsg = ''
-                        if (bridgeError && typeof bridgeError === 'object' && 'context' in bridgeError) {
-                            try {
-                                const ctxJson = await (bridgeError as any).context.json()
-                                if (ctxJson?.error) parsedMsg = ctxJson.error
-                            } catch {
-                                // ignore
-                            }
-                        }
-
                         const status = (bridgeError as { status?: number; context?: { status?: number } }).status ||
                                        (bridgeError as { context?: { status?: number } }).context?.status
-                        if (status === 429 || bridgeError.message?.includes('429')) {
-                            throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
-                        }
-                        throw new Error(parsedMsg || 'بيانات الدخول غير صحيحة. يرجى التأكد من اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
-                    }
 
-                    if (bridgeData?.session) {
-                        // Establish authoritative Supabase session
+                        // Fall back to direct Auth ONLY when the Edge Function itself is unreachable/not deployed
+                        if (
+                            !status ||
+                            status === 404 ||
+                            status >= 500 ||
+                            bridgeError.name === 'FunctionsFetchError' ||
+                            bridgeError.message?.toLowerCase().includes('failed to fetch') ||
+                            bridgeError.message?.toLowerCase().includes('failed to send a request')
+                        ) {
+                            bridgeUnavailable = true
+                        } else {
+                            let parsedMsg = ''
+                            if (typeof bridgeError === 'object' && 'context' in bridgeError) {
+                                try {
+                                    const ctxJson = await (bridgeError as any).context.json()
+                                    if (ctxJson?.error) parsedMsg = ctxJson.error
+                                } catch {
+                                    // ignore
+                                }
+                            }
+                            if (status === 429 || bridgeError.message?.includes('429')) {
+                                throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
+                            }
+                            throw new Error(parsedMsg || 'بيانات الدخول غير صحيحة. يرجى التأكد من اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
+                        }
+                    } else if (bridgeData?.session) {
+                        // Establish authoritative Supabase session (login-bridge already recorded login_success/new_ip/unusual_hour)
                         const { data: sessData, error: sessErr } = await supabase.auth.setSession(bridgeData.session)
                         if (sessErr) throw sessErr
                         signInData = sessData
                         signInError = null
+                        auditedByServerBridge = true
                     } else if (bridgeData?.error) {
                         throw new Error(bridgeData.error)
                     } else {
-                        throw new Error('تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة.')
+                        bridgeUnavailable = true
                     }
                 } catch (bridgeCatch) {
-                    if (bridgeCatch instanceof Error) {
+                    if (!bridgeUnavailable) {
                         throw bridgeCatch
                     }
-                    throw new Error('تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة.')
+                }
+
+                // 2. Fallback path if login-bridge Edge Function is unreachable in this environment
+                if (!signInData && bridgeUnavailable) {
+                    const targetAuthEmail = cleanUser.includes('@')
+                        ? cleanUser.toLowerCase()
+                        : `${cleanUser.toLowerCase()}@warehouse.local`
+
+                    const directRes = await supabase.auth.signInWithPassword({
+                        email: targetAuthEmail,
+                        password,
+                    })
+
+                    if (!directRes.error && directRes.data?.session) {
+                        signInData = directRes.data
+                        signInError = null
+                    } else {
+                        signInError = directRes.error
+                    }
                 }
             }
 
             if (signInError) {
                 if (signInError.message.toLowerCase().includes('invalid login credentials')) {
+                    void logAuditEvent({
+                        action: `محاولة تسجيل دخول فاشلة (${cleanUser})`,
+                        entity_type: 'auth',
+                        entity_id: cleanUser,
+                        event_type: 'failed_login',
+                        severity: 'warning',
+                        details: { identifier: cleanUser, source: 'direct_auth_fallback' },
+                    })
                     throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
                 }
                 if (signInError.message.toLowerCase().includes('email not confirmed')) {
@@ -478,11 +502,16 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 return
             }
 
-            void logAuditEvent({
-                action: 'تسجيل دخول موثّق إلى النظام عبر Supabase Auth',
-                entity_type: 'auth',
-                user: { id: signInData.user?.id || 'auth-user', email: signInData.user?.email || cleanUser },
-            })
+            if (!auditedByServerBridge) {
+                void recordSecurityEvent({
+                    event_type: 'login_success',
+                    action: 'تسجيل دخول موثّق إلى النظام عبر Supabase Auth',
+                    severity: 'info',
+                    table_name: 'auth',
+                    record_id: signInData.user?.id || cleanUser,
+                    user: { id: signInData.user?.id || 'auth-user', email: signInData.user?.email || cleanUser },
+                })
+            }
 
             setNotice('تم تسجيل الدخول بنجاح! جاري الدخول...')
             setTimeout(() => {

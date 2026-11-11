@@ -1,0 +1,1369 @@
+{
+  "name": "Supabase Security Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supabase-security-events",
+        "options": {}
+      },
+      "id": "04d22a8b-f658-4842-a146-2dc40c61eb44",
+      "name": "Supabase security_events INSERT",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        -448,
+        48
+      ],
+      "webhookId": "a635ccec-598e-4f05-9e00-c86b95c3453c"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "th-1",
+              "name": "window_minutes",
+              "type": "number",
+              "value": 10
+            },
+            {
+              "id": "th-2",
+              "name": "failed_per_email",
+              "type": "number",
+              "value": 5
+            },
+            {
+              "id": "th-3",
+              "name": "failed_per_ip",
+              "type": "number",
+              "value": 10
+            },
+            {
+              "id": "th-4",
+              "name": "emails_per_ip",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "th-5",
+              "name": "success_after_failed",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "th-6",
+              "name": "denied_per_user",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "th-7",
+              "name": "dedupe_minutes",
+              "type": "number",
+              "value": 30
+            },
+            {
+              "id": "th-8",
+              "name": "admin_user_ids",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "th-9",
+              "name": "admin_roles",
+              "type": "string",
+              "value": "system_admin,admin"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4d96e5bb-f2be-42c2-bb14-78a9d782812d",
+      "name": "Thresholds",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "security_events",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "created_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({ minutes: $json.window_minutes }).toUTC().toISO() }}"
+            },
+            {
+              "keyName": "alerted",
+              "condition": "eq",
+              "keyValue": "false"
+            }
+          ]
+        }
+      },
+      "id": "d4894a0d-f8b9-4fec-9ca7-d6007b7d55d3",
+      "name": "Get events (last 10 min)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        496,
+        224
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Thresholds').first().json;\nconst events = $input.all().map(i => i.json).filter(e => e && e.event_type);\nconst ipOf = e => e.ip_address || e.ip || '';\nconst emailOf = e => String(e.email || '').toLowerCase();\nconst ts = e => new Date(e.created_at).getTime();\nconst fmt = d => d.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', hour12: false });\nconst esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst emojis = { CRITICAL: '🔴', HIGH: '🟠' };\nconst admins = String(cfg.admin_user_ids || '').split(',').map(s => s.trim()).filter(Boolean);\nconst adminRoles = String(cfg.admin_roles || 'system_admin,admin').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);\nconst incidents = [];\n\nconst groupBy = (arr, fn) => {\n  const m = new Map();\n  for (const x of arr) {\n    const k = fn(x);\n    if (!k) continue;\n    if (!m.has(k)) m.set(k, []);\n    m.get(k).push(x);\n  }\n  return m;\n};\nconst topIp = evs => {\n  const c = {};\n  evs.forEach(e => { const i = ipOf(e); if (i) c[i] = (c[i] || 0) + 1; });\n  return Object.keys(c).sort((a, b) => c[b] - c[a])[0] || '';\n};\nconst firstOf = (evs, fn) => {\n  for (const e of evs) { const v = fn(e); if (v) return v; }\n  return '';\n};\nconst add = (rule, severity, evs, subject, emailOverride, allowBlock = true) => {\n  const times = evs.map(ts).filter(t => !isNaN(t));\n  if (!times.length) return;\n  const start = new Date(Math.min(...times));\n  const end = new Date(Math.max(...times));\n  const resolvedUserId = firstOf(evs, e => e.target_user_id || e.user_id);\n  const canBlock = Boolean(allowBlock && uuidRe.test(String(resolvedUserId || '')));\n  incidents.push({ json: {\n    rule: esc(rule),\n    raw_rule: rule,\n    severity,\n    emoji: emojis[severity] || '🟠',\n    email: esc(emailOverride || firstOf(evs, emailOf) || 'n/a'),\n    ip: esc(topIp(evs) || 'n/a'),\n    user_id: resolvedUserId || '',\n    can_block: canBlock,\n    count: evs.length,\n    window_start: start.toISOString(),\n    window_end: end.toISOString(),\n    window_text: esc(fmt(start) + ' - ' + fmt(end) + ' (توقيت القاهرة)'),\n    event_ids: evs.map(e => e.id).filter(x => x !== undefined && x !== null),\n    dedup_key: rule + '|' + subject,\n  } });\n};\n\nconst failed = events.filter(e => e.event_type === 'login_failed');\n\n// Rule 1: 5+ failed logins for the same account\ngroupBy(failed, emailOf).forEach((evs, email) => {\n  if (evs.length >= cfg.failed_per_email) add('محاولات دخول فاشلة متكررة (نفس الحساب)', 'HIGH', evs, email);\n});\n\n// Rule 2: 10+ failed from one IP, or one IP hitting 3+ different accounts\ngroupBy(failed, ipOf).forEach((evs, ip) => {\n  if (evs.length >= cfg.failed_per_ip) add('محاولات دخول فاشلة متكررة (نفس الـ IP)', 'HIGH', evs, ip);\n  const emails = new Set(evs.map(emailOf).filter(Boolean));\n  if (emails.size >= cfg.emails_per_ip) {\n    add('IP واحد يستهدف حسابات متعددة', 'HIGH', evs, ip, emails.size + ' حساب مختلف');\n  }\n});\n\n// Rule 3: login_success right after 3+ failures for the same account\nevents.filter(e => e.event_type === 'login_success').forEach(s => {\n  const prior = failed.filter(f => emailOf(f) === emailOf(s) && ts(f) < ts(s));\n  if (prior.length >= cfg.success_after_failed) {\n    add('تسجيل دخول ناجح بعد محاولات فاشلة', 'CRITICAL', prior.concat([s]), emailOf(s) + '|' + s.id, undefined, true);\n  }\n});\n\n// Rule 4: any role/permission change (extra critical if self or non-admin)\nevents.filter(e => e.event_type === 'role_change').forEach(e => {\n  const target = e.target_user_id || e.user_id;\n  const changer = e.changed_by;\n  const self = (e.details && e.details.audit_event_type === 'self_role_permission_change') || (!!changer && !!target && String(changer) === String(target));\n  const roleLower = String(e.changed_by_role || '').toLowerCase();\n  const adminKnown = admins.length > 0 || (e.changed_by_role !== undefined && e.changed_by_role !== null);\n  const isAdmin = adminRoles.includes(roleLower) || admins.includes(String(changer));\n  if (self) add('المستخدم غيّر دوره بنفسه', 'CRITICAL', [e], 'self|' + e.id, undefined, true);\n  else if (adminKnown && !isAdmin) add('تغيير دور بواسطة مستخدم غير أدمن', 'CRITICAL', [e], 'nonadmin|' + e.id, undefined, true);\n  else add('تغيير دور أو صلاحيات مستخدم (بواسطة أدمن)', 'CRITICAL', [e], 'adminrole|' + e.id, undefined, false);\n});\n\n// Rule 5: 3+ access_denied for the same user (or 1+ immediate cross-user/access violation)\ngroupBy(events.filter(e => e.event_type === 'access_denied'), e => e.user_id || emailOf(e) || ipOf(e)).forEach((evs, who) => {\n  if (evs.length >= cfg.denied_per_user) add('رفض وصول متكرر', 'HIGH', evs, who);\n});\n\n// Rule 6: Mass delete (immediately CRITICAL)\nevents.filter(e => e.event_type === 'mass_delete').forEach(e => {\n  add('حذف جماعي غير معتاد (Mass Delete)', 'CRITICAL', [e], 'massdel|' + e.id, undefined, true);\n});\n\n// Rule 7: Login from new IP or unusual hours\nevents.filter(e => e.event_type === 'login_anomaly').forEach(e => {\n  add('تسجيل دخول من IP جديد أو في وقت غير معتاد', 'HIGH', [e], 'anomaly|' + e.id, undefined, false);\n});\n\nreturn incidents;"
+      },
+      "id": "25bb0b37-3f96-401e-92fc-fdc9ba72e155",
+      "name": "Detect Incidents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Thresholds').first().json;\nconst store = $getWorkflowStaticData('global');\nstore.sent = store.sent || {};\nconst now = Date.now();\nconst ttl = cfg.dedupe_minutes * 60000;\nfor (const k of Object.keys(store.sent)) {\n  if (now - store.sent[k] > ttl) delete store.sent[k];\n}\nconst out = [];\nfor (const item of $input.all()) {\n  const k = item.json.dedup_key;\n  if (store.sent[k]) continue;\n  store.sent[k] = now;\n  out.push(item);\n}\nreturn out;"
+      },
+      "id": "a3ee57da-7e98-4d0b-a999-790a14dfe125",
+      "name": "Deduplicate (30 min)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=تم رصد حادث أمني.\nالقاعدة: {{ $json.raw_rule || $json.rule }}\nالخطورة: {{ $json.severity }}\nالحساب/البريد: {{ $json.email }}\nIP: {{ $json.ip }}\nعدد الأحداث: {{ $json.count }}\nالفترة: {{ $json.window_text }}",
+        "options": {
+          "systemMessage": "أنت محلل أمن لتطبيق مبني على Supabase. بناءً على الحادث المعطى، اكتب الرد بالعربية فقط وبنص عادي (بدون markdown أو HTML أو أقواس زاوية) من جزأين قصيرين بالضبط: \"الملخص:\" جملة أو جملتان تشرحان ما حدث على الأرجح ولماذا هو مهم، ثم \"الإجراء المقترح:\" خطوة أو خطوتان عمليتان. اجعل الرد كاملاً أقل من 70 كلمة."
+        }
+      },
+      "id": "a7c78f45-e074-4037-92b8-0755c3a6ac37",
+      "name": "Incident Summary Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1328,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.8-flash",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "14a2e121-e7a7-447a-9885-2ab04ad3bc9e",
+      "name": "Gemini Chat Model (incident)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1408,
+        448
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ca-1",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $(\"Deduplicate (30 min)\").item.json.emoji }} <b>{{ $(\"Deduplicate (30 min)\").item.json.severity }} - {{ $(\"Deduplicate (30 min)\").item.json.rule }}</b>\nالحساب/البريد: {{ $(\"Deduplicate (30 min)\").item.json.email }}\nIP: {{ $(\"Deduplicate (30 min)\").item.json.ip }}\nعدد الأحداث: {{ $(\"Deduplicate (30 min)\").item.json.count }}\nالفترة: {{ $(\"Deduplicate (30 min)\").item.json.window_text }}\n\n🤖 {{ String($json.output || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}"
+            },
+            {
+              "id": "ca-2",
+              "name": "severity",
+              "type": "string",
+              "value": "={{ $(\"Deduplicate (30 min)\").item.json.severity }}"
+            },
+            {
+              "id": "ca-3",
+              "name": "user_id",
+              "type": "string",
+              "value": "={{ $(\"Deduplicate (30 min)\").item.json.user_id }}"
+            },
+            {
+              "id": "ca-4",
+              "name": "event_ids",
+              "type": "array",
+              "value": "={{ $(\"Deduplicate (30 min)\").item.json.event_ids }}"
+            },
+            {
+              "id": "ca-5",
+              "name": "can_block",
+              "type": "boolean",
+              "value": "={{ $(\"Deduplicate (30 min)\").item.json.can_block }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1e247c13-a28e-42ee-bf9d-5780299f9187",
+      "name": "Compose Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1856,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "CRITICAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "508514ed-d419-445d-8aa3-c2988277d3e0",
+      "name": "Is CRITICAL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2080,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.can_block }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1c2d3e4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+      "name": "Has Block Target?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "1200587150",
+        "text": "={{ $json.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "حظر المستخدم",
+                    "additionalFields": {
+                      "callback_data": "=block:{{ $json.user_id }}"
+                    }
+                  },
+                  {
+                    "text": "تجاهل",
+                    "additionalFields": {
+                      "callback_data": "ignore"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "21270827-ef4f-412c-98fe-bb481063bf37",
+      "name": "Telegram alert (CRITICAL + buttons)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2384,
+        144
+      ],
+      "webhookId": "64e682a5-36e6-4caf-b29e-301873bba7c5",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "1200587150",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c2d3e4f5-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+      "name": "Telegram alert (CRITICAL)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2384,
+        288
+      ],
+      "webhookId": "7e12a34b-56c7-48d9-90ef-1234567890ab",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ce-1",
+              "name": "event_ids",
+              "type": "array",
+              "value": "={{ $(\"Compose Alert\").item.json.event_ids }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "04631a2d-02c4-4ed5-8586-30fde9b04255",
+      "name": "Collect Event IDs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2624,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "event_ids",
+        "options": {
+          "destinationFieldName": "event_id"
+        }
+      },
+      "id": "746e6483-4a81-4643-8d06-6526951f660f",
+      "name": "One item per event",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "security_events",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.event_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "alerted",
+              "fieldValue": "true"
+            }
+          ]
+        }
+      },
+      "id": "606fc9b7-d657-4b55-bf95-ac281ea7443d",
+      "name": "Mark alerted = true",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3072,
+        320
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "1200587150",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "803dd45d-215a-4d40-8086-c38dd921880d",
+      "name": "Telegram alert (HIGH)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2384,
+        448
+      ],
+      "webhookId": "cf6d029b-03a3-4c8e-ab23-ae333ed70d83",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "35d89198-218c-4447-a9fd-433a2157dcb6",
+      "name": "Every 1 minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -128,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {
+          "chatIds": "1200587150"
+        }
+      },
+      "id": "d4eb3119-fcfe-45dd-baff-f1e372016ae6",
+      "name": "Telegram button pressed",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -112,
+        448
+      ],
+      "webhookId": "b9dbca3c-1fb9-4e6c-9a7c-d09c911c5d05",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.callback_query.data }}",
+              "rightValue": "block:",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "20217c69-0034-419e-a03b-7d06894d5e9a",
+      "name": "Block pressed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        272,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sp-1",
+              "name": "supabase_url",
+              "type": "string",
+              "value": "https://agfvwyycgqhzjbywyzqi.supabase.co"
+            },
+            {
+              "id": "sp-2",
+              "name": "target_user_id",
+              "type": "string",
+              "value": "={{ String($json.callback_query.data || '').replace('block:', '').trim() }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "3e8740e9-2bb7-4aff-814a-6c9437e11396",
+      "name": "Supabase project URL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        496,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test($json.target_user_id) ? ($json.supabase_url + '/rest/v1/app_users?auth_user_id=eq.' + $json.target_user_id + '&select=id,username,role,status') : ($json.supabase_url + '/rest/v1/app_users?id=eq.__invalid__&select=id,username,role,status') }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "d3e4f5a6-7b8c-4d9e-0f1a-2b3c4d5e6f70",
+      "name": "Lookup target in app_users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "alwaysOutputData": true,
+      "position": [
+        688,
+        544
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test($('Supabase project URL').item.json.target_user_id) && String($json.role || '').toLowerCase() !== 'system_admin' && String($json.username || '').toLowerCase() !== 'marwan-desouky' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4f5a6b7-8c9d-4e0f-1a2b-3c4d5e6f7081",
+      "name": "Safe to Ban?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        880,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('Supabase project URL').item.json.supabase_url }}/auth/v1/admin/users/{{ $('Supabase project URL').item.json.target_user_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"ban_duration\":\"876000h\"}",
+        "options": {}
+      },
+      "id": "acef1ed1-bb9d-4a54-8f82-0b126e0f337f",
+      "name": "Ban user (Supabase Auth Admin API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1088,
+        480
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Supabase project URL').item.json.supabase_url }}/rest/v1/app_users?auth_user_id=eq.{{ $('Supabase project URL').item.json.target_user_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"status\":\"suspended\"}",
+        "options": {}
+      },
+      "id": "f5a6b7c8-9d0e-4f1a-2b3c-4d5e6f708192",
+      "name": "Suspend in app_users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1296,
+        480
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $(\"Telegram button pressed\").item.json.callback_query.message.chat.id }}",
+        "text": "=⛔ تم حظر المستخدم وتعليق حسابه {{ $(\"Supabase project URL\").item.json.target_user_id }}.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e59b6def-0055-4aeb-bcb3-42efa9b6846f",
+      "name": "Telegram: user blocked",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1504,
+        480
+      ],
+      "webhookId": "b0112fbb-9eb9-4cff-95e1-eb0222b48f0e",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $(\"Telegram button pressed\").item.json.callback_query.message.chat.id }}",
+        "text": "⚠️ تعذر تنفيذ الحظر: المعرف غير صالح أو الحساب محمي (مدير النظام الرئيسي).",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a6b7c8d9-0e1f-4a2b-3c4d-5e6f708192a3",
+      "name": "Telegram: ban skipped",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1088,
+        624
+      ],
+      "webhookId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.callback_query.message.chat.id }}",
+        "text": "تم تجاهل الحادث. لم يتم اتخاذ أي إجراء.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7665fa57-632d-4831-ad6d-dfbeaa36e820",
+      "name": "Telegram: ignored",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        496,
+        736
+      ],
+      "webhookId": "33e5f310-8dee-4a38-ad1b-2f3421c883c9",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "74d8e547-1846-480a-aa45-76fc7d0b7a14",
+      "name": "Every day 8:00 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "security_events",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "created_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({ hours: 24 }).toUTC().toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "0dac07e6-269f-4c79-a1ee-cb9e2aa19acf",
+      "name": "Get events (last 24h)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        768
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "g7f1OZc8IRQrqEmL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(e => e && e.event_type);\nconst esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst ipOf = e => e.ip_address || e.ip || '';\nconst byType = t => rows.filter(e => e.event_type === t);\nconst failed = byType('login_failed');\nconst denied = byType('access_denied');\nconst roleChanges = byType('role_change');\nconst massDeletes = byType('mass_delete');\nconst anomalies = byType('login_anomaly');\nconst top = (arr, fn, n) => {\n  const c = {};\n  arr.forEach(e => { const k = fn(e); if (k) c[k] = (c[k] || 0) + 1; });\n  return Object.keys(c).sort((a, b) => c[b] - c[a]).slice(0, n).map(k => ({ key: k, count: c[k] }));\n};\nconst topIps = top(rows, ipOf, 5);\nconst topFailedIps = top(failed, ipOf, 5);\nconst topDeniedUsers = top(denied, e => e.email || e.user_id, 5);\nconst roleList = roleChanges.map(e => ({ target: e.target_user_id || e.user_id || e.email, changed_by: e.changed_by, changed_by_role: e.changed_by_role, new_role: e.new_role, at: e.created_at }));\nconst line = list => list.length ? esc(list.map(x => x.key + ' (' + x.count + ')').join(', ')) : 'لا يوجد';\nconst facts = [\n  '<b>آخر 24 ساعة</b>',\n  'إجمالي الأحداث: ' + rows.length,\n  'محاولات الدخول الفاشلة: ' + failed.length,\n  'تسجيلات الدخول الناجحة: ' + byType('login_success').length,\n  'تنبيهات الدخول غير المعتاد: ' + anomalies.length,\n  'أكثر الـ IP نشاطاً: ' + line(topIps),\n  'أكثر الـ IP في الفشل: ' + line(topFailedIps),\n  'تغييرات الأدوار: ' + roleChanges.length,\n  'عمليات الحذف الجماعي: ' + massDeletes.length,\n  'حالات رفض الوصول: ' + denied.length + ' | أكثر المستخدمين: ' + line(topDeniedUsers),\n].join('\\n');\nconst report = {\n  total_events: rows.length,\n  failed_logins: failed.length,\n  successful_logins: byType('login_success').length,\n  login_anomalies: anomalies.length,\n  mass_deletes: massDeletes.length,\n  top_ips: topIps,\n  top_failed_login_ips: topFailedIps,\n  role_changes: roleList.slice(0, 20),\n  access_denials: denied.length,\n  top_denied_users: topDeniedUsers,\n};\nreturn [{ json: { facts_text: facts, report_data: JSON.stringify(report) } }];"
+      },
+      "id": "fc8b0968-4bf0-416e-861c-421ee1abc894",
+      "name": "Aggregate Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=بيانات الأمان لآخر 24 ساعة (JSON):\n{{ $json.report_data }}",
+        "options": {
+          "systemMessage": "أنت محلل أمن. اكتب موجزاً أمنياً يومياً مختصراً بالعربية فقط وبنص عادي (بدون markdown أو HTML أو أقواس زاوية) في 120 كلمة كحد أقصى. غطِّ محاولات الدخول الفاشلة وأكثر الـ IP نشاطاً وتغييرات الأدوار وحالات رفض الوصول والحذف الجماعي، ونبّه على أي شيء مشبوه، واختم بسطر يبدأ بـ \"الإجراء المقترح:\". إذا لم يكن هناك نشاط فاذكر ذلك باختصار."
+        }
+      },
+      "id": "3ab622d9-9166-42a0-a253-ac9252a5b732",
+      "name": "Daily Report Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        720,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.8-flash",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "97d19a20-8eb0-426c-8d97-68e42fa198a6",
+      "name": "Gemini Chat Model (report)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        992
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "1200587150",
+        "text": "=📊 <b>التقرير الأمني اليومي</b> - {{ $now.setZone(\"Africa/Cairo\").toFormat(\"yyyy-LL-dd\") }}\n\n{{ $(\"Aggregate Stats\").item.json.facts_text }}\n\n🤖 {{ String($json.output || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "d9aa1202-3766-43ca-8089-bb0ddb841d9d",
+      "name": "Telegram daily report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        768
+      ],
+      "webhookId": "25db4e70-3a28-49d8-9276-f9a2bdc9111c",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "11b59823-b095-442d-918c-c3dce03c4ab5",
+      "name": "Workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "1200587150",
+        "text": "=🚨 فشل الـ workflow: {{ String($json.workflow?.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\nالعقدة: {{ String($json.execution?.lastNodeExecuted || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\nالخطأ: {{ String($json.execution?.error?.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\nالتنفيذ: {{ $json.execution?.url || '' }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "f87740b1-2f05-46ee-9f27-883f9fcc9ca2",
+      "name": "Telegram error notice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        864
+      ],
+      "webhookId": "51f7b385-d240-4782-9a8a-8d8f02bcfc60",
+      "credentials": {
+        "telegramApi": {
+          "id": "vflFy7UeAsh7U6YR",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Supabase security_events INSERT": {
+      "main": [
+        [
+          {
+            "node": "Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Get events (last 10 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get events (last 10 min)": {
+      "main": [
+        [
+          {
+            "node": "Detect Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Incidents": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate (30 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate (30 min)": {
+      "main": [
+        [
+          {
+            "node": "Incident Summary Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incident Summary Agent": {
+      "main": [
+        [
+          {
+            "node": "Compose Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model (incident)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Incident Summary Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Alert": {
+      "main": [
+        [
+          {
+            "node": "Is CRITICAL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is CRITICAL?": {
+      "main": [
+        [
+          {
+            "node": "Has Block Target?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram alert (HIGH)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Block Target?": {
+      "main": [
+        [
+          {
+            "node": "Telegram alert (CRITICAL + buttons)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram alert (CRITICAL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram alert (CRITICAL + buttons)": {
+      "main": [
+        [
+          {
+            "node": "Collect Event IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram alert (CRITICAL)": {
+      "main": [
+        [
+          {
+            "node": "Collect Event IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Event IDs": {
+      "main": [
+        [
+          {
+            "node": "One item per event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per event": {
+      "main": [
+        [
+          {
+            "node": "Mark alerted = true",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram alert (HIGH)": {
+      "main": [
+        [
+          {
+            "node": "Collect Event IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 minute": {
+      "main": [
+        [
+          {
+            "node": "Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram button pressed": {
+      "main": [
+        [
+          {
+            "node": "Block pressed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block pressed?": {
+      "main": [
+        [
+          {
+            "node": "Supabase project URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: ignored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase project URL": {
+      "main": [
+        [
+          {
+            "node": "Lookup target in app_users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup target in app_users": {
+      "main": [
+        [
+          {
+            "node": "Safe to Ban?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safe to Ban?": {
+      "main": [
+        [
+          {
+            "node": "Ban user (Supabase Auth Admin API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: ban skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ban user (Supabase Auth Admin API)": {
+      "main": [
+        [
+          {
+            "node": "Suspend in app_users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suspend in app_users": {
+      "main": [
+        [
+          {
+            "node": "Telegram: user blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day 8:00 AM": {
+      "main": [
+        [
+          {
+            "node": "Get events (last 24h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get events (last 24h)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Stats": {
+      "main": [
+        [
+          {
+            "node": "Daily Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Report Agent": {
+      "main": [
+        [
+          {
+            "node": "Telegram daily report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model (report)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Daily Report Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow error": {
+      "main": [
+        [
+          {
+            "node": "Telegram error notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Africa/Cairo",
+    "availableInMCP": true
+  },
+  "versionId": "e59f750b-5e7c-4b01-a9d0-f61e1780c141",
+  "meta": {
+    "instanceId": "c0272a673840274c0c3b08478cb7856e9bf37332cf91367e3409114999cc922f"
+  },
+  "nodeGroups": [
+    {
+      "id": "b392d8d6-2220-4bbf-a09e-84c7631af641",
+      "name": "Collect recent events",
+      "nodeIds": [
+        "4d96e5bb-f2be-42c2-bb14-78a9d782812d",
+        "d4894a0d-f8b9-4fec-9ca7-d6007b7d55d3"
+      ],
+      "description": "Runs on each Supabase insert and every minute; loads the last 10 minutes of unalerted security events with the alert thresholds"
+    },
+    {
+      "id": "63b4b5f5-84c2-454f-ae39-e02b6e02fcb5",
+      "name": "Detect new incidents",
+      "nodeIds": [
+        "25bb0b37-3f96-401e-92fc-fdc9ba72e155",
+        "a3ee57da-7e98-4d0b-a999-790a14dfe125"
+      ],
+      "description": "Applies all detection rules, then drops any incident already alerted within the last 30 minutes"
+    },
+    {
+      "id": "45dc27a0-efac-43e0-a73d-3c61a105e036",
+      "name": "Write AI summary",
+      "nodeIds": [
+        "a7c78f45-e074-4037-92b8-0755c3a6ac37",
+        "14a2e121-e7a7-447a-9885-2ab04ad3bc9e"
+      ],
+      "description": "Gemini writes a short incident summary and a recommended action for each new incident"
+    },
+    {
+      "id": "d2f3df3a-eda9-4ada-aa25-34cefbab8111",
+      "name": "Deliver alert",
+      "nodeIds": [
+        "1e247c13-a28e-42ee-bf9d-5780299f9187",
+        "508514ed-d419-445d-8aa3-c2988277d3e0",
+        "b1c2d3e4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+        "21270827-ef4f-412c-98fe-bb481063bf37",
+        "c2d3e4f5-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+        "803dd45d-215a-4d40-8086-c38dd921880d",
+        "04631a2d-02c4-4ed5-8586-30fde9b04255",
+        "746e6483-4a81-4643-8d06-6526951f660f",
+        "606fc9b7-d657-4b55-bf95-ac281ea7443d"
+      ],
+      "description": "Sends the Telegram alert (with safe Block/Ignore buttons only when a non-protected user UUID exists), then flags the source events as alerted in Supabase"
+    },
+    {
+      "id": "f8222a5c-be8e-4b72-8bef-01508f893793",
+      "name": "Handle button press",
+      "nodeIds": [
+        "20217c69-0034-419e-a03b-7d06894d5e9a",
+        "3e8740e9-2bb7-4aff-814a-6c9437e11396",
+        "d3e4f5a6-7b8c-4d9e-0f1a-2b3c4d5e6f70",
+        "e4f5a6b7-8c9d-4e0f-1a2b-3c4d5e6f7081",
+        "acef1ed1-bb9d-4a54-8f82-0b126e0f337f",
+        "f5a6b7c8-9d0e-4f1a-2b3c-4d5e6f708192",
+        "e59b6def-0055-4aeb-bcb3-42efa9b6846f",
+        "a6b7c8d9-0e1f-4a2b-3c4d-5e6f708192a3",
+        "7665fa57-632d-4831-ad6d-dfbeaa36e820"
+      ],
+      "description": "Reacts to Block user / Ignore taps in Telegram; guards against system_admin lockout, bans in Auth, and suspends in app_users"
+    },
+    {
+      "id": "063a1ce6-ce78-458b-99a6-4a15eed1c648",
+      "name": "Build daily report",
+      "nodeIds": [
+        "0dac07e6-269f-4c79-a1ee-cb9e2aa19acf",
+        "fc8b0968-4bf0-416e-861c-421ee1abc894",
+        "3ab622d9-9166-42a0-a253-ac9252a5b732",
+        "97d19a20-8eb0-426c-8d97-68e42fa198a6",
+        "d9aa1202-3766-43ca-8089-bb0ddb841d9d"
+      ],
+      "description": "At 8:00 AM Cairo time, summarizes the last 24 hours of events with Gemini and sends the report to Telegram"
+    }
+  ],
+  "id": "1kP0uOv5M81HlQSW",
+  "tags": []
+}
