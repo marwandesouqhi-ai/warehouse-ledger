@@ -18,6 +18,48 @@ function getCorsHeaders(req: Request): Record<string, string> {
   }
 }
 
+const FALLBACK_MODEL = "gemini-2.5-flash"
+const MODEL_TTL_MS = 6 * 60 * 60 * 1000
+let cachedModels: { names: string[]; at: number } | null = null
+
+function pinnedModel(): string {
+  return (Deno.env.get("GEMINI_MODEL") || "").trim()
+}
+
+// Returns up to 3 stable "gemini-<version>-flash" models that support generateContent,
+// newest first. GEMINI_MODEL (Supabase secret) overrides discovery.
+async function resolveModels(apiKey: string, force = false): Promise<string[]> {
+  const pinned = pinnedModel()
+  if (pinned) return [pinned]
+  if (!force && cachedModels && Date.now() - cachedModels.at < MODEL_TTL_MS) return cachedModels.names
+  try {
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
+      headers: { "x-goog-api-key": apiKey },
+      signal: AbortSignal.timeout(6000),
+    })
+    if (res.ok) {
+      const data = await res.json().catch(() => null)
+      const models: Array<{ name?: string; supportedGenerationMethods?: string[] }> = Array.isArray(data?.models) ? data.models : []
+      const candidates = models
+        .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+        .map((m) => {
+          const match = /^models\/(gemini-(\d+(?:\.\d+)?)-flash)$/.exec(m.name || "")
+          return match ? { name: match[1], version: parseFloat(match[2]) } : null
+        })
+        .filter((m): m is { name: string; version: number } => m !== null)
+        .sort((a, b) => b.version - a.version)
+      if (candidates.length > 0) {
+        cachedModels = { names: candidates.slice(0, 3).map((c) => c.name), at: Date.now() }
+        console.log("gemini-chat discovered models:", cachedModels.names.join(","))
+        return cachedModels.names
+      }
+    }
+  } catch (err) {
+    console.error("gemini-chat model discovery failed:", err instanceof Error ? err.message : String(err))
+  }
+  return cachedModels?.names ?? [FALLBACK_MODEL]
+}
+
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 12
 const rateHits = new Map<string, number[]>()
@@ -154,26 +196,55 @@ serve(async (req: Request) => {
       },
     ]
 
-    const model = "gemini-2.5-flash"
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-    const upstreamRes = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey,
+    const requestBody = JSON.stringify({
+      system_instruction: { parts: [{ text: systemInstructionText }] },
+      contents,
+      generationConfig: {
+        temperature: 0.35,
+        maxOutputTokens: 1200,
       },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstructionText }] },
-        contents,
-        generationConfig: {
-          temperature: 0.35,
-          maxOutputTokens: 1200,
-        },
-      }),
     })
+    const callModel = (model: string) =>
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiApiKey,
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(25000),
+      })
 
-    if (!upstreamRes.ok) {
-      console.error("gemini-chat upstream error status:", upstreamRes.status)
+    // Try the newest model first; on a retired model (404), rate limit (429) or Google-side
+    // error (5xx) fall through to the next candidate. A 404 also forces re-discovery once.
+    let models = await resolveModels(geminiApiKey)
+    let upstreamRes: Response | null = null
+    let rediscovered = false
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i]
+      try {
+        upstreamRes = await callModel(model)
+      } catch (err) {
+        console.error("gemini-chat upstream call failed:", model, err instanceof Error ? err.message : String(err))
+        upstreamRes = null
+        continue
+      }
+      if (upstreamRes.ok) break
+      console.error("gemini-chat upstream error:", model, upstreamRes.status)
+      if (upstreamRes.status === 404 && !rediscovered && !pinnedModel()) {
+        rediscovered = true
+        const refreshed = await resolveModels(geminiApiKey, true)
+        if (refreshed.join() !== models.join()) {
+          models = refreshed
+          i = -1
+          continue
+        }
+      }
+      if (![404, 429, 500, 502, 503, 504].includes(upstreamRes.status)) break
+    }
+
+    if (!upstreamRes || !upstreamRes.ok) {
+      console.error("gemini-chat all models failed; last status:", upstreamRes?.status ?? "no response")
       return new Response(JSON.stringify({ error: "تعذر الحصول على رد من خدمة المساعد الذكي حالياً." }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
