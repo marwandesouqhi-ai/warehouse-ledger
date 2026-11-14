@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -117,8 +117,11 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
   }
 
   try {
@@ -132,24 +135,25 @@ serve(async (req: Request) => {
     const chatId = Deno.env.get("TELEGRAM_CHAT_ID")?.trim() ?? ""
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(JSON.stringify({ error: "Supabase environment not configured." }), {
+      return new Response(JSON.stringify({ error: "Server configuration incomplete." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
     if (!isAuthorizedCronOrServiceCaller(req, supabaseServiceKey, cronSecret)) {
-      return new Response(JSON.stringify({ error: "Unauthorized: valid service role key or x-cron-secret required." }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
     if (!botToken || !chatId) {
+      console.error("daily-report: missing Telegram notification configuration")
       return new Response(JSON.stringify({
-        error: "TELEGRAM_MONITOR_BOT_TOKEN (or TELEGRAM_BOT_TOKEN) and/or TELEGRAM_CHAT_ID secrets are not set in Edge Function environment.",
+        error: "Notification transport is not configured.",
       }), {
-        status: 400,
+        status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
@@ -314,9 +318,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err)
-    console.error("daily-report Edge Function error:", err)
-    return new Response(JSON.stringify({ error: errorMsg }), {
+    console.error("daily-report Edge Function error:", err instanceof Error ? err.message : String(err))
+    return new Response(JSON.stringify({ error: "Internal Server Error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

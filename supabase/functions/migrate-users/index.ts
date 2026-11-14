@@ -1,16 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = new Set<string>([DEFAULT_APP_ORIGIN])
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim().replace(/\/+$/, "")
+  if (envUrl && envUrl.startsWith("https://")) allowed.add(envUrl)
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)
+  for (const item of extra) allowed.add(item)
+  const allowOrigin = origin && allowed.has(origin) ? origin : DEFAULT_APP_ORIGIN
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  }
 }
 
 function getReqIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || ""
+  const parts = xff.split(",").map((p) => p.trim()).filter(Boolean)
+  if (parts.length > 0) return parts[parts.length - 1]
   return (
-    req.headers.get("cf-connecting-ip")?.trim() ||
     req.headers.get("x-real-ip")?.trim() ||
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("cf-connecting-ip")?.trim() ||
     "unknown"
   )
 }
@@ -56,9 +70,30 @@ async function logUnauthorizedMigrateAttempt(
   }
 }
 
+const RL_WINDOW_MS = 60_000
+const RL_MAX = 30
+const rlHits = new Map<string, number[]>()
+
+function isRateLimited(req: Request): boolean {
+  const key = (req.headers.get("x-forwarded-for") || req.headers.get("authorization") || "anon").slice(0, 200)
+  const now = Date.now()
+  const hits = (rlHits.get(key) || []).filter((t) => now - t < RL_WINDOW_MS)
+  const limited = hits.length >= RL_MAX
+  if (!limited) hits.push(now)
+  rlHits.set(key, hits)
+  if (rlHits.size > 5000) rlHits.clear()
+  return limited
+}
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
+  }
+  if (isRateLimited(req)) {
+    return new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
+    })
   }
 
   try {
@@ -295,8 +330,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "حدث خطأ غير متوقع"
-    return new Response(JSON.stringify({ error: message }), {
+    console.error("migrate-users error:", err instanceof Error ? err.message : String(err))
+    return new Response(JSON.stringify({ error: "حدث خطأ غير متوقع أثناء ترحيل الحسابات." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

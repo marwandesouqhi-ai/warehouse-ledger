@@ -1,36 +1,51 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const jsonHeaders = {
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
 }
 
-async function hashToken(token: string): Promise<string> {
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.length !== bBytes.length) return false
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i]
+  }
+  return diff === 0
+}
+
+async function hashTokenWithPepper(token: string, pepper: string): Promise<string> {
   const encoder = new TextEncoder()
-  const data = encoder.encode(token.trim())
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+  const input = `${pepper}:${token.trim()}`
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(input))
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+      status: 405,
+      headers: jsonHeaders,
+    })
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    const otpPepper = (Deno.env.get("OTP_PEPPER") ?? "").trim()
 
     // Security Restriction: verify-email is an internal server-side function only.
-    // Public web verification is strictly disabled per Part 1.4.
-    const authHeader = req.headers.get("Authorization") || ""
+    const authHeader = (req.headers.get("Authorization") || "").trim()
     const expectedAuth = `Bearer ${supabaseServiceKey}`
-    if (!supabaseServiceKey || authHeader !== expectedAuth) {
+    if (!supabaseServiceKey || !otpPepper || !timingSafeEqual(authHeader, expectedAuth)) {
       return new Response(JSON.stringify({ error: "Unauthorized: Internal function only." }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
@@ -39,10 +54,10 @@ serve(async (req: Request) => {
     const requestId = body.requestId ? String(body.requestId).trim() : ""
     const token = body.token ? String(body.token).trim() : ""
 
-    if ((!email && !requestId) || !token) {
-      return new Response(JSON.stringify({ error: "البريد الإلكتروني ورمز التحقق مطلوبان." }), {
+    if ((!email && !requestId) || !/^\d{6}$/.test(token)) {
+      return new Response(JSON.stringify({ error: "البريد الإلكتروني ورمز التحقق الصالح مطلوبان." }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
@@ -50,7 +65,7 @@ serve(async (req: Request) => {
 
     let query = supabaseAdmin
       .from("registration_requests")
-      .select("*")
+      .select("id, email, telegram_user_id, verification_status, approval_status")
       .eq("approval_status", "pending")
 
     if (requestId) {
@@ -67,7 +82,7 @@ serve(async (req: Request) => {
     if (fetchErr || !request) {
       return new Response(JSON.stringify({ error: "لم يتم العثور على طلب تسجيل معلق لهذا الحساب." }), {
         status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
@@ -77,56 +92,44 @@ serve(async (req: Request) => {
         message: "تم التحقق من البريد الإلكتروني مسبقاً والطلب قيد المراجعة.",
       }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
-    // Check maximum failed attempts
-    if (request.verification_attempts >= 5) {
+    // Atomic attempt increment & expiry enforcement via DB RPC
+    const { data: attemptRows, error: rpcErr } = await supabaseAdmin.rpc("record_verification_attempt", {
+      p_request_id: request.id,
+      p_telegram_user_id: request.telegram_user_id,
+    })
+
+    if (rpcErr || !attemptRows || attemptRows.length === 0) {
       return new Response(JSON.stringify({
-        error: "تم تجاوز الحد الأقصى للمحاولات الخاطئة. يرجى تقديم طلب تسجيل جديد.",
+        error: "تعذر التحقق: تم تجاوز الحد الأقصى للمحاولات أو انتهت صلاحية الرمز.",
       }), {
         status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
-    // Check expiration (10 minutes)
-    if (request.verification_token_expires_at && new Date(request.verification_token_expires_at).getTime() < Date.now()) {
+    const attemptResult = attemptRows[0]
+    const storedHash = String(attemptResult.token_hash || "")
+    const currentAttempts = Number(attemptResult.attempts || 1)
+
+    const inputHash = await hashTokenWithPepper(token, otpPepper)
+    if (!storedHash || !timingSafeEqual(inputHash, storedHash)) {
       return new Response(JSON.stringify({
-        error: "انتهت صلاحية رمز التحقق (صلاحية الرمز 10 دقائق). يرجى طلب رمز جديد.",
+        error: `رمز التحقق غير صحيح. تبقى لك ${Math.max(0, 5 - currentAttempts)} محاولات.`,
       }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       })
     }
 
-    // Compare token hash
-    const inputHash = await hashToken(token)
-    if (inputHash !== request.verification_token_hash) {
-      await supabaseAdmin
-        .from("registration_requests")
-        .update({ verification_attempts: request.verification_attempts + 1 })
-        .eq("id", request.id)
-
-      return new Response(JSON.stringify({
-        error: `رمز التحقق غير صحيح. تبقى لك ${4 - request.verification_attempts} محاولات.`,
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // Mark as verified
-    const { error: updateErr } = await supabaseAdmin
-      .from("registration_requests")
-      .update({
-        verification_status: "verified",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", request.id)
-
-    if (updateErr) throw updateErr
+    // Mark as verified and clear token hash atomically
+    await supabaseAdmin.rpc("mark_verification_verified", {
+      p_request_id: request.id,
+      p_telegram_user_id: request.telegram_user_id,
+    })
 
     // Audit log
     await supabaseAdmin.from("audit_logs").insert({
@@ -143,13 +146,13 @@ serve(async (req: Request) => {
       message: "تم التحقق من البريد الإلكتروني بنجاح! تم تحويل طلبك للإدارة للمراجعة والاعتماد.",
     }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonHeaders,
     })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error"
-    return new Response(JSON.stringify({ error: message }), {
+    console.error("verify-email error:", err instanceof Error ? err.message : "Internal Error")
+    return new Response(JSON.stringify({ error: "حدث خطأ غير متوقع." }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonHeaders,
     })
   }
 })

@@ -3,9 +3,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import nodemailer from "npm:nodemailer"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-telegram-bot-api-secret-token",
+const corsHeaders: Record<string, string> = {
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
 }
 
 // ─── Arabic Messages & Texts (Mandatory Exact Specifications) ────────────────
@@ -89,6 +89,32 @@ function isValidEmail(email: string): boolean {
   return EMAIL_REGEX.test(email.trim())
 }
 
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+async function authEmailExists(supabaseAdmin: any, targetEmail: string): Promise<boolean> {
+  const cleanTarget = targetEmail.trim().toLowerCase()
+  let page = 1
+  const perPage = 1000
+  while (page <= 20) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+    if (error || !data?.users?.length) break
+    if (data.users.some((u: any) => (u.email || "").trim().toLowerCase() === cleanTarget)) {
+      return true
+    }
+    if (data.users.length < perPage) break
+    page += 1
+  }
+  return false
+}
+
 // ─── External Email Sending Integration (Gmail SMTP & Resend API) ─────────────
 interface EmailSendResult {
   success: boolean
@@ -111,11 +137,12 @@ async function sendOtpEmail(
   recipientName: string,
   otpCode: string
 ): Promise<EmailSendResult> {
+  const safeRecipientName = escapeHtml(recipientName || "المتقدم")
   const subject = "رمز التحقق من البريد الإلكتروني - حركة المخزن"
   const html = `
     <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
       <h2 style="color: #0f172a; margin-top: 0;">رمز التحقق لتسجيل الموظفين</h2>
-      <p style="color: #334155; font-size: 16px;">مرحباً <strong>${recipientName}</strong>،</p>
+      <p style="color: #334155; font-size: 16px;">مرحباً <strong>${safeRecipientName}</strong>،</p>
       <p style="color: #475569; font-size: 15px; line-height: 1.6;">
         لقد تم تقديم طلب تسجيل لحسابك في نظام حركة المخزن (Warehouse Ledger). للتحقق من ملكية بريدك الإلكتروني ومتابعة مراجعة الطلب من الإدارة، يرجى استخدام رمز التحقق التالي داخل بوت التيليجرام:
       </p>
@@ -237,7 +264,7 @@ async function checkAndRecordRateLimit(
   const cleanId = identifier.trim().toLowerCase()
   const threshold = new Date(Date.now() - windowSeconds * 1000).toISOString()
 
-  const { data, count, error } = await supabaseAdmin
+  const { count, error } = await supabaseAdmin
     .from("telegram_rate_events")
     .select("id", { count: "exact", head: true })
     .eq("event_type", eventType)
@@ -483,8 +510,8 @@ async function executeRegistration(params: {
     .ilike("email", cleanEmail)
     .maybeSingle()
 
-  if (userByEmail) {
-    await sendTelegramMessage(botToken, chatId, `⚠️ تعذر إنشاء الطلب: البريد الإلكتروني (${email}) مسجل وموجود بالفعل في قاعدة بيانات النظام لموظف سابق أو حالي. يرجى مراجعة إدارة النظام.`)
+  if (userByEmail || await authEmailExists(supabaseAdmin, cleanEmail)) {
+    await sendTelegramMessage(botToken, chatId, `⚠️ تعذر إنشاء الطلب: البريد الإلكتروني (${escapeHtml(email)}) مسجل وموجود بالفعل في النظام. يرجى مراجعة إدارة النظام.`)
     return
   }
 
@@ -497,21 +524,37 @@ async function executeRegistration(params: {
     .maybeSingle()
 
   if (pendingByEmail) {
-    await sendTelegramMessage(botToken, chatId, `⏳ يوجد طلب تسجيل معلق قيد المراجعة والاعتماد بالفعل لهذا البريد الإلكتروني (${email}). فور موافقة الإدارة ستصلك رسالة دعوة لتفعيل حسابك على هذا البريد.`)
+    await sendTelegramMessage(botToken, chatId, `⏳ يوجد طلب تسجيل معلق قيد المراجعة والاعتماد بالفعل لهذا البريد الإلكتروني (${escapeHtml(email)}).`)
     return
   }
 
-  // 4. Insert registration request directly for Admin review (NO Telegram OTP)
-  // verification_status is set to 'verified' so it is immediately eligible for Admin review & invitation sending
-  // (Legacy note: previously verificationStatus = emailRes.accepted ? "pending" : "delivery_failed" with "تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً")
+  // 4. Generate uniform OTP, hash with mandatory OTP_PEPPER, email OTP, and require /verify before Admin review
+  if (!otpPepper) {
+    console.error("Configuration Error: Required verification pepper is missing.")
+    await sendTelegramMessage(botToken, chatId, "تعذر معالجة طلب التسجيل حالياً بسبب إعدادات الخادم. يرجى مراجعة إدارة النظام.")
+    return
+  }
+
+  const otpCode = generateUniform6DigitOtp()
+  const tokenHash = await hashTokenWithPepper(otpCode, otpPepper)
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  const emailRes = await sendOtpEmail(emailConfig, cleanEmail, fullName, otpCode)
+  const sendStatus = emailRes.accepted ? "sent" : "failed"
+  const verificationStatus = emailRes.accepted ? "pending" : "delivery_failed"
+
   const insertPayload: Record<string, any> = {
     full_name: fullName,
-    email: email,
+    email: cleanEmail,
     telegram_user_id: tgUserId,
     telegram_username: tgUsername || "",
     requested_department: requestedDept,
     requested_role: requestedRole,
-    verification_status: "verified",
+    verification_token_hash: tokenHash,
+    verification_token_expires_at: expiresAt,
+    verification_attempts: 0,
+    email_send_status: sendStatus,
+    email_sent_at: emailRes.accepted ? new Date().toISOString() : null,
+    verification_status: verificationStatus,
     approval_status: "pending",
   }
 
@@ -519,17 +562,21 @@ async function executeRegistration(params: {
 
   if (insertErr) {
     console.error("Insert registration error:", insertErr)
-    await sendTelegramMessage(botToken, chatId, `حدث خطأ أثناء حفظ الطلب في قاعدة البيانات (${insertErr.message || "فشل الإدراج"}). يرجى المحاولة مرة أخرى لاحقاً.`)
+    await sendTelegramMessage(botToken, chatId, "حدث خطأ أثناء حفظ الطلب في قاعدة البيانات. يرجى المحاولة مرة أخرى لاحقاً.")
     return
   }
 
-  const confirmMsg = `✅ <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n` +
-    `• الاسم: <b>${fullName}</b>\n` +
-    `• البريد الإلكتروني: <b>${email}</b>\n` +
-    `• القسم: <b>${DEPT_LABELS[requestedDept] || requestedDept}</b>\n` +
-    `• الدور المطلوب: <b>${ROLE_LABELS[requestedRole] || requestedRole}</b>\n\n` +
-    `طلبك الآن قيد المراجعة لدى إدارة النظام.\n` +
-    `فور موافقة الإدارة، ستصلك رسالة دعوة رسمية على بريدك الإلكتروني تحتوي على رابط تفعيل حسابك واختيار اسم المستخدم وكلمة المرور.\n\n` +
+  const otpInstruction = emailRes.accepted
+    ? `📧 <b>تم إرسال رمز التحقق المكون من 6 أرقام إلى بريدك الإلكتروني.</b>\nيرجى تأكيد ملكية البريد عبر الأمر:\n<code>/verify الرمز</code>\n(صالح لمدة 10 دقائق، ويمكنك طلب رمز جديد عبر /resend).`
+    : `⚠️ تم حفظ طلبك، لكن تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حالياً.\nيمكنك إعادة المحاولة عبر <code>/resend</code> أو مراجعة إدارة النظام.`
+
+  const confirmMsg = `✅ <b>تم استلام طلب تسجيلك المبدئي!</b>\n\n` +
+    `• الاسم: <b>${escapeHtml(fullName)}</b>\n` +
+    `• البريد الإلكتروني: <b>${escapeHtml(cleanEmail)}</b>\n` +
+    `• القسم: <b>${escapeHtml(DEPT_LABELS[requestedDept] || requestedDept)}</b>\n` +
+    `• الدور المطلوب: <b>${escapeHtml(ROLE_LABELS[requestedRole] || requestedRole)}</b>\n\n` +
+    `${otpInstruction}\n\n` +
+    `لن يتم إرسال طلبك للموافقة الإدارية قبل إتمام التحقق من البريد الإلكتروني.\n` +
     `يمكنك متابعة حالة طلبك في أي وقت عبر الأمر /status.`
 
   await sendTelegramMessage(botToken, chatId, confirmMsg)
@@ -537,15 +584,11 @@ async function executeRegistration(params: {
 
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
-  }
-
-  // Strict: Reject non-POST requests immediately
+  // Strict: Reject non-POST requests immediately (Telegram server-to-server webhook)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders },
     })
   }
 
@@ -565,9 +608,16 @@ serve(async (req: Request) => {
       smtpPort: Number(Deno.env.get("SMTP_PORT")) || 465,
     }
 
-    // 1. Fail Closed: If webhook secret is not configured, reject with 500 and process NOTHING
+    // 1. Fail Closed: If webhook secret or pepper is not configured, reject with 500 and process NOTHING
     if (!webhookSecret) {
-      console.error("Configuration Error: TELEGRAM_WEBHOOK_SECRET is missing or empty. Rejecting request to prevent unauthenticated access.")
+      console.error("Configuration Error: TELEGRAM_WEBHOOK_SECRET is missing or empty. Rejecting request.")
+      return new Response(JSON.stringify({ error: "Server Configuration Error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+    if (!otpPepper) {
+      console.error("Configuration Error: Required verification pepper is missing or empty. Rejecting request.")
       return new Response(JSON.stringify({ error: "Server Configuration Error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -677,10 +727,10 @@ serve(async (req: Request) => {
           { text: "🔙 تغيير القسم", callback_data: "back_to_dept" },
           { text: "❌ إلغاء", callback_data: "reg_cancel" },
         ])
-        const roleMsg = `💼 <b>الخطوة 4 من 4: الدور الوظيفي (${deptTitle})</b>\n\n` +
-          `• <b>الاسم:</b> ${fullName}\n` +
-          `• <b>البريد:</b> ${email}\n` +
-          `• <b>القسم:</b> ${deptTitle}\n\n` +
+        const roleMsg = `💼 <b>الخطوة 4 من 4: الدور الوظيفي (${escapeHtml(deptTitle)})</b>\n\n` +
+          `• <b>الاسم:</b> ${escapeHtml(fullName)}\n` +
+          `• <b>البريد:</b> ${escapeHtml(email)}\n` +
+          `• <b>القسم:</b> ${escapeHtml(deptTitle)}\n\n` +
           `اختر الدور الوظيفي المطلوب بالضغط على أحد الأزرار أدناه:`
         await sendTelegramMessage(botToken, chatId, roleMsg, { inline_keyboard: roleButtons })
         return new Response("ok", { headers: corsHeaders })
@@ -701,8 +751,8 @@ serve(async (req: Request) => {
         await saveUserSession(supabaseAdmin, tgUserId, session)
 
         const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\n` +
-          `• <b>الاسم:</b> ${fullName}\n` +
-          `• <b>البريد:</b> ${email}\n\n` +
+          `• <b>الاسم:</b> ${escapeHtml(fullName)}\n` +
+          `• <b>البريد:</b> ${escapeHtml(email)}\n\n` +
           `اختر القسم التابع له من الخيارات التالية 👇`
         const keyboard = {
           inline_keyboard: [
@@ -746,10 +796,10 @@ serve(async (req: Request) => {
         await saveUserSession(supabaseAdmin, tgUserId, session)
 
         const summaryMsg = `📋 <b>مراجعة وتأكيد بيانات طلب التسجيل:</b>\n\n` +
-          `• <b>الاسم الكامل:</b> ${fullName}\n` +
-          `• <b>البريد الإلكتروني:</b> ${email}\n` +
-          `• <b>القسم المختار:</b> ${DEPT_LABELS[department] || department}\n` +
-          `• <b>الدور المطلوب:</b> ${ROLE_LABELS[role] || role}\n\n` +
+          `• <b>الاسم الكامل:</b> ${escapeHtml(fullName)}\n` +
+          `• <b>البريد الإلكتروني:</b> ${escapeHtml(email)}\n` +
+          `• <b>القسم المختار:</b> ${escapeHtml(DEPT_LABELS[department] || department)}\n` +
+          `• <b>الدور المطلوب:</b> ${escapeHtml(ROLE_LABELS[role] || role)}\n\n` +
           `هل البيانات صحيحة؟ اضغط على زر <b>تأكيد وإرسال الطلب</b> لتقديم طلبك لإدارة النظام 👇`
         const keyboard = {
           inline_keyboard: [
@@ -899,10 +949,10 @@ serve(async (req: Request) => {
       }
 
       if (request.approval_status === "approved") {
-        const msg = `تمت الموافقة على طلبك، ويمكنك استكمال تفعيل الحساب.\n\nالرقم الوظيفي: <b>${request.employee_id}</b>\nالدور المعتمد: ${ROLE_LABELS[request.approved_role] || request.approved_role}\nالقسم: ${DEPT_LABELS[request.requested_department] || request.requested_department}\n\nيمكنك الآن تسجيل الدخول عبر واجهة النظام باستخدام الرقم الوظيفي أو اسم المستخدم.`
+        const msg = `تمت الموافقة على طلبك، ويمكنك استكمال تفعيل الحساب.\n\nالرقم الوظيفي: <b>${escapeHtml(request.employee_id || "—")}</b>\nالدور المعتمد: ${escapeHtml(ROLE_LABELS[request.approved_role] || request.approved_role)}\nالقسم: ${escapeHtml(DEPT_LABELS[request.requested_department] || request.requested_department)}\n\nيمكنك الآن تسجيل الدخول عبر واجهة النظام باستخدام الرقم الوظيفي أو اسم المستخدم.`
         await sendTelegramMessage(botToken, chatId, msg)
       } else if (request.approval_status === "rejected") {
-        const reason = request.rejection_reason ? `\nسبب الرفض: ${request.rejection_reason}` : ""
+        const reason = request.rejection_reason ? `\nسبب الرفض: ${escapeHtml(request.rejection_reason)}` : ""
         await sendTelegramMessage(botToken, chatId, `تم رفض الطلب. يرجى مراجعة الإدارة.${reason}`)
       } else if (request.approval_status === "cancelled") {
         await sendTelegramMessage(botToken, chatId, "تم إلغاء طلب التسجيل.")
@@ -1123,13 +1173,15 @@ serve(async (req: Request) => {
           .eq("id", request.id)
           .maybeSingle()
 
-        const appBaseUrl = Deno.env.get("APP_BASE_URL") || ""
-        const dashboardLink = appBaseUrl ? `\n<a href="${appBaseUrl}/users">فتح لوحة الإدارة</a>` : ""
+        const appBaseUrl = (Deno.env.get("APP_BASE_URL") || "").trim()
+        const dashboardLink = appBaseUrl.startsWith("https://")
+          ? `\n<a href="${escapeHtml(appBaseUrl.replace(/\/+$/, ""))}/users">فتح لوحة الإدارة</a>`
+          : ""
         const adminMsg = `🔔 <b>طلب تسجيل موظف جديد بانتظار الاعتماد</b>\n\n` +
-          `• المعرّف: <code>${request.id}</code>\n` +
-          `• المتقدم: ${requestDetails?.full_name || "متقدم"}\n` +
-          `• القسم: ${requestDetails?.requested_department || ""}\n` +
-          `• الدور المطلوب: ${requestDetails?.requested_role || ""}\n` +
+          `• المعرّف: <code>${escapeHtml(request.id)}</code>\n` +
+          `• المتقدم: ${escapeHtml(requestDetails?.full_name || "متقدم")}\n` +
+          `• القسم: ${escapeHtml(DEPT_LABELS[requestDetails?.requested_department || ""] || requestDetails?.requested_department || "")}\n` +
+          `• الدور المطلوب: ${escapeHtml(ROLE_LABELS[requestDetails?.requested_role || ""] || requestDetails?.requested_role || "")}\n` +
           `• حالة التحقق: تم تأكيد البريد الإلكتروني بنجاح ✅` +
           dashboardLink
         try {
@@ -1164,7 +1216,7 @@ serve(async (req: Request) => {
         return new Response("ok", { headers: corsHeaders })
       }
       await saveUserSession(supabaseAdmin, tgUserId, { ...(activeSession || {}), fullName: text, step: "awaiting_email" })
-      const nextMsg = `📧 <b>الخطوة 2 من 4: البريد الإلكتروني</b>\n\nأهلاً بك يا <b>${text}</b>! 👋\nيرجى كتابة بريدك الإلكتروني (سنرسل إليه رابط دعوة تفعيل الحساب فور موافقة الإدارة):`
+      const nextMsg = `📧 <b>الخطوة 2 من 4: البريد الإلكتروني</b>\n\nأهلاً بك يا <b>${escapeHtml(text)}</b>! 👋\nيرجى كتابة بريدك الإلكتروني (سنرسل إليه رمز التحقق ورابط دعوة تفعيل الحساب فور موافقة الإدارة):`
       const keyboard = {
         inline_keyboard: [
           [{ text: "❌ إلغاء", callback_data: "reg_cancel" }],
@@ -1200,8 +1252,8 @@ serve(async (req: Request) => {
       }
       await saveUserSession(supabaseAdmin, tgUserId, updatedSession)
       const deptMsg = `🏢 <b>الخطوة 3 من 4: القسم المطلوب</b>\n\n` +
-        `• <b>الاسم:</b> ${fullName}\n` +
-        `• <b>البريد:</b> ${cleanEmail}\n\n` +
+        `• <b>الاسم:</b> ${escapeHtml(fullName)}\n` +
+        `• <b>البريد:</b> ${escapeHtml(cleanEmail)}\n\n` +
         `اختر القسم التابع له بالضغط على أحد الأزرار التالية 👇`
       const keyboard = {
         inline_keyboard: [
@@ -1293,8 +1345,8 @@ serve(async (req: Request) => {
     )
     return new Response("ok", { headers: corsHeaders })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error"
-    return new Response(JSON.stringify({ error: message }), {
+    console.error("telegram-bot error:", err instanceof Error ? err.message : "Internal Error")
+    return new Response(JSON.stringify({ error: "تعذر معالجة الطلب" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

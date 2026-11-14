@@ -81,11 +81,11 @@
   [`.env:4-10`](file:///c:/Users/Glory/OneDrive/Desktop/warehouse-ledger/.env#L4-L10) وتاريخ Git في الـ Commits السابقة (`8dc323d`, `e6961e6`, `9a6e544`).
 - **الكود المسبب للثغرة:**
   ```env
-  TELEGRAM_BOT_TOKEN=8665877224:AAEdAWDQ...[REDACTED_BOT_TOKEN]
-  TELEGRAM_WEBHOOK_SECRET=9a0ab7a9d080...[REDACTED_WEBHOOK_SECRET]
-  SMTP_USER=marwandesouqhi@gmail.com
-  SMTP_PASS=pizp...[REDACTED_GMAIL_APP_PASS]
-  VERCEL_OIDC_TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6..."
+  TELEGRAM_BOT_TOKEN=<REDACTED_BOT_TOKEN>
+  TELEGRAM_WEBHOOK_SECRET=<REDACTED_WEBHOOK_SECRET>
+  SMTP_USER=<REDACTED_SMTP_USER>
+  SMTP_PASS=<REDACTED_SMTP_PASS>
+  VERCEL_OIDC_TOKEN=<REDACTED_VERCEL_OIDC_TOKEN>
   ```
 - **آلية الثغرة والأثر على المؤسسة:**  
   الملفات تحتوي على كلمات مرور حقيقية (Gmail App Password الصالح للإرسال باسم المؤسسة) ورمز البوت (Telegram Bot Token) الذي يمنح السيطرة الكاملة على قراءة الرسائل وتوجيه البوت، بالإضافة إلى توكن Vercel OIDC. تم رصد تسجيل هذه البيانات سابقاً في تاريخ Git، مما يعني أن أي شخص يمكنه الوصول للمستودع يمكنه استخراج هذه المفاتيح والسيطرة على قنوات البريد وتليجرام.
@@ -170,7 +170,6 @@
     TO authenticated
     USING (
       (auth.jwt() -> 'app_metadata' ->> 'role') = 'system_admin'
-      OR (auth.jwt() ->> 'email') = 'marwandesowky2@gmail.com'
     );
   ```
 - **آلية الثغرة والأثر على المؤسسة:**  

@@ -1,9 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = new Set<string>([DEFAULT_APP_ORIGIN])
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim().replace(/\/+$/, "")
+  if (envUrl.startsWith("https://")) allowed.add(envUrl)
+  for (const item of (Deno.env.get("ALLOWED_ORIGINS") || "").split(",")) {
+    const v = item.trim().replace(/\/+$/, "")
+    if (v) allowed.add(v)
+  }
+  return {
+    "Access-Control-Allow-Origin": origin && allowed.has(origin) ? origin : DEFAULT_APP_ORIGIN,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  }
 }
 
 function normalizeUsername(input: string | null | undefined): string {
@@ -42,6 +55,7 @@ function isProtectedUsername(usernameOrEmail: string | null | undefined): boolea
 }
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -317,7 +331,7 @@ serve(async (req: Request) => {
       }
 
       // Execute DB atomic completion procedure
-      const { data: actRes, error: actErr } = await supabaseAdmin.rpc("complete_employee_activation", {
+      const { error: actErr } = await supabaseAdmin.rpc("complete_employee_activation", {
         p_auth_user_id: caller.id,
         p_chosen_username: cleanUsername,
       })
