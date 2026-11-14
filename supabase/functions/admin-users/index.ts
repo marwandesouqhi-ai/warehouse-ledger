@@ -124,6 +124,80 @@ async function logAdminSecurityEvent(
   }
 }
 
+function getRequestIp(req: Request): string {
+  return (
+    req.headers.get("cf-connecting-ip")?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  )
+}
+
+async function logAdminSecurityEvent(
+  supabaseAdmin: any,
+  req: Request,
+  params: {
+    caller?: { id?: string; email?: string; app_metadata?: Record<string, any> } | null
+    action: string
+    eventType: string
+    severity: "info" | "warning" | "critical"
+    entityType?: string
+    entityId?: string
+    tableName?: string
+    oldData?: Record<string, any> | null
+    newData?: Record<string, any> | null
+    details?: Record<string, any>
+  }
+): Promise<void> {
+  try {
+    const reqIp = getRequestIp(req)
+    const payload = {
+      user_id: params.caller?.id || null,
+      actor_id: params.caller?.id || null,
+      actor_role: (params.caller?.app_metadata?.role as string) || "anon",
+      user_email: params.caller?.email || "anonymous",
+      action: params.action,
+      event_type: params.eventType,
+      entity_type: params.entityType || "security_violation",
+      entity_id: params.entityId || params.caller?.id || "",
+      table_name: params.tableName || params.entityType || "edge_function:admin-users",
+      record_id: params.entityId || params.caller?.id || "",
+      old_data: params.oldData || null,
+      new_data: params.newData || null,
+      ip: reqIp,
+      ip_address: reqIp,
+      user_agent: req.headers.get("user-agent") || "",
+      severity: params.severity,
+      details: params.details || {},
+    }
+
+    // For 401/403 authorization denials, emit directly to PostgREST so rejected requests
+    // never invoke business/directory client abstractions and stay completely non-blocking.
+    if (params.eventType === "unauthorized_api_access") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      if (supabaseUrl && supabaseServiceKey && typeof fetch === "function") {
+        await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/audit_logs`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify(payload),
+          signal: typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(1500) : undefined,
+        }).catch(() => undefined)
+      }
+      return
+    }
+
+    await supabaseAdmin.from("audit_logs").insert(payload)
+  } catch {
+    // Non-blocking audit logging
+  }
+}
+
 function normalizeUsername(input: string | null | undefined): string {
   if (!input) return ""
   let normalized = String(input).trim().toLowerCase().normalize("NFKC")

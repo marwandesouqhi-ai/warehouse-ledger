@@ -57,7 +57,7 @@ import { deriveMovement, deriveSummary } from './lib/derive'
 import { fixtureMovements, type FixtureMovement } from './lib/fixture'
 import { movementFingerprint } from './lib/importRows'
 import { AccessibleDialog } from './components/AccessibleDialog'
-import { createWarehouseIssue, deleteMovement, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
+import { createWarehouseIssue, fetchMovements, saveMovements, updateMovement } from './lib/movementsRepository'
 import { summarizeQuality } from './lib/quality'
 import { loadAppSettings, saveAppSettingsToCloud, settingsStorageKey, logoBackupStorageKey, resolveSettingsWithCloud, fetchAppSettingsFromCloud, getSystemDisplayName, type AppSettings, type PersistenceOutcome } from './lib/settings'
 import { supabase } from './lib/supabase'
@@ -81,7 +81,6 @@ import {
   syncInwardMovementToCustody,
   syncOutwardMovementToCustody,
   reconcileMovementEdit,
-  reverseMovementCustody,
   fixtureCustodyItems,
   WAREHOUSES,
 } from './lib/custody'
@@ -1117,48 +1116,8 @@ function App() {
     })
   }
 
-  async function deleteExistingMovement(movement: FixtureMovement) {
-    if (!isSystemAdmin) {
-      throw new Error('حذف الحركات والبيانات في النظام مقتصر حصرياً على مدير النظام (System Admin).')
-    }
-
-    // عكس أثر الحركة على رصيد المخزن والعهدة قبل الحذف (Custody Reversal)
-    try {
-      const nextCustody = reverseMovementCustody(movement)
-      setCustodyItems(nextCustody)
-    } catch (custodyErr) {
-      console.warn('Custody reversal warning on delete:', custodyErr)
-    }
-
-    if (supabase && session) {
-      try {
-        await deleteMovement(movement.id, session.user.id, movement)
-        setMovements((current) => current.filter((m) => m.id !== movement.id))
-        setSyncStatus('synced')
-      } catch (error) {
-        setSyncStatus('error')
-        setSyncError(error instanceof Error ? error.message : 'تعذر حذف الحركة من الخادم.')
-        throw error
-      }
-    } else {
-      setMovements((current) => current.filter((m) => m.id !== movement.id))
-    }
-    void logAuditEvent({
-      action: `حذف حركة: ${movement.item}`,
-      entity_type: 'movement',
-      details: {
-        id: movement.id,
-        item: movement.item,
-        price: movement.price,
-        qty_in: movement.qin,
-        qty_out: movement.qout,
-        supplier: movement.from,
-        recipient: movement.to,
-        inv: movement.inv,
-        date: movement.date,
-      },
-      user: session?.user,
-    })
+  async function deleteExistingMovement(_movement: FixtureMovement) {
+    throw new Error('سجل العمليات وحركات المخزون محفوظ بشكل دائم وغير قابل للحذف نهائياً لضمان النزاهة والامتثال المحاسبي.')
   }
 
   async function mergeImportedMovements(imported: FixtureMovement[]) {
@@ -2217,21 +2176,11 @@ function App() {
                                             type="button"
                                             className="table-action-btn edit-action-btn"
                                             onClick={() => setEditingMovement(movement)}
-                                            title="تعديل الحركة"
+                                            title="تعديل تفاصيل الحركة"
                                             aria-label={`تعديل حركة ${movement.item}`}
                                           >
                                             <Pencil size={14} />
                                             <span>تعديل</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="table-action-btn delete-action-btn"
-                                            onClick={() => setDeletingMovement(movement)}
-                                            title="حذف الحركة"
-                                            aria-label={`حذف حركة ${movement.item}`}
-                                          >
-                                            <Trash2 size={14} />
-                                            <span>حذف</span>
                                           </button>
                                         </div>
                                       ) : (
@@ -2716,21 +2665,11 @@ function App() {
                                               type="button"
                                               className="table-action-btn edit-action-btn"
                                               onClick={() => setEditingMovement(movement)}
-                                              title="تعديل الحركة"
+                                              title="تعديل تفاصيل الحركة"
                                               aria-label={`تعديل حركة ${movement.item}`}
                                             >
                                               <Pencil size={14} />
                                               <span>تعديل</span>
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="table-action-btn delete-action-btn"
-                                              onClick={() => setDeletingMovement(movement)}
-                                              title="حذف الحركة"
-                                              aria-label={`حذف حركة ${movement.item}`}
-                                            >
-                                              <Trash2 size={14} />
-                                              <span>حذف</span>
                                             </button>
                                           </div>
                                         ) : (
