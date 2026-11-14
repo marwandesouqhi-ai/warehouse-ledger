@@ -319,7 +319,7 @@ export async function updateSupplier(id: string, updates: UpdateSupplierInput): 
         if (!checkErr && existing) {
           throw new Error(`يوجد مورد آخر مسجل بالفعل بنفس الاسم «${existing.name}».`)
         }
-      } catch (err) {
+      } catch {
         // ignore
       }
     }

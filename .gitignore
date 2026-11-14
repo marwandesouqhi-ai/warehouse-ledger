@@ -31,3 +31,5 @@ supabase/.temp/
 scratch/
 data/
 reports/screenshots/
+*-DESKTOP-*
+*-pablo.*
