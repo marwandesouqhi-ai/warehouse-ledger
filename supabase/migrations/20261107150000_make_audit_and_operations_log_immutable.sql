@@ -6,8 +6,6 @@
 -- 2. public.asset_movement_log: Immutable asset history; disallow DELETE.
 -- NOTE: audit_logs tamper protection (with the retention-purge exception) is
 -- defined in the security monitoring migrations; do not redefine it here.
--- 2. public.movements: Immutable ledger; disallow DELETE.
--- 3. public.asset_movement_log: Immutable asset history; disallow DELETE.
 -- ==============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
