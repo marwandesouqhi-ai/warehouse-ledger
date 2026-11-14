@@ -1,32 +1,12 @@
 -- ==============================================================================
 -- Migration: 20261107150000_make_audit_and_operations_log_immutable.sql
 -- Description:
--- Permanently preserve operations and audit logs with anti-tamper triggers:
--- 1. public.audit_logs: Strict append-only; disallow any UPDATE or DELETE.
--- 2. public.movements: Immutable ledger; disallow DELETE.
--- 3. public.asset_movement_log: Immutable asset history; disallow DELETE.
+-- Permanently preserve operations logs with anti-tamper protection:
+-- 1. public.movements: Immutable ledger; disallow DELETE.
+-- 2. public.asset_movement_log: Immutable asset history; disallow DELETE.
+-- NOTE: audit_logs tamper protection (with the retention-purge exception) is
+-- defined in the security monitoring migrations; do not redefine it here.
 -- ==============================================================================
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 1. Anti-Tamper Protection for Audit Logs (public.audit_logs)
--- ─────────────────────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION public.prevent_audit_log_tamper()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SET search_path = public, pg_temp
-AS $$
-BEGIN
-  RAISE EXCEPTION 'سجل التدقيق والمراقبة (audit_logs) محفوظ بشكل دائم وغير قابل للتعديل أو الحذف نهائياً لضمان النزاهة الرقابية والأمنية.'
-    USING ERRCODE = '55000';
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_prevent_audit_log_tamper ON public.audit_logs;
-CREATE TRIGGER trg_prevent_audit_log_tamper
-  BEFORE UPDATE OR DELETE ON public.audit_logs
-  FOR EACH ROW EXECUTE FUNCTION public.prevent_audit_log_tamper();
-
-REVOKE UPDATE, DELETE ON public.audit_logs FROM PUBLIC, anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Immutable Ledger Protection for Movements (public.movements)

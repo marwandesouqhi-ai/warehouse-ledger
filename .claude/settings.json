@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(node_modules/**)",
+      "Read(package-lock.json)",
+      "Read(yarn.lock)",
+      "Read(pnpm-lock.yaml)",
+      "Read(.next/**)",
+      "Read(dist/**)",
+      "Read(build/**)"
+    ]
+  }
+}

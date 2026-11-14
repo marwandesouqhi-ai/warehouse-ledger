@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import {
@@ -39,7 +39,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
     const [dateFrom, setDateFrom] = useState('')
     const [dateTo, setDateTo] = useState('')
 
-    async function loadLogs() {
+    const loadLogs = useCallback(async () => {
         if (!isSystemAdmin) return
         setLoading(true)
         setError('')
@@ -51,7 +51,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [isSystemAdmin])
 
     useEffect(() => {
         if (!isSystemAdmin) return
@@ -88,7 +88,7 @@ export default function AuditLogPage({ session }: AuditLogPageProps) {
                 supabase.removeChannel(channel)
             }
         }
-    }, [isSystemAdmin])
+    }, [isSystemAdmin, loadLogs])
 
     const distinctUsers = Array.from(
         new Set(

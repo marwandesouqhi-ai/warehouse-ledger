@@ -10,7 +10,7 @@ let migrationSql = `-- Migration: Engineering Workshops Custody Import (81 items
 --   1. Add import_batch_id column to public.custody_items for idempotent re-runs
 --   2. Add unique constraint on (warehouse_id, code)
 --   3. Create atomic import_custody_batch RPC function
---   4. Grant table & RPC privileges to anon and authenticated roles
+--   4. Restrict table & RPC privileges to authenticated and service_role (never anon)
 --   5. Seed all 81 verified items for 'engineering_workshops' with zero rows skipped and exact 0 prices for missing unit prices
 
 -- 1. Ensure import_batch_id column exists
@@ -22,8 +22,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS custody_items_wh_code_unique
   ON public.custody_items (warehouse_id, code)
   WHERE code IS NOT NULL AND code <> '';
 
--- 3. Grant privileges so anon and authenticated users can access custody items
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.custody_items TO anon, authenticated;
+-- 3. Revoke anonymous access and grant minimum privileges to authenticated role (enforced via RLS)
+REVOKE ALL ON public.custody_items FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.custody_items TO authenticated;
 
 -- 4. Batch Import RPC Function supporting dryRun and force
 CREATE OR REPLACE FUNCTION public.import_custody_batch(
@@ -44,6 +45,10 @@ DECLARE
   v_exists BOOLEAN := FALSE;
   v_inserted INT := 0;
 BEGIN
+  IF auth.role() <> 'service_role' AND NOT public.app_can_modify_records() THEN
+    RAISE EXCEPTION 'System administrator required' USING ERRCODE = '42501';
+  END IF;
+
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN
     RAISE EXCEPTION 'p_items must be a JSON array';
   END IF;
@@ -155,7 +160,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.import_custody_batch TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.import_custody_batch(TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.import_custody_batch(TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN) TO authenticated, service_role;
 
 -- 5. Seed all 81 Engineering Workshop items
 `;

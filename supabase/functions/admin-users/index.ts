@@ -2,9 +2,126 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import nodemailer from "npm:nodemailer"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
+
+function getAllowedOrigins(): string[] {
+  const origins = new Set<string>([DEFAULT_APP_ORIGIN])
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim()
+  if (envUrl && envUrl.startsWith("https://")) {
+    origins.add(envUrl.replace(/\/+$/, ""))
+  }
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "").split(",")
+  for (const item of extra) {
+    const clean = item.trim().replace(/\/+$/, "")
+    if (clean) origins.add(clean)
+  }
+  return Array.from(origins)
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = getAllowedOrigins()
+  const allowOrigin = origin && allowed.includes(origin) ? origin : allowed[0]
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  }
+}
+
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function isSafeFilterIdentifier(value: string): boolean {
+  if (!value || value.length > 254) return false
+  // Disallow PostgREST .or() operators & wildcard/delimiter characters
+  return !/[(),*%\\'";\s]/.test(value)
+}
+
+function getRequestIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || ""
+  const parts = xff.split(",").map((p) => p.trim()).filter(Boolean)
+  if (parts.length > 0) {
+    // Prefer the rightmost proxy-appended client hop when present
+    return parts[parts.length - 1]
+  }
+  return (
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("cf-connecting-ip")?.trim() ||
+    "unknown"
+  )
+}
+
+async function logAdminSecurityEvent(
+  supabaseAdmin: any,
+  req: Request,
+  params: {
+    caller?: { id?: string; email?: string; app_metadata?: Record<string, any> } | null
+    action: string
+    eventType: string
+    severity: "info" | "warning" | "critical"
+    entityType?: string
+    entityId?: string
+    tableName?: string
+    oldData?: Record<string, any> | null
+    newData?: Record<string, any> | null
+    details?: Record<string, any>
+  }
+): Promise<void> {
+  try {
+    const reqIp = getRequestIp(req)
+    const payload = {
+      user_id: params.caller?.id || null,
+      actor_id: params.caller?.id || null,
+      actor_role: (params.caller?.app_metadata?.role as string) || "anon",
+      user_email: params.caller?.email || "anonymous",
+      action: params.action,
+      event_type: params.eventType,
+      entity_type: params.entityType || "security_violation",
+      entity_id: params.entityId || params.caller?.id || "",
+      table_name: params.tableName || params.entityType || "edge_function:admin-users",
+      record_id: params.entityId || params.caller?.id || "",
+      old_data: params.oldData || null,
+      new_data: params.newData || null,
+      ip: reqIp,
+      ip_address: reqIp,
+      user_agent: req.headers.get("user-agent") || "",
+      severity: params.severity,
+      details: params.details || {},
+    }
+
+    // For 401/403 authorization denials, emit directly to PostgREST so rejected requests
+    // never invoke business/directory client abstractions and stay completely non-blocking.
+    if (params.eventType === "unauthorized_api_access") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      if (supabaseUrl && supabaseServiceKey && typeof fetch === "function") {
+        await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/audit_logs`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify(payload),
+          signal: typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(1500) : undefined,
+        }).catch(() => undefined)
+      }
+      return
+    }
+
+    await supabaseAdmin.from("audit_logs").insert(payload)
+  } catch {
+    // Non-blocking audit logging
+  }
 }
 
 function getRequestIp(req: Request): string {
@@ -97,17 +214,23 @@ function normalizeUsername(input: string | null | undefined): string {
 function isProtectedUsername(usernameOrEmail: string | null | undefined): boolean {
   if (!usernameOrEmail) return false
   const clean = normalizeUsername(usernameOrEmail)
+  const bootstrapEmail = (Deno.env.get("BOOTSTRAP_ADMIN_EMAIL") || "").trim()
+  const bootstrapUsername = (Deno.env.get("BOOTSTRAP_ADMIN_USERNAME") || "").trim()
   const reserved = [
     "marwan-desouky",
     "marwan-desouky@warehouse.local",
     "marwandesouqhi@gmail.com",
+    ...(bootstrapEmail ? [bootstrapEmail] : []),
+    ...(bootstrapUsername ? [bootstrapUsername] : []),
   ]
   for (const r of reserved) {
     if (clean === normalizeUsername(r)) return true
   }
   if (clean.endsWith("@warehouse.local")) {
     const prefix = clean.replace(/@warehouse\.local$/, "")
-    if (prefix === "marwan-desouky") return true
+    if (prefix === "marwan-desouky" || (bootstrapUsername && prefix === normalizeUsername(bootstrapUsername))) {
+      return true
+    }
   }
   return false
 }
@@ -178,15 +301,16 @@ async function ensureAuthUserForRecovery(supabaseAdmin: any, appUser: Record<str
 }
 
 function resolveAppBaseUrl(req: Request): string {
-  const envUrl = Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL")
-  if (envUrl && envUrl.trim()) {
-    return envUrl.trim().replace(/\/+$/, "")
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim()
+  if (envUrl && envUrl.startsWith("https://")) {
+    return envUrl.replace(/\/+$/, "")
   }
-  const origin = req.headers.get("origin") || ""
-  if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
-    return origin.replace(/\/+$/, "")
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = getAllowedOrigins()
+  if (origin && allowed.includes(origin)) {
+    return origin
   }
-  return "https://warehouse-ledger-vert.vercel.app"
+  return DEFAULT_APP_ORIGIN
 }
 
 async function sendActivationInviteEmail(options: {
@@ -220,6 +344,14 @@ async function sendActivationInviteEmail(options: {
   const displayRole = roleNameMap[role] || role
   const displayDept = department === "warehouse" ? "إدارة المخازن" : department === "procurement" ? "إدارة المشتريات" : department
 
+  const safeFullName = escapeHtml(fullName)
+  const safeEmployeeId = escapeHtml(employeeId)
+  const safeDept = escapeHtml(displayDept)
+  const safeRole = escapeHtml(displayRole)
+  const safeActionHref = actionLink.startsWith("https://") || actionLink.startsWith("http://localhost")
+    ? escapeHtml(actionLink)
+    : ""
+
   const emailSubject = `دعوة تفعيل حسابك في نظام المستودع - الرقم الوظيفي (${employeeId})`
 
   // Plain text fallback ensures anti-spam filters score the email favorably
@@ -246,7 +378,7 @@ ${actionLink}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${emailSubject}</title>
+  <title>${escapeHtml(emailSubject)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; direction: rtl; }
     .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
@@ -268,7 +400,7 @@ ${actionLink}
       <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; color: #f0fdfa;">Warehouse Ledger System</p>
     </div>
     <div class="content" style="padding: 30px 24px;">
-      <div class="welcome" style="font-size: 17px; font-weight: 600; margin-bottom: 16px; color: #0f172a;">مرحباً بك يا ${fullName}،</div>
+      <div class="welcome" style="font-size: 17px; font-weight: 600; margin-bottom: 16px; color: #0f172a;">مرحباً بك يا ${safeFullName}،</div>
       <p style="line-height: 1.6; color: #334155; font-size: 15px; margin: 0 0 16px 0;">
         يسعدنا إبلاغك بأنه تمت الموافقة على طلب انضمامك إلى المنظومة وتخصيص رقمك الوظيفي الرسمي.
       </p>
@@ -277,19 +409,19 @@ ${actionLink}
         <table border="0" cellpadding="6" cellspacing="0" width="100%" style="font-size: 15px; direction: rtl;">
           <tr style="border-bottom: 1px dashed #cbd5e1;">
             <td style="color: #64748b; font-weight: 500; width: 40%;">الاسم:</td>
-            <td style="color: #0f172a; font-weight: 700; text-align: left;">${fullName}</td>
+            <td style="color: #0f172a; font-weight: 700; text-align: left;">${safeFullName}</td>
           </tr>
           <tr style="border-bottom: 1px dashed #cbd5e1;">
             <td style="color: #64748b; font-weight: 500;">الرقم الوظيفي الفريد:</td>
-            <td style="color: #0d9488; font-weight: 700; text-align: left;">${employeeId}</td>
+            <td style="color: #0d9488; font-weight: 700; text-align: left;">${safeEmployeeId}</td>
           </tr>
           <tr style="border-bottom: 1px dashed #cbd5e1;">
             <td style="color: #64748b; font-weight: 500;">القسم:</td>
-            <td style="color: #0f172a; font-weight: 700; text-align: left;">${displayDept}</td>
+            <td style="color: #0f172a; font-weight: 700; text-align: left;">${safeDept}</td>
           </tr>
           <tr>
             <td style="color: #64748b; font-weight: 500;">الدور الوظيفي:</td>
-            <td style="color: #0f172a; font-weight: 700; text-align: left;">${displayRole}</td>
+            <td style="color: #0f172a; font-weight: 700; text-align: left;">${safeRole}</td>
           </tr>
         </table>
       </div>
@@ -302,7 +434,7 @@ ${actionLink}
         <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto; text-align: center;">
           <tr>
             <td align="center" bgcolor="#0d9488" style="border-radius: 8px; background-color: #0d9488;">
-              <a href="${actionLink}" target="_blank" style="display: inline-block; padding: 14px 34px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 16px; font-weight: 700; color: #ffffff !important; text-decoration: none; border-radius: 8px; background-color: #0d9488; -webkit-text-size-adjust: none;">تفعيل الحساب وتعيين كلمة المرور</a>
+              <a href="${safeActionHref}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 14px 34px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 16px; font-weight: 700; color: #ffffff !important; text-decoration: none; border-radius: 8px; background-color: #0d9488; -webkit-text-size-adjust: none;">تفعيل الحساب وتعيين كلمة المرور</a>
             </td>
           </tr>
         </table>
@@ -310,7 +442,7 @@ ${actionLink}
 
       <div style="margin-top: 15px; margin-bottom: 25px; text-align: center; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
         إذا واجهتك مشكلة في الضغط على الزر أعلاه، يمكنك نسخ الرابط التالي ولصقه في المتصفح:<br>
-        <a href="${actionLink}" target="_blank" style="color: #0d9488; text-decoration: underline; font-weight: 500;">${actionLink}</a>
+        <a href="${safeActionHref}" target="_blank" rel="noopener noreferrer" style="color: #0d9488; text-decoration: underline; font-weight: 500;">${safeActionHref}</a>
       </div>
 
       <p class="note" style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
@@ -369,10 +501,9 @@ async function sendActivationInviteTelegram(options: {
   employeeId: string
   role: string
   department: string
-  actionLink: string
 }): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
   try {
-    const { telegramUserId, email, fullName, employeeId, role, department, actionLink } = options
+    const { telegramUserId, email, fullName, employeeId, role, department } = options
 
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")?.trim()
     if (!botToken || !telegramUserId) {
@@ -395,23 +526,17 @@ async function sendActivationInviteTelegram(options: {
     const safeDept = escapeTelegramHtml(displayDept)
     const safeEmail = escapeTelegramHtml(email)
 
-    const isHttps = typeof actionLink === "string" && actionLink.startsWith("https://")
-
-    let messageText = `تهانينا يا <b>${safeName}</b>! 🎉\n\n` +
+    const messageText = `تهانينا يا <b>${safeName}</b>! 🎉\n\n` +
       `تمت الموافقة على طلب انضمامك إلى منظومة إدارة المخازن والمشتريات وتخصيص رقمك الوظيفي الرسمي.\n\n` +
       `📋 <b>البيانات الوظيفية:</b>\n` +
       `• الاسم: ${safeName}\n` +
       `• الرقم الوظيفي: <b>${safeEmpId}</b>\n` +
       `• القسم: ${safeDept}\n` +
       `• الدور الوظيفي: ${safeRole}\n\n` +
-      `يرجى الضغط على زر «تفعيل الحساب» أدناه لتفعيل حسابك وتعيين اسم المستخدم وكلمة المرور الخاصة بك.\n\n` +
-      `⚠️ <b>ملاحظة أمنية هامة:</b>\n` +
-      `هذا الرابط شخصي وخاص بك ومخصص للاستخدام لمرة واحدة فقط ومحدد الصلاحية زمنياً، ويُحظر تماماً مشاركته مع أي شخص آخر.\n\n` +
-      `📧 <b>تنويه:</b> تم إرسال نفس دعوة التفعيل أيضاً إلى بريدك الإلكتروني (${safeEmail}).`
-
-    if (!isHttps) {
-      messageText += `\n\n🔗 <b>رابط التفعيل:</b>\n${escapeTelegramHtml(actionLink)}`
-    }
+      `📧 <b>خطوة التفعيل:</b>\n` +
+      `تم إرسال رابط التفعيل السري والمخصص للاستخدام لمرة واحدة إلى بريدك الإلكتروني الموثق فقط (${safeEmail}).\n` +
+      `يُرجى فحص صندوق الوارد (أو الرسائل غير المرغوب فيها) لاستكمال تعيين اسم المستخدم وكلمة المرور.\n\n` +
+      `⚠️ <b>ملاحظة أمنية:</b> لأمان حسابك، لا تُرسل روابط التفعيل داخل محادثات تيليجرام.`
 
     const payload: Record<string, unknown> = {
       chat_id: telegramUserId,
@@ -419,19 +544,6 @@ async function sendActivationInviteTelegram(options: {
       parse_mode: "HTML",
       protect_content: true,
       link_preview_options: { is_disabled: true },
-    }
-
-    if (isHttps) {
-      payload.reply_markup = {
-        inline_keyboard: [
-          [
-            {
-              text: "تفعيل الحساب",
-              url: actionLink,
-            },
-          ],
-        ],
-      }
     }
 
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -456,6 +568,7 @@ async function sendActivationInviteTelegram(options: {
 }
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -504,8 +617,16 @@ serve(async (req: Request) => {
 
     // ─── ACTION: bootstrap_system_admin (One-Time Verified Bootstrap) ─────────
     if (action === "bootstrap_system_admin") {
-      const expectedEmail = (Deno.env.get("BOOTSTRAP_ADMIN_EMAIL") || "marwandesouqhi@gmail.com").trim().toLowerCase()
+      const expectedEmail = (Deno.env.get("BOOTSTRAP_ADMIN_EMAIL") || "").trim().toLowerCase()
       const expectedUsername = (Deno.env.get("BOOTSTRAP_ADMIN_USERNAME") || "marwan-desouky").trim()
+      if (!expectedEmail) {
+        return new Response(JSON.stringify({
+          error: "لم يتم إعداد BOOTSTRAP_ADMIN_EMAIL في أسرار الخادم.",
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
 
       // 1. Authoritatively fetch caller from Auth admin API (never trust request body)
       const { data: authUserData, error: authUserErr } = await supabaseAdmin.auth.admin.getUserById(caller.id)
@@ -581,42 +702,91 @@ serve(async (req: Request) => {
         })
       }
 
+      const cleanIdent = rawIdentifier.toLowerCase()
+      if (!isSafeFilterIdentifier(cleanIdent)) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: "إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      // Per-IP & per-identifier rate limiting via telegram_rate_events
+      try {
+        const clientIp = getRequestIp(req)
+        const windowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        const [{ count: ipCount }, { count: identCount }] = await Promise.all([
+          supabaseAdmin
+            .from("telegram_rate_events")
+            .select("*", { count: "exact", head: true })
+            .eq("event_type", "recovery_ip")
+            .eq("identifier", clientIp)
+            .gte("created_at", windowStart),
+          supabaseAdmin
+            .from("telegram_rate_events")
+            .select("*", { count: "exact", head: true })
+            .eq("event_type", "recovery_ident")
+            .eq("identifier", cleanIdent)
+            .gte("created_at", windowStart),
+        ])
+
+        if ((ipCount ?? 0) >= 8 || (identCount ?? 0) >= 3) {
+          return new Response(JSON.stringify({
+            success: true,
+            message: "إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+
+        await supabaseAdmin.from("telegram_rate_events").insert([
+          { event_type: "recovery_ip", identifier: clientIp },
+          { event_type: "recovery_ident", identifier: cleanIdent },
+        ])
+      } catch {
+        // Continue safely if rate-limit table unavailable
+      }
+
       let targetEmail = ""
       let targetFullName = ""
       let matchedKnownUser = false
-      const cleanIdent = rawIdentifier.toLowerCase()
+      let dbUser: Record<string, any> | null = null
 
       if (cleanIdent.includes("@")) {
-        targetEmail = cleanIdent
-      }
-
-      // Lookup user in app_users
-      const { data: dbUser } = await supabaseAdmin
-        .from("app_users")
-        .select("display_name, email, employee_id, username, status")
-        .or(`email.ilike.${cleanIdent},username.ilike.${cleanIdent},employee_id.ilike.${cleanIdent}`)
-        .maybeSingle()
-
-      if (dbUser?.email) {
-        targetEmail = dbUser.email.trim().toLowerCase()
-        targetFullName = dbUser.display_name || dbUser.username
-        matchedKnownUser = true
-      } else if (!targetEmail) {
-        // Also check registration_requests
-        const { data: regUser } = await supabaseAdmin
-          .from("registration_requests")
-          .select("full_name, email, employee_id")
-          .or(`email.ilike.${cleanIdent},employee_id.ilike.${cleanIdent}`)
+        const { data } = await supabaseAdmin
+          .from("app_users")
+          .select("id, auth_user_id, display_name, email, employee_id, username, role, department, status")
+          .ilike("email", cleanIdent)
           .maybeSingle()
-        if (regUser?.email) {
-          targetEmail = regUser.email.trim().toLowerCase()
-          targetFullName = regUser.full_name
-          matchedKnownUser = true
+        dbUser = data
+      } else {
+        const { data: byUsername } = await supabaseAdmin
+          .from("app_users")
+          .select("id, auth_user_id, display_name, email, employee_id, username, role, department, status")
+          .ilike("username", cleanIdent)
+          .maybeSingle()
+        dbUser = byUsername
+        if (!dbUser) {
+          const { data: byEmpId } = await supabaseAdmin
+            .from("app_users")
+            .select("id, auth_user_id, display_name, email, employee_id, username, role, department, status")
+            .ilike("employee_id", cleanIdent)
+            .maybeSingle()
+          dbUser = byEmpId
         }
       }
 
+      if (dbUser?.email && dbUser.status === "active") {
+        targetEmail = dbUser.email.trim().toLowerCase()
+        targetFullName = dbUser.display_name || dbUser.username
+        matchedKnownUser = true
+      }
+
       if (!matchedKnownUser) {
-        // For security, do not expose whether user exists or not, but return friendly message
+        // For security, do not expose whether user exists or not, return uniform generic response
         return new Response(JSON.stringify({
           success: true,
           message: "إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
@@ -648,7 +818,7 @@ serve(async (req: Request) => {
         linkErr = generateError
       }
 
-      if ((!recoveryLink || linkErr) && dbUser?.email) {
+      if ((!recoveryLink || linkErr) && dbUser?.email && dbUser.status === "active") {
         const msg = linkErr instanceof Error ? linkErr.message : String(linkErr || "")
         if (msg.toLowerCase().includes("user with this email not found") || msg.toLowerCase().includes("email not found")) {
           const repairedUser = await ensureAuthUserForRecovery(supabaseAdmin, dbUser)
@@ -672,10 +842,12 @@ serve(async (req: Request) => {
       }
 
       if (!recoveryLink || linkErr) {
+        console.warn("send_password_recovery link generation failed:", linkErr?.message || linkErr)
         return new Response(JSON.stringify({
-          error: `تعذر إنشاء رابط تعيين كلمة المرور: ${linkErr?.message || linkErr || "خطأ غير معروف"}`,
+          success: true,
+          message: "إذا كان الحساب مسجلاً في المنظومة، فقد تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
         }), {
-          status: 400,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
@@ -712,13 +884,18 @@ ${recoveryLink}
 
 جامعة الزقازيق الأهلية — الإدارة العامة للمخازن والمشتريات © 2026`
 
+      const safeTargetName = escapeHtml(targetFullName || "بك")
+      const safeRecoveryHref = recoveryLink.startsWith("https://") || recoveryLink.startsWith("http://localhost")
+        ? escapeHtml(recoveryLink)
+        : ""
+
       const emailHtml = `
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${emailSubject}</title>
+  <title>${escapeHtml(emailSubject)}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; direction: rtl;">
   <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
@@ -727,17 +904,17 @@ ${recoveryLink}
       <p style="margin: 8px 0 0 0; opacity: 0.95; font-size: 15px; color: #f0fdfa;">منظومة إدارة المخازن والمشتريات — استعادة كلمة المرور</p>
     </div>
     <div style="padding: 30px 24px;">
-      <div style="font-size: 17px; font-weight: 600; margin-bottom: 16px; color: #0f172a;">مرحباً ${targetFullName || "بك"}،</div>
+      <div style="font-size: 17px; font-weight: 600; margin-bottom: 16px; color: #0f172a;">مرحباً ${safeTargetName}،</div>
       <p style="line-height: 1.6; color: #334155; font-size: 15px; margin: 0 0 16px 0;">
         تلقينا طلباً لإعادة تعيين كلمة المرور لحسابك في المنظومة. يُرجى الضغط على الزر أدناه لاختيار كلمة مرور جديدة:
       </p>
 
       <div style="text-align: center; margin: 30px 0 25px 0;">
-        <a href="${recoveryLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #0d9488; color: #ffffff !important; padding: 14px 34px; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3); text-align: center;">إعادة تعيين كلمة المرور الآن</a>
+        <a href="${safeRecoveryHref}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #0d9488; color: #ffffff !important; padding: 14px 34px; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3); text-align: center;">إعادة تعيين كلمة المرور الآن</a>
       </div>
 
       <div style="margin-top: 15px; margin-bottom: 25px; text-align: center; font-size: 13px; color: #64748b; line-height: 1.6;">
-        إذا واجهتك مشكلة في الضغط على الزر أعلاه، يُرجى <a href="${recoveryLink}" target="_blank" rel="noopener noreferrer" style="color: #0d9488; font-weight: 600; text-decoration: underline;">الضغط هنا لفتح صفحة تعيين كلمة المرور مباشرة</a>.
+        إذا واجهتك مشكلة في الضغط على الزر أعلاه، يُرجى <a href="${safeRecoveryHref}" target="_blank" rel="noopener noreferrer" style="color: #0d9488; font-weight: 600; text-decoration: underline;">الضغط هنا لفتح صفحة تعيين كلمة المرور مباشرة</a>.
       </div>
 
       <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
@@ -952,10 +1129,8 @@ ${recoveryLink}
 
       // Generate strong temporary password if not provided
       let effectivePassword = password
-      let isGeneratedPassword = false
       if (!effectivePassword || typeof effectivePassword !== "string" || effectivePassword.trim().length === 0) {
         effectivePassword = generateSecureTempPassword()
-        isGeneratedPassword = true
       } else if (effectivePassword.length < 6) {
         return new Response(JSON.stringify({ error: "كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام." }), {
           status: 400,
@@ -1019,7 +1194,8 @@ ${recoveryLink}
       })
 
       if (createError) {
-        return new Response(JSON.stringify({ error: createError.message }), {
+        console.error("admin createUser error:", createError.message)
+        return new Response(JSON.stringify({ error: "تعذر إنشاء حساب المستخدم." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
@@ -1380,36 +1556,47 @@ ${recoveryLink}
         }
       }
 
-      // 2. If not found yet, search in app_users
-      const query = supabaseAdmin.from("app_users").select("*")
-      if (isUuid) {
-        query.or(`id.eq.${userId},auth_user_id.eq.${userId}${targetUsername ? `,username.ilike.${targetUsername}` : ""}`)
-      } else if (targetUsername) {
-        query.ilike("username", targetUsername)
-      } else if (userId) {
-        query.eq("id", userId)
+      // 2. If not found yet, search in app_users using parameterized exact queries
+      let mirror: Record<string, any> | null = null
+      if (userId) {
+        const { data: byId } = await supabaseAdmin.from("app_users").select("*").eq("id", userId).maybeSingle()
+        mirror = byId
+        if (!mirror && isUuid) {
+          const { data: byAuth } = await supabaseAdmin.from("app_users").select("*").eq("auth_user_id", userId).maybeSingle()
+          mirror = byAuth
+        }
       }
-      const { data: mirrorRows } = await query
-      const mirror = mirrorRows && mirrorRows.length > 0 ? mirrorRows[0] : null
+      if (!mirror && targetUsername && isSafeFilterIdentifier(targetUsername)) {
+        const { data: byUser } = await supabaseAdmin.from("app_users").select("*").ilike("username", targetUsername).maybeSingle()
+        mirror = byUser
+      }
       if (mirror) {
         if (!targetUsername) targetUsername = mirror.username
         if (!targetAuthId && mirror.auth_user_id) targetAuthId = mirror.auth_user_id
         if (!targetEmail && mirror.email) targetEmail = mirror.email.toLowerCase()
       }
 
-      // 3. Search auth.users by synthetic email if targetAuthId is still not resolved
+      // 3. Search auth.users by paginated listUsers if targetAuthId is still not resolved
       if (!targetAuthId && targetUsername) {
         const syntheticEmail = `${targetUsername}@warehouse.local`.toLowerCase()
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-        const matched = listData?.users?.find(
-          (u) =>
-            u.email?.toLowerCase() === syntheticEmail ||
-            (targetEmail && u.email?.toLowerCase() === targetEmail) ||
-            normalizeUsername(u.app_metadata?.username as string) === targetUsername
-        )
-        if (matched) {
-          targetAuthId = matched.id
-          if (!targetEmail && matched.email) targetEmail = matched.email.toLowerCase()
+        let page = 1
+        const perPage = 200
+        while (page <= 20 && !targetAuthId) {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+          const users = listData?.users || []
+          const matched = users.find(
+            (u) =>
+              u.email?.toLowerCase() === syntheticEmail ||
+              (targetEmail && u.email?.toLowerCase() === targetEmail) ||
+              normalizeUsername(u.app_metadata?.username as string) === targetUsername
+          )
+          if (matched) {
+            targetAuthId = matched.id
+            if (!targetEmail && matched.email) targetEmail = matched.email.toLowerCase()
+            break
+          }
+          if (users.length < perPage) break
+          page += 1
         }
       }
 
@@ -2007,9 +2194,9 @@ ${recoveryLink}
       const appBaseUrl = resolveAppBaseUrl(req)
 
       const targetEmail = regReq.email.trim().toLowerCase()
-      // Generate invitation link (Custom SMTP delivery instead of default inviteUserByEmail)
-      let actionLink = `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`
-      let targetAuthUser = null
+      // Generate invitation link ONLY (fail closed if email belongs to an existing Auth user to prevent recovery/magiclink takeover)
+      let actionLink = ""
+      let targetAuthUser: any = null
 
       try {
         const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -2024,53 +2211,24 @@ ${recoveryLink}
             },
           },
         })
-        if (!linkErr && linkData?.properties?.action_link) {
+        if (!linkErr && linkData?.properties?.action_link && linkData.properties.action_link.includes("verify?token=")) {
           actionLink = linkData.properties.action_link
           targetAuthUser = linkData.user
         }
       } catch (err) {
-        console.warn("generateLink error:", err)
+        console.warn("generateLink invite error:", err)
       }
 
-      // If invite link couldn't be generated (e.g. user already exists in auth), generate recovery link!
-      if (!actionLink.includes("verify?token=")) {
-        try {
-          const { data: recData } = await supabaseAdmin.auth.admin.generateLink({
-            type: "recovery",
-            email: targetEmail,
-            options: {
-              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
-            },
-          })
-          if (recData?.properties?.action_link) {
-            actionLink = recData.properties.action_link
-            targetAuthUser = recData.user
-          }
-        } catch {
-          // ignore
-        }
+      if (!actionLink || !targetAuthUser) {
+        return new Response(JSON.stringify({
+          error: "تعذر توليد رابط دعوة تفعيل آمن لهذا البريد الإلكتروني (قد يكون البريد مسجلاً مسبقاً في نظام المصادقة).",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
       }
 
-      // Fallback to magiclink if needed
-      if (!actionLink.includes("verify?token=")) {
-        try {
-          const { data: magicData } = await supabaseAdmin.auth.admin.generateLink({
-            type: "magiclink",
-            email: targetEmail,
-            options: {
-              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
-            },
-          })
-          if (magicData?.properties?.action_link) {
-            actionLink = magicData.properties.action_link
-            targetAuthUser = magicData.user
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // Dispatch direct invitation email via Google SMTP (Nodemailer)
+      // Dispatch direct invitation email via Google SMTP (Nodemailer) ONLY (never expose activation token in Telegram)
       const mailRes = await sendActivationInviteEmail({
         toEmail: regReq.email,
         fullName: regReq.full_name,
@@ -2099,7 +2257,7 @@ ${recoveryLink}
         })
 
         return new Response(JSON.stringify({
-          error: `تم اعتماد الطلب وتخصيص الرقم الوظيفي (${allocatedEmployeeId})، ولكن تعذر إرسال رسالة الدعوة عبر مزود البريد (Google SMTP): ${mailRes.error}. يُرجى التحقق من إعدادات البريد وإعادة المحاولة.`,
+          error: `تم اعتماد الطلب وتخصيص الرقم الوظيفي (${allocatedEmployeeId})، ولكن تعذر إرسال رسالة الدعوة عبر مزود البريد. يُرجى التحقق من إعدادات البريد وإعادة المحاولة.`,
           employeeId: allocatedEmployeeId,
           recoverable: true,
         }), {
@@ -2141,7 +2299,7 @@ ${recoveryLink}
         })
         .eq("id", requestId)
 
-      // Deliver activation invitation via Telegram
+      // Deliver status notification via Telegram (never transmit secret activation links over Telegram)
       const tgRes = await sendActivationInviteTelegram({
         telegramUserId: regReq.telegram_user_id,
         email: regReq.email,
@@ -2149,7 +2307,6 @@ ${recoveryLink}
         employeeId: allocatedEmployeeId,
         role: roleToAssign,
         department: regReq.requested_department,
-        actionLink,
       })
       const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
         ? "sent"
@@ -2245,33 +2402,29 @@ ${recoveryLink}
 
       const appBaseUrl = resolveAppBaseUrl(req)
       const targetEmail = regReq.email.trim().toLowerCase()
-      let actionLink = `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`
+      let actionLink = ""
       let targetAuthUser: any = null
 
-      try {
-        const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
-          type: "invite",
-          email: targetEmail,
-          options: {
-            redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
-            data: {
-              name: regReq.full_name,
-              displayName: regReq.full_name,
-              employee_id: regReq.employee_id,
-            },
+      const { data: linkData, error: inviteErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: "invite",
+        email: targetEmail,
+        options: {
+          redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
+          data: {
+            name: regReq.full_name,
+            displayName: regReq.full_name,
+            employee_id: regReq.employee_id,
           },
-        })
-        if (linkData?.properties?.action_link) {
-          actionLink = linkData.properties.action_link
-          targetAuthUser = linkData.user
-        }
-      } catch {
-        // ignore
-      }
-
-      // If invite link couldn't be generated (e.g. user already exists in auth), generate recovery link!
-      if (!actionLink.includes("verify?token=")) {
-        try {
+        },
+      })
+      if (!inviteErr && linkData?.properties?.action_link && linkData.properties.action_link.includes("verify?token=")) {
+        actionLink = linkData.properties.action_link
+        targetAuthUser = linkData.user
+      } else {
+        // Only permit re-sending for unconfirmed pending_activation Auth accounts belonging to this registration
+        const { data: existingData } = await supabaseAdmin.auth.admin.getUserByEmail(targetEmail)
+        const existingUser = existingData?.user
+        if (existingUser && !existingUser.email_confirmed_at && existingUser.app_metadata?.status === "pending_activation") {
           const { data: recData } = await supabaseAdmin.auth.admin.generateLink({
             type: "recovery",
             email: targetEmail,
@@ -2279,35 +2432,23 @@ ${recoveryLink}
               redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
             },
           })
-          if (recData?.properties?.action_link) {
+          if (recData?.properties?.action_link && recData.properties.action_link.includes("verify?token=")) {
             actionLink = recData.properties.action_link
             targetAuthUser = recData.user
           }
-        } catch {
-          // ignore
         }
       }
 
-      // Fallback to magiclink if needed
-      if (!actionLink.includes("verify?token=")) {
-        try {
-          const { data: magicData } = await supabaseAdmin.auth.admin.generateLink({
-            type: "magiclink",
-            email: targetEmail,
-            options: {
-              redirectTo: `${appBaseUrl}/?type=invite&email=${encodeURIComponent(targetEmail)}`,
-            },
-          })
-          if (magicData?.properties?.action_link) {
-            actionLink = magicData.properties.action_link
-            targetAuthUser = magicData.user
-          }
-        } catch {
-          // ignore
-        }
+      if (!actionLink || !targetAuthUser) {
+        return new Response(JSON.stringify({
+          error: "تعذر إعادة توليد رابط دعوة التفعيل لهذا الحساب.",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
       }
 
-      // Send via Google SMTP (Nodemailer)
+      // Send via Google SMTP (Nodemailer) ONLY
       const mailRes = await sendActivationInviteEmail({
         toEmail: regReq.email,
         fullName: regReq.full_name,
@@ -2318,7 +2459,7 @@ ${recoveryLink}
       })
 
       if (!mailRes.success) {
-        return new Response(JSON.stringify({ error: `فشل إعادة إرسال الدعوة عبر Google SMTP: ${mailRes.error}` }), {
+        return new Response(JSON.stringify({ error: "فشل إعادة إرسال الدعوة عبر مزود البريد." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
@@ -2356,7 +2497,7 @@ ${recoveryLink}
         })
         .eq("id", requestId)
 
-      // Deliver activation invitation via Telegram
+      // Deliver status notification via Telegram (never transmit secret activation links over Telegram)
       const tgRes = await sendActivationInviteTelegram({
         telegramUserId: regReq.telegram_user_id,
         email: regReq.email,
@@ -2364,7 +2505,6 @@ ${recoveryLink}
         employeeId: regReq.employee_id || "WH-EMP-NEW",
         role: regReq.approved_role || regReq.requested_role,
         department: regReq.requested_department,
-        actionLink,
       })
       const telegramInvitation: "sent" | "skipped" | "failed" = tgRes.success
         ? "sent"
@@ -2548,7 +2688,7 @@ ${recoveryLink}
           emailCounts[em] = (emailCounts[em] || 0) + 1
         }
       }
-      const duplicateEmails = Object.entries(emailCounts).filter(([_, count]) => count > 1).map(([email, count]) => ({
+      const duplicateEmails = Object.entries(emailCounts).filter(([, count]) => count > 1).map(([email, count]) => ({
         email,
         count,
         reason: "duplicate_email_in_app_users",
@@ -2669,7 +2809,8 @@ ${recoveryLink}
 
     // ─── ACTION: set_user_status ─────────────────────────────────────────────
     if (action === "set_user_status") {
-      const { userId, status } = body
+      const userId = String(body.userId || "").trim()
+      const status = String(body.status || "").trim()
       if (!userId || !status) {
         return new Response(JSON.stringify({ error: "معرّف المستخدم والحالة الجديدة مطلوبان." }), {
           status: 400,
@@ -2685,15 +2826,48 @@ ${recoveryLink}
         })
       }
 
-      // Check if target is protected system admin
-      const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(userId)
-      const targetUsername = targetUser?.user?.email?.replace(/@warehouse\.local$/, "") || ""
-      const isTargetProtected = isProtectedUsername(targetUsername) || isProtectedUsername(targetUser?.user?.email)
+      // Resolve both app_users row and auth.users record before evaluating protections
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+      let appUserRow: Record<string, any> | null = null
+      const { data: byAppId } = await supabaseAdmin
+        .from("app_users")
+        .select("id, auth_user_id, username, email, role, status")
+        .eq("id", userId)
+        .maybeSingle()
+      appUserRow = byAppId
+      if (!appUserRow && isUuid) {
+        const { data: byAuthId } = await supabaseAdmin
+          .from("app_users")
+          .select("id, auth_user_id, username, email, role, status")
+          .eq("auth_user_id", userId)
+          .maybeSingle()
+        appUserRow = byAuthId
+      }
 
-      if (isTargetProtected && status === "suspended") {
+      const resolvedAuthId = (appUserRow?.auth_user_id as string | undefined) || (isUuid ? userId : "")
+      const targetUser = resolvedAuthId
+        ? (await supabaseAdmin.auth.admin.getUserById(resolvedAuthId)).data
+        : null
+
+      const targetUsername =
+        appUserRow?.username ||
+        (targetUser?.user?.app_metadata?.username as string) ||
+        targetUser?.user?.email?.replace(/@warehouse\.local$/, "") ||
+        ""
+      const targetEmail = appUserRow?.email || targetUser?.user?.email || ""
+      const isTargetSysAdmin =
+        appUserRow?.role === "system_admin" ||
+        targetUser?.user?.app_metadata?.role === "system_admin" ||
+        targetUser?.user?.app_metadata?.system_admin === true
+      const isTargetProtected =
+        isTargetSysAdmin ||
+        isProtectedUsername(targetUsername) ||
+        isProtectedUsername(targetEmail)
+
+      if (isTargetProtected && status !== "active") {
         await logAdminSecurityEvent(supabaseAdmin, req, {
           caller,
-          action: `محاولة غير مصرح بها لتعليق حساب مدير النظام الرئيسي (${targetUsername})`,
+          action: `محاولة غير مصرح بها لتعطيل أو تعليق حساب مدير النظام الرئيسي (${targetUsername || userId})`,
           eventType: "unauthorized_api_access",
           severity: "critical",
           entityId: userId,
@@ -2707,11 +2881,11 @@ ${recoveryLink}
         })
       }
 
-      const previousStatus = targetUser?.user?.app_metadata?.status || "unknown"
-      if (targetUser?.user) {
+      const previousStatus = appUserRow?.status || targetUser?.user?.app_metadata?.status || "unknown"
+      if (targetUser?.user && resolvedAuthId) {
         // Enforce Auth ban_duration when suspended, and clear ban when active
         const banDuration = status === "suspended" ? "876000h" : "none"
-        await supabaseAdmin.auth.admin.updateUserById(userId, {
+        await supabaseAdmin.auth.admin.updateUserById(resolvedAuthId, {
           ban_duration: banDuration,
           app_metadata: {
             ...targetUser.user.app_metadata,
@@ -2720,13 +2894,16 @@ ${recoveryLink}
         })
       }
 
-      // Mirror to app_users
-      await supabaseAdmin
-        .from("app_users")
-        .update({ status })
-        .or(`auth_user_id.eq.${userId},id.eq.${userId}`)
+      // Mirror to app_users without .or() string interpolation
+      if (appUserRow?.id) {
+        await supabaseAdmin.from("app_users").update({ status }).eq("id", appUserRow.id)
+      } else if (isUuid) {
+        await supabaseAdmin.from("app_users").update({ status }).eq("auth_user_id", userId)
+      } else {
+        await supabaseAdmin.from("app_users").update({ status }).eq("id", userId)
+      }
 
-      const isSelfStatusChange = caller.id === userId
+      const isSelfStatusChange = caller.id === resolvedAuthId || caller.id === userId
       await logAdminSecurityEvent(supabaseAdmin, req, {
         caller,
         action: `تعديل حالة حساب المستخدم إلى (${status}): ${targetUsername || userId}`,
@@ -2742,7 +2919,7 @@ ${recoveryLink}
 
       return new Response(JSON.stringify({
         success: true,
-        message: `تم تحديث حالة الحساب إلى ${status === "suspended" ? "معلّق" : "نشط"} بنجاح.`,
+        message: `تم تحديث حالة الحساب إلى ${status === "suspended" ? "معلّق" : status === "pending_activation" ? "بانتظار التفعيل" : "نشط"} بنجاح.`,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2756,8 +2933,8 @@ ${recoveryLink}
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "حدث خطأ غير متوقع"
-    return new Response(JSON.stringify({ error: message }), {
+    console.error("admin-users internal error:", err instanceof Error ? err.message : String(err))
+    return new Response(JSON.stringify({ error: "حدث خطأ غير متوقع أثناء معالجة الطلب." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

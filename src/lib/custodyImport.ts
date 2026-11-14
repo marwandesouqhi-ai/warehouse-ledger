@@ -3,6 +3,7 @@ import type { CustodyCategory, CustodyCondition, CustodyItem, CustodyType } from
 import { findWarehouseByRecipient, guessCategory, saveCustodyItems, saveCustodyItemsToCloud, WAREHOUSES } from './custody'
 import { classifyWorkshopItem, WORKSHOP_CATEGORIES } from './workshopCategoryClassifier'
 import { getCairoDateString } from './dateUtils'
+import { sanitizeSpreadsheetCell } from './security'
 
 export type CustodyImportRow = {
   code?: string
@@ -41,12 +42,9 @@ export type CustodyRowValidationError = {
 }
 
 function sanitizeCsvCell(text: string): string {
-  const escaped = text.replace(/"/g, '""')
-  // Prevent CSV Formula Injection (CWE-1236) in Excel/Google Sheets
-  if (/^[=+\-@\t\r]/.test(escaped)) {
-    return `'${escaped}`
-  }
-  return escaped
+  // Prevent CSV Formula Injection (CWE-1236) including leading-whitespace bypasses
+  const safe = sanitizeSpreadsheetCell(text)
+  return safe.replace(/"/g, '""')
 }
 
 export function generateCustodyErrorReportCsv(rejectedRows: CustodyRowValidationError[]): string {

@@ -16,6 +16,9 @@ verify_jwt = true
 [functions.complete-activation]
 verify_jwt = true
 
+[functions.gemini-chat]
+verify_jwt = true
+
 # ── Intentional exceptions (with documented reason) ──────────────────────────
 
 # login-bridge: Called before auth session exists (user is logging in).

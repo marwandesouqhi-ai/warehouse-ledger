@@ -10,6 +10,8 @@ import type { RegistrationRequest } from './employeeIdentity'
 import { formatEmployeeId } from './employeeIdentity'
 import { logAuditEvent } from './auditLogger'
 
+type EdgeErrorWithContext = { context: { json: () => Promise<{ error?: string; message?: string }> } }
+
 const LOCAL_STORAGE_REQ_KEY = 'warehouse_ledger_registration_requests'
 
 function notifyRegistrationChanged(): void {
@@ -167,7 +169,7 @@ export async function approveRegistrationRequest(
       let errMessage = edgeData?.error || edgeErr?.message
       if (edgeErr && typeof edgeErr === 'object' && 'context' in edgeErr) {
         try {
-          const ctxJson = await (edgeErr as any).context.json()
+          const ctxJson = await (edgeErr as EdgeErrorWithContext).context.json()
           if (ctxJson?.error) errMessage = ctxJson.error
         } catch {
           // ignore
@@ -377,7 +379,7 @@ export async function sendPasswordRecovery(target: {
         let errMessage = data?.error || error?.message
         if (error && typeof error === 'object' && 'context' in error) {
           try {
-            const ctxJson = await (error as any).context.json()
+            const ctxJson = await (error as EdgeErrorWithContext).context.json()
             if (ctxJson?.error) errMessage = ctxJson.error
             else if (ctxJson?.message) errMessage = ctxJson.message
           } catch {
@@ -439,7 +441,7 @@ export async function resendRegistrationInvitation(
         let errMessage = data?.error || error?.message
         if (error && typeof error === 'object' && 'context' in error) {
           try {
-            const ctxJson = await (error as any).context.json()
+            const ctxJson = await (error as EdgeErrorWithContext).context.json()
             if (ctxJson?.error) errMessage = ctxJson.error
             else if (ctxJson?.message) errMessage = ctxJson.message
           } catch {
@@ -482,7 +484,7 @@ export async function cancelRegistrationInvitation(
         let errMessage = data?.error || error?.message
         if (error && typeof error === 'object' && 'context' in error) {
           try {
-            const ctxJson = await (error as any).context.json()
+            const ctxJson = await (error as EdgeErrorWithContext).context.json()
             if (ctxJson?.error) errMessage = ctxJson.error
             else if (ctxJson?.message) errMessage = ctxJson.message
           } catch {
@@ -573,23 +575,35 @@ export async function getInviteProfile(fallbackEmail?: string): Promise<{ succes
         return { success: true, profile: data.profile }
       }
 
-      // 2. Direct secure lookup for signed-in invite user or fallback email
+      // 2. Direct secure lookup using parameterized queries (no PostgREST .or() string interpolation)
       const { data: { user } } = await supabase.auth.getUser()
-      const searchEmail = user?.email || cleanEmail
+      const searchEmail = (user?.email || cleanEmail || '').trim().toLowerCase()
       if (user || searchEmail) {
-        let query = supabase
-          .from('app_users')
-          .select('display_name, email, employee_id, department, role, status')
+        let dbUser: {
+          display_name: string | null
+          email: string | null
+          employee_id: string | null
+          department: string | null
+          role: string | null
+          status: string | null
+        } | null = null
 
-        if (user && searchEmail) {
-          query = query.or(`auth_user_id.eq.${user.id},email.ilike.${searchEmail}`)
-        } else if (user) {
-          query = query.eq('auth_user_id', user.id)
-        } else if (searchEmail) {
-          query = query.ilike('email', searchEmail)
+        if (user?.id) {
+          const { data: byAuth } = await supabase
+            .from('app_users')
+            .select('display_name, email, employee_id, department, role, status')
+            .eq('auth_user_id', user.id)
+            .maybeSingle()
+          dbUser = byAuth
         }
-
-        const { data: dbUser } = await query.maybeSingle()
+        if (!dbUser && searchEmail) {
+          const { data: byEmail } = await supabase
+            .from('app_users')
+            .select('display_name, email, employee_id, department, role, status')
+            .ilike('email', searchEmail)
+            .maybeSingle()
+          dbUser = byEmail
+        }
 
         if (dbUser) {
           return {

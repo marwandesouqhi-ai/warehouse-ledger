@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/supabase-js'
+import { isSafeImageUrl } from './security'
 import { logAuditEvent, getLocalAuditLogs, fetchAuditLogs, type AuditLogEntry } from './auditLogger'
 import { fetchCustodyItemsFromCloud, loadCustodyItems, saveCustodyItems, saveCustodyItemsToCloud, type CustodyItem } from './custody'
 import type { FixtureMovement } from './fixture'
@@ -152,7 +153,7 @@ function isUuid(str: string | undefined | null): boolean {
 
 function sanitizeForUuidPk<T extends { id?: string }>(item: T): Omit<T, 'id'> | T {
   if (item && item.id && !isUuid(item.id)) {
-    const { id, ...rest } = item
+    const { id: _id, ...rest } = item
     return rest as T
   }
   return item
@@ -861,7 +862,7 @@ export async function backupToSupabaseCloud(
   if (purchaseRequests.length > 0) {
     for (const pr of purchaseRequests) {
       try {
-        const { items, approvals, ...reqRow } = pr as any
+        const { items: _items, approvals: _approvals, ...reqRow } = pr as any
         const payload = sanitizeForUuidPk(reqRow)
         await supabase.from('purchase_requests').upsert(payload, { onConflict: 'request_no' })
       } catch (err) {
@@ -960,14 +961,22 @@ export function validateBackupPayload(jsonString: string): {
   error?: string
 } {
   try {
+    if (typeof jsonString !== 'string' || jsonString.length > 50 * 1024 * 1024) {
+      return { valid: false, error: 'حجم ملف النسخة الاحتياطية غير صالح أو يتجاوز الحد الأقصى (50 ميجابايت).' }
+    }
     let parsed: unknown
     try {
-      parsed = JSON.parse(jsonString)
+      parsed = JSON.parse(jsonString, (key, value) => {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          return undefined
+        }
+        return value
+      })
     } catch {
       return { valid: false, error: 'الملف ليس بتنسيق JSON صحيح.' }
     }
 
-    if (!parsed || typeof parsed !== 'object') {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { valid: false, error: 'الملف ليس بتنسيق JSON صحيح.' }
     }
     const candidate = parsed as Partial<SystemBackupPayload>
@@ -977,23 +986,40 @@ export function validateBackupPayload(jsonString: string): {
         error: 'الملف المختار ليس نسخة احتياطية صالحة لنظام حركة المخزن (رمز التطبيق غير مطابق).',
       }
     }
-    if (!candidate.data || typeof candidate.data !== 'object') {
+    if (!candidate.data || typeof candidate.data !== 'object' || Array.isArray(candidate.data)) {
       return { valid: false, error: 'النسخة الاحتياطية لا تحتوي على حزمة بيانات صالحة (حقل data مفقود).' }
     }
 
+    const baseSettings = loadAppSettings()
+    const rawSettings = candidate.data.settings && typeof candidate.data.settings === 'object' ? candidate.data.settings : baseSettings
+    const safeSettings: AppSettings = {
+      ...baseSettings,
+      ...rawSettings,
+      logoDataUrl: rawSettings.logoDataUrl && isSafeImageUrl(rawSettings.logoDataUrl) ? rawSettings.logoDataUrl : '',
+      logoUrl: rawSettings.logoUrl && isSafeImageUrl(rawSettings.logoUrl) ? rawSettings.logoUrl : '',
+    }
+
+    const sanitizedUsers: LocalUser[] = Array.isArray(candidate.data.users)
+      ? candidate.data.users.map((u) => ({
+          ...u,
+          password: '',
+          activationCode: '',
+        }))
+      : []
+
     const payload: SystemBackupPayload = {
       app: 'warehouse-ledger',
-      version: candidate.version || '2.0.0',
-      backupDate: candidate.backupDate || new Date().toISOString(),
+      version: candidate.version === '1.0.0' ? '1.0.0' : '2.0.0',
+      backupDate: typeof candidate.backupDate === 'string' ? candidate.backupDate : new Date().toISOString(),
       generator: candidate.generator || { role: 'admin' },
       metadata: candidate.metadata || {
-        organization: candidate.data.settings?.organization || 'جامعة الزقازيق الأهلية',
-        department: candidate.data.settings?.department || 'إدارة المخازن',
-        currency: candidate.data.settings?.currency || 'EGP',
+        organization: safeSettings.organization || 'جامعة الزقازيق الأهلية',
+        department: safeSettings.department || 'إدارة المخازن',
+        currency: safeSettings.currency || 'EGP',
         counts: {
           movements: Array.isArray(candidate.data.movements) ? candidate.data.movements.length : 0,
           custody: Array.isArray(candidate.data.custody) ? candidate.data.custody.length : 0,
-          users: Array.isArray(candidate.data.users) ? candidate.data.users.length : 0,
+          users: sanitizedUsers.length,
           auditLogs: Array.isArray(candidate.data.auditLogs) ? candidate.data.auditLogs.length : 0,
           suppliers: Array.isArray(candidate.data.suppliers) ? candidate.data.suppliers.length : 0,
           contracts: Array.isArray(candidate.data.contracts) ? candidate.data.contracts.length : 0,
@@ -1014,10 +1040,10 @@ export function validateBackupPayload(jsonString: string): {
         },
       },
       data: {
-        settings: candidate.data.settings || loadAppSettings(),
+        settings: safeSettings,
         movements: Array.isArray(candidate.data.movements) ? candidate.data.movements : [],
         custody: Array.isArray(candidate.data.custody) ? candidate.data.custody : [],
-        users: Array.isArray(candidate.data.users) ? candidate.data.users : [],
+        users: sanitizedUsers,
         auditLogs: Array.isArray(candidate.data.auditLogs) ? candidate.data.auditLogs : [],
         suppliers: Array.isArray(candidate.data.suppliers) ? candidate.data.suppliers : [],
         contracts: Array.isArray(candidate.data.contracts) ? candidate.data.contracts : [],
@@ -1039,10 +1065,10 @@ export function validateBackupPayload(jsonString: string): {
     }
 
     return { valid: true, payload }
-  } catch (err) {
+  } catch {
     return {
       valid: false,
-      error: `تعذر قراءة ملف النسخة الاحتياطية: ${err instanceof Error ? err.message : 'تنسيق غير صالح'}`,
+      error: 'تعذر قراءة ملف النسخة الاحتياطية: تنسيق غير صالح.',
     }
   }
 }
@@ -1355,7 +1381,7 @@ export async function restoreLocalBackup(
     if (supabase && payload.data.purchaseRequests.length > 0) {
       for (const pr of payload.data.purchaseRequests) {
         try {
-          const { items, approvals, ...reqRow } = pr as any
+          const { items: _items, approvals: _approvals, ...reqRow } = pr as any
           const clean = sanitizeForUuidPk(reqRow)
           await supabase.from('purchase_requests').upsert(clean, { onConflict: 'request_no' })
         } catch {

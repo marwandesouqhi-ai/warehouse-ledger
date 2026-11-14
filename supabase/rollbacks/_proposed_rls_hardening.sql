@@ -25,7 +25,7 @@ CREATE POLICY "movements_hardened_select_policy" ON public.movements
     auth.uid() = owner_id
     OR EXISTS (
       SELECT 1 FROM public.app_users u
-      WHERE u.id = auth.uid()
+      WHERE u.auth_user_id = auth.uid()
         AND u.role IN ('system_admin', 'admin', 'warehouse_staff', 'purchasing_staff')
     )
   );
@@ -41,7 +41,7 @@ CREATE POLICY "movements_hardened_insert_policy" ON public.movements
       auth.uid() = owner_id
       OR EXISTS (
         SELECT 1 FROM public.app_users u
-        WHERE u.id = auth.uid()
+        WHERE u.auth_user_id = auth.uid()
           AND u.role IN ('system_admin', 'admin', 'purchasing_staff', 'warehouse_staff')
       )
     )
@@ -55,7 +55,7 @@ CREATE POLICY "movements_hardened_update_delete_policy" ON public.movements
   USING (
     EXISTS (
       SELECT 1 FROM public.app_users u
-      WHERE u.id = auth.uid()
+      WHERE u.auth_user_id = auth.uid()
         AND (u.role = 'system_admin' OR 'manage_records' = ANY(u.permissions))
     )
   );
@@ -69,7 +69,7 @@ CREATE POLICY "audit_logs_read_restricted" ON public.audit_logs
   USING (
     EXISTS (
       SELECT 1 FROM public.app_users u
-      WHERE u.id = auth.uid()
+      WHERE u.auth_user_id = auth.uid()
         AND (u.role = 'system_admin' OR 'view_audit' = ANY(u.permissions))
     )
   );

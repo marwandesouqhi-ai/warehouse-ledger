@@ -13,24 +13,47 @@ const DEFAULT_WEBHOOK_URL =
 const STORAGE_KEY = 'google_sheets_webhook_url'
 const QUEUE_KEY = 'google_sheets_pending_sync_queue'
 
+function isAllowedAppsScriptWebhookUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl.trim())
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'script.google.com' &&
+      parsed.pathname.startsWith('/macros/s/')
+    )
+  } catch {
+    return false
+  }
+}
+
 /**
  * الحصول على رابط الويبهوك الحالي (من الإعدادات أو متغيرات البيئة)
  */
 export function getGoogleSheetsWebhookUrl(): string {
   if (typeof window === 'undefined') return DEFAULT_WEBHOOK_URL
-  return window.localStorage.getItem(STORAGE_KEY) || DEFAULT_WEBHOOK_URL
+  const stored = window.localStorage.getItem(STORAGE_KEY)
+  if (stored && isAllowedAppsScriptWebhookUrl(stored)) {
+    return stored.trim()
+  }
+  if (stored) {
+    window.localStorage.removeItem(STORAGE_KEY)
+  }
+  return DEFAULT_WEBHOOK_URL
 }
 
 /**
- * حفظ أو تحديث رابط الويبهوك
+ * حفظ أو تحديث رابط الويبهوك (مقيد بنطاق Google Apps Script الرسمي فقط)
  */
 export function setGoogleSheetsWebhookUrl(url: string): void {
   if (typeof window === 'undefined') return
   if (!url || url.trim() === '') {
     window.localStorage.removeItem(STORAGE_KEY)
-  } else {
-    window.localStorage.setItem(STORAGE_KEY, url.trim())
+    return
   }
+  if (!isAllowedAppsScriptWebhookUrl(url)) {
+    throw new Error('عنوان Webhook غير صالح: يسمح فقط بروابط Google Apps Script الرسمية.')
+  }
+  window.localStorage.setItem(STORAGE_KEY, url.trim())
 }
 
 /**

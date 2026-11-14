@@ -103,7 +103,7 @@ async function processImageFile(file: File): Promise<string> {
                     : canvas.toDataURL('image/jpeg', 0.88)
                 resolve(compressedDataUrl)
             }
-            img.onerror = () => resolve(reader.result as string)
+            img.onerror = () => reject(new Error('تنسيق الصورة غير مدعوم أو الملف تالف (يُقبل PNG/JPEG/WebP فقط).'))
             img.src = reader.result as string
         }
         reader.onerror = () => reject(new Error('تعذر قراءة ملف الصورة.'))
@@ -213,9 +213,10 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                 })
             }
         } catch (err) {
+            console.error('Google Sheets test error:', err)
             setSheetTestOutcome({
                 status: 'error',
-                message: 'حدث خطأ أثناء الاتصال: ' + (err instanceof Error ? err.message : String(err)),
+                message: 'حدث خطأ أثناء الاتصال بخدمة المزامنة.',
             })
         } finally {
             setIsTestingSheet(false)
@@ -367,7 +368,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
             setRestoreFile(null)
         } catch (err) {
             console.error('Local restore error:', err)
-            setRestoreError(err instanceof Error ? err.message : 'تعذر إتمام عملية استعادة النسخة الاحتياطية.')
+            setRestoreError('تعذر إتمام عملية استعادة النسخة الاحتياطية.')
         } finally {
             setIsRestoringLocal(false)
         }
@@ -815,7 +816,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                 <label className="logo-file-picker">
                                     <input
                                         type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                        accept="image/png,image/jpeg,image/webp"
                                         onChange={handleLogoFileChange}
                                         disabled={isProcessingFile || !isSystemAdmin}
                                     />

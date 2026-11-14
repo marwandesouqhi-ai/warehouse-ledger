@@ -210,8 +210,10 @@ describe('Employee Onboarding: Telegram -> Admin Approval -> Gmail Invite -> Act
             // Must NOT contain listUsers
             expect(approveBlock).not.toContain('listUsers')
 
-            // Must call inviteUserByEmail
-            expect(approveBlock).toContain('inviteUserByEmail')
+            // Must generate explicit invite links only (no recovery/magiclink fallback)
+            expect(approveBlock).toContain('type: "invite"')
+            expect(approveBlock).not.toContain('type: "recovery"')
+            expect(approveBlock).not.toContain('type: "magiclink"')
 
             // Must NOT create password or temp password in approve action
             expect(approveBlock).not.toContain('generateTempPassword')

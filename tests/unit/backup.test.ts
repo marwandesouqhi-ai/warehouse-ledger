@@ -121,8 +121,8 @@ describe('System Backup Suite', () => {
     expect(result.counts.movements).toBe(1)
     // 1 custom seeded item + 67 medicine + 81 workshops auto-healed = 149
     expect(result.counts.custody).toBe(149)
-    // 2 custom seeded users + 1 auto-provisioned employee (ahmed-hussain) = 3
-    expect(result.counts.users).toBe(3)
+    // 2 custom seeded users (no hardcoded employee is auto-provisioned anymore)
+    expect(result.counts.users).toBe(2)
     expect(result.counts.auditLogs).toBe(1)
     expect(result.fileName).toContain('نسخة_احتياطية_شاملة_المخازن_')
     expect(localStorage.getItem(LAST_LOCAL_BACKUP_KEY)).toBeTruthy()

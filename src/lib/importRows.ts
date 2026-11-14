@@ -1,5 +1,6 @@
 import { normalizeHeader } from './parse'
 import type { FixtureMovement } from './fixture'
+import { sanitizeSpreadsheetCell } from './security'
 
 export type CoreMovementField =
     | 'date'
@@ -159,7 +160,10 @@ export function validateAndClassifyMovementRows(
 
 export function generateMovementErrorReportCsv(rejectedRows: RowValidationError[]): string {
     const header = '\uFEFFرقم الصف في الملف,اسم الصنف,سبب الرفض'
-    const lines = rejectedRows.map((r) => `${r.rowNumber},"${(r.itemName || '—').replace(/"/g, '""')}","${r.reason.replace(/"/g, '""')}"`)
+    const lines = rejectedRows.map(
+        (r) =>
+            `${r.rowNumber},"${sanitizeSpreadsheetCell(r.itemName || '—').replace(/"/g, '""')}","${sanitizeSpreadsheetCell(r.reason).replace(/"/g, '""')}"`
+    )
     return [header, ...lines].join('\r\n')
 }
 

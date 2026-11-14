@@ -1,16 +1,60 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
+
+function getAllowedOrigins(): string[] {
+  const origins = new Set<string>([DEFAULT_APP_ORIGIN])
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim()
+  if (envUrl && envUrl.startsWith("https://")) {
+    origins.add(envUrl.replace(/\/+$/, ""))
+  }
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "").split(",")
+  for (const item of extra) {
+    const clean = item.trim().replace(/\/+$/, "")
+    if (clean) origins.add(clean)
+  }
+  return Array.from(origins)
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = getAllowedOrigins()
+  const allowOrigin = origin && allowed.includes(origin) ? origin : allowed[0]
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  }
+}
+
+function isProtectedAccount(usernameOrEmail: string | null | undefined): boolean {
+  if (!usernameOrEmail) return false
+  const clean = String(usernameOrEmail).trim().toLowerCase()
+  const bootstrapEmail = (Deno.env.get("BOOTSTRAP_ADMIN_EMAIL") || "").trim().toLowerCase()
+  const bootstrapUser = (Deno.env.get("BOOTSTRAP_ADMIN_USERNAME") || "").trim().toLowerCase()
+  const protectedSet = new Set([
+    "marwan-desouky",
+    "marwan-desouky@warehouse.local",
+    "marwandesouqhi@gmail.com",
+    ...(bootstrapEmail ? [bootstrapEmail] : []),
+    ...(bootstrapUser ? [bootstrapUser] : []),
+  ])
+  if (protectedSet.has(clean)) return true
+  if (clean.endsWith("@warehouse.local")) {
+    const prefix = clean.replace(/@warehouse\.local$/, "")
+    if (protectedSet.has(prefix)) return true
+  }
+  return false
 }
 
 function getReqIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || ""
+  const parts = xff.split(",").map((p) => p.trim()).filter(Boolean)
+  if (parts.length > 0) return parts[parts.length - 1]
   return (
-    req.headers.get("cf-connecting-ip")?.trim() ||
     req.headers.get("x-real-ip")?.trim() ||
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("cf-connecting-ip")?.trim() ||
     "unknown"
   )
 }
@@ -56,9 +100,30 @@ async function logUnauthorizedInviteAttempt(
   }
 }
 
+const RL_WINDOW_MS = 60_000
+const RL_MAX = 30
+const rlHits = new Map<string, number[]>()
+
+function isRateLimited(req: Request): boolean {
+  const key = (req.headers.get("x-forwarded-for") || req.headers.get("authorization") || "anon").slice(0, 200)
+  const now = Date.now()
+  const hits = (rlHits.get(key) || []).filter((t) => now - t < RL_WINDOW_MS)
+  const limited = hits.length >= RL_MAX
+  if (!limited) hits.push(now)
+  rlHits.set(key, hits)
+  if (rlHits.size > 5000) rlHits.clear()
+  return limited
+}
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
+  }
+  if (isRateLimited(req)) {
+    return new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
+    })
   }
 
   try {
@@ -109,21 +174,13 @@ serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     const rawForwarded = req.headers.get("x-forwarded-for") || ""
-    const ip = rawForwarded.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown"
+    const xffParts = rawForwarded.split(",").map((p) => p.trim()).filter(Boolean)
+    const ip = (xffParts.length > 0 ? xffParts[xffParts.length - 1] : "") || req.headers.get("x-real-ip")?.trim() || req.headers.get("cf-connecting-ip") || "unknown"
     const userAgent = req.headers.get("user-agent") || ""
 
-    let siteUrl: string | undefined = undefined
-    const rawOrigin = req.headers.get("origin") || req.headers.get("referer") || ""
-    if (rawOrigin) {
-      try {
-        const parsed = new URL(rawOrigin)
-        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          siteUrl = `${parsed.protocol}//${parsed.host}`
-        }
-      } catch {
-        siteUrl = undefined
-      }
-    }
+    const allowedOrigins = getAllowedOrigins()
+    const rawOrigin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+    const siteUrl = rawOrigin && allowedOrigins.includes(rawOrigin) ? rawOrigin : allowedOrigins[0]
 
     const action = body.action || "invite"
 
@@ -160,23 +217,42 @@ serve(async (req: Request) => {
       const trimmedEmail = email.trim().toLowerCase()
       const { data: dbUser } = await supabaseAdmin
         .from("app_users")
-        .select("auth_user_id")
+        .select("auth_user_id, username, email, role")
         .ilike("email", trimmedEmail)
         .maybeSingle()
 
       const targetUserId = dbUser?.auth_user_id
       if (!targetUserId) {
         return new Response(JSON.stringify({
-          error: `لم يتم العثور على مستخدم مسجل بالبريد: ${trimmedEmail}`,
+          error: "لم يتم العثور على مستخدم مسجل بهذا البريد الإلكتروني.",
         }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
 
+      const { data: targetAuthData } = await supabaseAdmin.auth.admin.getUserById(targetUserId)
+      const targetAuthUser = targetAuthData?.user
+      const isProtectedTarget =
+        dbUser?.role === "system_admin" ||
+        targetAuthUser?.app_metadata?.role === "system_admin" ||
+        targetAuthUser?.app_metadata?.system_admin === true ||
+        isProtectedAccount(trimmedEmail) ||
+        isProtectedAccount(dbUser?.username) ||
+        isProtectedAccount(targetAuthUser?.email)
+
+      if (isProtectedTarget && targetUserId !== user.id) {
+        return new Response(JSON.stringify({
+          error: "غير مصرح: لا يمكن إعادة تعيين كلمة مرور حساب مدير النظام الرئيسي من هذا المسار.",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
       if (newPassword) {
-        if (typeof newPassword !== "string" || newPassword.length < 6) {
-          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام لضمان أمان الحساب." }), {
+        if (typeof newPassword !== "string" || newPassword.length < 10) {
+          return new Response(JSON.stringify({ error: "كلمة المرور يجب أن لا تقل عن 10 أحرف لضمان أمان الحساب." }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           })
@@ -234,8 +310,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "حدث خطأ غير متوقع"
-    return new Response(JSON.stringify({ error: message }), {
+    console.error("invite-user error:", err instanceof Error ? err.message : String(err))
+    return new Response(JSON.stringify({ error: "حدث خطأ غير متوقع أثناء معالجة الطلب." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })

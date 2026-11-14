@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { isSafeInternalRoute } from '../lib/security'
 import {
   fetchNotifications,
   markNotificationAsRead,
@@ -33,7 +34,7 @@ const TYPE_CONFIG = {
   ticket: { icon: Bell, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-950/40', label: 'دعم فني' },
 }
 
-export default function NotificationsPage({}: NotificationsPageProps) {
+export default function NotificationsPage(_props: NotificationsPageProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'important'>('all')
@@ -172,7 +173,7 @@ export default function NotificationsPage({}: NotificationsPageProps) {
                     <p className="text-sm text-muted leading-relaxed mb-3">{notif.body}</p>
 
                     <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40">
-                      {notif.action_url ? (
+                      {notif.action_url && isSafeInternalRoute(notif.action_url) ? (
                         <Link
                           to={notif.action_url}
                           onClick={() => handleMarkAsRead(notif.id)}

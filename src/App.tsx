@@ -85,10 +85,10 @@ import {
   WAREHOUSES,
 } from './lib/custody'
 import {
-  getLocalSession,
   clearLocalSession,
   syncUsersWithCloud,
 } from './lib/localUsers'
+import { isSafeImageUrl, toSafeUserErrorMessage } from './lib/security'
 import { startAutoBackupWatcher } from './lib/autoBackupEngine'
 import { usePwaInstall } from './lib/pwa'
 import AuthPage from './pages/AuthPage'
@@ -269,12 +269,11 @@ function App() {
   const shouldReduceMotion = useReducedMotion()
   const [darkMode, setDarkMode] = useState(() => getSavedTheme() === 'dark')
   const [session, setSession] = useState<Session | null>(() => {
-    const local = getLocalSession()
-    prepareAccessContext(local)
-    return local as unknown as Session | null
+    prepareAccessContext(null)
+    return null
   })
   const [movements, setMovements] = useState<FixtureMovement[]>(() => loadMovements())
-  const [authLoading, setAuthLoading] = useState(() => !getLocalSession() && Boolean(supabase))
+  const [authLoading, setAuthLoading] = useState(() => Boolean(supabase))
   const [isSettingPassword, setIsSettingPassword] = useState(() => {
     if (typeof window === 'undefined') return false
     const hash = window.location.hash || ''
@@ -322,7 +321,8 @@ function App() {
 
   const [settings, setSettings] = useState<AppSettings>(loadAppSettings)
   const [failedLogoSource, setFailedLogoSource] = useState('')
-  const logoSource = settings.logoDataUrl || settings.logoUrl || ''
+  const rawLogoSource = settings.logoDataUrl || settings.logoUrl || ''
+  const logoSource = isSafeImageUrl(rawLogoSource) ? rawLogoSource : ''
 
   useEffect(() => {
     setFailedLogoSource('')
@@ -737,21 +737,10 @@ function App() {
 
   useEffect(() => {
     purgeLocalDemoData()
-    function handleLocalAuth() {
-      const local = getLocalSession()
-      if (local) {
-        updateAccessSession(local as unknown as Session)
-        setAuthLoading(false)
-      } else if (!supabase) {
-        updateAccessSession(null)
-        setAuthLoading(false)
-      }
-    }
-    window.addEventListener('local-auth-changed', handleLocalAuth)
-
     if (!supabase) {
-      handleLocalAuth()
-      return () => window.removeEventListener('local-auth-changed', handleLocalAuth)
+      updateAccessSession(null)
+      setAuthLoading(false)
+      return
     }
 
     let active = true
@@ -795,39 +784,25 @@ function App() {
       if ((window.location.hash.includes('type=invite') || window.location.search.includes('type=invite')) && !window.location.hash.includes('error=')) {
         setIsInviteFlow(true)
       }
-      if (nextSession) {
-        updateAccessSession(nextSession)
-      } else {
-        const local = getLocalSession()
-        updateAccessSession(local ? (local as unknown as Session) : null)
-      }
+      updateAccessSession(nextSession ?? null)
       setAuthLoading(false)
     })
 
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return
-      if (error) setSyncError(error.message)
-      if (data.session) {
-        updateAccessSession(data.session)
-      } else {
-        const local = getLocalSession()
-        if (local) {
-          updateAccessSession(local as unknown as Session)
-        }
-      }
+      if (error) setSyncError(toSafeUserErrorMessage(error, 'تعذر التحقق من جلسة الدخول.'))
+      updateAccessSession(data.session ?? null)
       setAuthLoading(false)
     }).catch((error: unknown) => {
       if (!active) return
-      setSyncError(error instanceof Error ? error.message : 'تعذر التحقق من جلسة الدخول.')
-      const local = getLocalSession()
-      if (local) updateAccessSession(local as unknown as Session)
+      setSyncError(toSafeUserErrorMessage(error, 'تعذر التحقق من جلسة الدخول.'))
+      updateAccessSession(null)
       setAuthLoading(false)
     })
 
     return () => {
       active = false
       subscription.unsubscribe()
-      window.removeEventListener('local-auth-changed', handleLocalAuth)
     }
   }, [])
 
@@ -1500,8 +1475,9 @@ function App() {
       <AuthPage
         settings={settings}
         onPasswordSet={() => {
-          const local = getLocalSession()
-          if (local) updateAccessSession(local as unknown as Session)
+          void supabase?.auth.getSession().then(({ data }) => {
+            if (data.session) updateAccessSession(data.session)
+          })
         }}
       />
     )

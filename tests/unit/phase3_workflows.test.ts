@@ -20,20 +20,20 @@ describe('Phase 3 Trustworthy Workflows', () => {
       expect(userMustChangePassword(user)).toBe(true)
     })
 
-    it('returns true when user_metadata.must_change_password is true', () => {
+    it('ignores untrusted user_metadata.must_change_password when app_metadata is unset', () => {
       const user = {
         app_metadata: {},
         user_metadata: { must_change_password: true },
       }
-      expect(userMustChangePassword(user)).toBe(true)
+      expect(userMustChangePassword(user)).toBe(false)
     })
 
-    it('returns false when user_metadata explicitly overrides must_change_password to false', () => {
+    it('ignores user_metadata override when app_metadata.must_change_password is true', () => {
       const user = {
         app_metadata: { must_change_password: true },
         user_metadata: { must_change_password: false },
       }
-      expect(userMustChangePassword(user)).toBe(false)
+      expect(userMustChangePassword(user)).toBe(true)
     })
 
     it('returns false when no password change flag is present', () => {

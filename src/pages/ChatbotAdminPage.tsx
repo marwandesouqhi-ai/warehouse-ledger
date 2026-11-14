@@ -22,8 +22,6 @@ import {
 } from 'lucide-react'
 import { isSystemAdmin } from '../lib/permissions'
 import {
-  getGeminiApiKey,
-  saveGeminiApiKeyLocal,
   clearGeminiApiKeyLocal,
   testGeminiConnection,
   CANDIDATE_MODELS,
@@ -44,9 +42,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
   // Tabs
   const [activeTab, setActiveTab] = useState<'api_settings' | 'architecture' | 'code_sandbox' | 'diagnostics'>('code_sandbox')
 
-  // API Key State
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [showKey, setShowKey] = useState(false)
+  // API Key State (managed server-side via Supabase Edge Function `gemini-chat`)
   const [isTestingKey, setIsTestingKey] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [selectedModel, setSelectedModel] = useState(CANDIDATE_MODELS[0])
@@ -71,10 +67,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
   const [liveContextPayload, setLiveContextPayload] = useState<string>('')
 
   useEffect(() => {
-    const existingKey = getGeminiApiKey()
-    if (existingKey) {
-      setApiKeyInput(existingKey)
-    }
+    clearGeminiApiKeyLocal()
     void loadDatabaseStats()
   }, [])
 
@@ -100,23 +93,10 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
     setIsTestingKey(true)
     setTestResult(null)
     try {
-      const res = await testGeminiConnection(apiKeyInput)
+      const res = await testGeminiConnection()
       setTestResult(res)
-      if (res.success && apiKeyInput) {
-        saveGeminiApiKeyLocal(apiKeyInput)
-      }
     } finally {
       setIsTestingKey(false)
-    }
-  }
-
-  function handleSaveApiKey() {
-    if (!apiKeyInput.trim()) {
-      clearGeminiApiKeyLocal()
-      setTestResult({ success: false, message: 'تم مسح المفتاح المحلي.' })
-    } else {
-      saveGeminiApiKeyLocal(apiKeyInput)
-      setTestResult({ success: true, message: 'تم حفظ مفتاح API بنجاح في المتصفح.' })
     }
   }
 
@@ -622,42 +602,15 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
           <div className="border-b pb-3">
             <h3 className="text-base font-bold text-ink flex items-center gap-2">
               <Key size={18} className="text-primary" />
-              إعدادات الاتصال بـ Google Gemini API
+              إعدادات الاتصال الآمن بـ Google Gemini API
             </h3>
             <p className="text-xs text-muted mt-1">
-              يستخدم النظام مفتاح API للربط مع أحدث نماذج Gemini الذكية. يتم حفظ المفتاح بأمان في المتصفح دون مشاركته.
+              يتم حفظ مفتاح Gemini API حصرياً على الخادم ضمن أسرار Supabase Secrets (<code className="font-mono">GEMINI_API_KEY</code>) ويتم التواصل عبر دالة الخادم المؤمّنة <code className="font-mono">gemini-chat</code> دون تعريض أي مفاتيح في المتصفح.
             </p>
           </div>
 
           <div className="space-y-4">
-            <label className="flex flex-col gap-1.5 text-xs font-semibold">
-              مفتاح Gemini API Key
-              <div className="flex gap-2">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="flex-1 p-2 border rounded text-xs font-mono bg-background"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="secondary-btn text-xs py-1 px-3"
-                >
-                  {showKey ? 'إخفاء' : 'إظهار'}
-                </button>
-              </div>
-            </label>
-
             <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleSaveApiKey}
-                className="primary-btn text-xs py-2 px-4"
-              >
-                حفظ المفتاح
-              </button>
               <button
                 type="button"
                 onClick={handleTestConnection}
@@ -665,7 +618,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 className="secondary-btn text-xs py-2 px-4 inline-flex items-center gap-1.5"
               >
                 <Activity size={14} className={isTestingKey ? 'animate-spin' : ''} />
-                <span>{isTestingKey ? 'جارٍ فحص الاتصال...' : 'اختبار سرعة الاتصال بالنموذج'}</span>
+                <span>{isTestingKey ? 'جارٍ فحص الاتصال بالخادم...' : 'اختبار الاتصال بدالة الخادم الآمنة'}</span>
               </button>
             </div>
 

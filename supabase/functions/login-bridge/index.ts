@@ -1,9 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get("origin") || "").trim().replace(/\/+$/, "")
+  const allowed = new Set<string>([DEFAULT_APP_ORIGIN])
+  const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim().replace(/\/+$/, "")
+  if (envUrl && envUrl.startsWith("https://")) allowed.add(envUrl)
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)
+  for (const item of extra) allowed.add(item)
+  const allowOrigin = origin && allowed.has(origin) ? origin : DEFAULT_APP_ORIGIN
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  }
 }
 
 const GENERIC_LOGIN_ERROR = "تعذر تسجيل الدخول. تحقق من بيانات الدخول أو تواصل مع الإدارة."
@@ -42,12 +54,16 @@ const DEFAULT_SECURITY_CONFIG: SecurityMonitorConfig = {
 }
 
 function extractClientIp(req: Request): string {
-  const cfIp = req.headers.get("cf-connecting-ip")?.trim()
-  if (cfIp) return cfIp
+  const xff = req.headers.get("x-forwarded-for") || ""
+  const parts = xff.split(",").map((p) => p.trim()).filter(Boolean)
+  if (parts.length > 0) {
+    // Prefer proxy-appended rightmost IP over client-spoofable forwarding headers
+    return parts[parts.length - 1]
+  }
   const realIp = req.headers.get("x-real-ip")?.trim()
   if (realIp) return realIp
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  if (forwarded) return forwarded
+  const cfIp = req.headers.get("cf-connecting-ip")?.trim()
+  if (cfIp) return cfIp
   return "unknown-ip"
 }
 
@@ -309,6 +325,7 @@ function isValidIdentifier(identifier: string): boolean {
 }
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -350,24 +367,34 @@ serve(async (req: Request) => {
     const securityConfig = await loadSecurityConfig(supabaseAdmin)
     const userAgent = req.headers.get("user-agent") || ""
 
-    // 2. Rate limiting check via login_attempts (Max 5 failed attempts in 15 mins)
+    // 2. Per-IP & per-identifier sliding-window throttling via login_attempts
     const clientIp = extractClientIp(req)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
-    const { count: failedCount } = await supabaseAdmin
-      .from("login_attempts")
-      .select("id", { count: "exact", head: true })
-      .eq("username", normalizedIdentifier)
-      .eq("success", false)
-      .gte("attempted_at", fifteenMinutesAgo)
+    const [{ count: failedCount }, { count: ipFailedCount }] = await Promise.all([
+      supabaseAdmin
+        .from("login_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("username", normalizedIdentifier)
+        .eq("success", false)
+        .gte("attempted_at", fifteenMinutesAgo),
+      clientIp !== "unknown-ip"
+        ? supabaseAdmin
+            .from("login_attempts")
+            .select("id", { count: "exact", head: true })
+            .eq("ip_address", clientIp)
+            .eq("success", false)
+            .gte("attempted_at", fifteenMinutesAgo)
+        : Promise.resolve({ count: 0 }),
+    ])
 
-    if (failedCount && failedCount >= 5) {
+    if ((failedCount && failedCount >= 5) || (ipFailedCount && ipFailedCount >= 20)) {
       await recordFailedLoginAttempt({
         supabaseAdmin,
         identifier: normalizedIdentifier,
         clientIp,
         userAgent,
-        reason: "rate_limited_too_many_attempts",
+        reason: ipFailedCount && ipFailedCount >= 20 ? "rate_limited_ip_threshold" : "rate_limited_too_many_attempts",
         config: securityConfig,
         insertAttempt: false,
       })
@@ -627,7 +654,7 @@ serve(async (req: Request) => {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
-  } catch (err: unknown) {
+  } catch {
     // Generic response for unexpected server errors
     return new Response(JSON.stringify({ error: GENERIC_LOGIN_ERROR }), {
       status: 500,
