@@ -891,7 +891,7 @@ DECLARE
   v_request_id BIGINT;
   v_fn TEXT;
 BEGIN
-  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
+  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' AND session_user NOT IN ('postgres', 'supabase_admin') THEN
     RAISE EXCEPTION 'غير مصرح: استدعاء dispatch_security_webhook مقتصر على service_role.'
       USING ERRCODE = '42501';
   END IF;
