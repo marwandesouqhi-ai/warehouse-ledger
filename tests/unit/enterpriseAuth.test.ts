@@ -65,10 +65,11 @@ describe('Enterprise Directory Authentication & User Provisioning Suite', () => 
 
     expect(updateSpy).toHaveBeenCalled()
     const payloadPassed = updateSpy.mock.calls[0][0]
-    expect(payloadPassed.password).toBe('ExistingHashedPassword123')
+    expect(payloadPassed.password).toBeUndefined()
+    expect(payloadPassed.activation_code).toBeUndefined()
   })
 
-  it('3. saveUserToCloud sets new password when provided', async () => {
+  it('3. saveUserToCloud never transmits password or activation_code even when provided in memory', async () => {
     if (!supabase) return
 
     const updateSpy = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
@@ -99,7 +100,8 @@ describe('Enterprise Directory Authentication & User Provisioning Suite', () => 
 
     expect(updateSpy).toHaveBeenCalled()
     const payloadPassed = updateSpy.mock.calls[0][0]
-    expect(payloadPassed.password).toBe('BrandNewSecurePassword123!')
+    expect(payloadPassed.password).toBeUndefined()
+    expect(payloadPassed.activation_code).toBeUndefined()
   })
 
   it('4. setLocalSession and getLocalSession strictly assign system_admin to founder marwan-desouky', () => {

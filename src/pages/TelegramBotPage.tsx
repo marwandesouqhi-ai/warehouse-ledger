@@ -319,8 +319,9 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                   type="button"
                   onClick={() => setShowChatIdGuide((prev) => !prev)}
                   className="text-xs text-primary hover:underline flex items-center gap-1.5 min-h-[32px] px-2.5 py-1 rounded-md hover:bg-primary/10 transition-colors"
+                  aria-expanded={showChatIdGuide}
                 >
-                  <Info size={14} />
+                  <Info size={14} aria-hidden="true" />
                   <span>كيف أحصل على معرف تليجرام؟</span>
                 </button>
               </div>

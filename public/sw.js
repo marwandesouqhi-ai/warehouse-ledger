@@ -93,9 +93,10 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static assets (CSS, JS, Fonts, Images): Stale-while-revalidate
+  // Static assets (CSS, JS, Fonts, Images): Stale-while-revalidate (never cache sw.js itself)
   if (
     url.origin === self.location.origin &&
+    url.pathname !== '/sw.js' &&
     (url.pathname.startsWith('/assets/') ||
       url.pathname.endsWith('.js') ||
       url.pathname.endsWith('.css') ||

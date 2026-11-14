@@ -40,14 +40,15 @@ import {
 } from '../lib/supportTicketsRepository'
 import { checkIsSystemAdmin } from '../lib/supabase'
 import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
+import { escapeHtml, isSafeExternalUrl, isSafeImageUrl, safeWindowOpen } from '../lib/security'
 
 type SupportPageProps = {
   session?: Session | null
 }
 
-const SUPPORT_EMAIL = 'marwandesowky2@gmail.com'
-const SUPPORT_PHONE = '01011488621'
-const WHATSAPP_NUMBER = '201011488621'
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || 'support@warehouse.local'
+const SUPPORT_PHONE = import.meta.env.VITE_SUPPORT_PHONE || ''
+const WHATSAPP_NUMBER = import.meta.env.VITE_SUPPORT_WHATSAPP || ''
 
 const DEPARTMENTS = [
   'المستودعات والمخازن',
@@ -77,8 +78,6 @@ export default function SupportPage({ session }: SupportPageProps) {
   const isSysAdmin = Boolean(
     isSystemAdmin(session) ||
     checkIsSystemAdmin(session) ||
-    session?.user?.email?.toLowerCase() === 'marwandesouqhi@gmail.com' ||
-    session?.user?.email?.toLowerCase() === 'marwandesowky2@gmail.com' ||
     session?.user?.app_metadata?.role === 'system_admin' ||
     session?.user?.app_metadata?.system_admin === true
   )
@@ -356,9 +355,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
         )
       }
 
-      window.open(url, '_blank')
+      if (WHATSAPP_NUMBER) {
+        safeWindowOpen(url, '_blank')
+      }
       setStatusMessage({
-        text: `تم حفظ التذكرة #${savedTicket.ticket_number} بنجاح في قاعدة البيانات وفتح الواتساب`,
+        text: `تم حفظ التذكرة #${savedTicket.ticket_number} بنجاح في قاعدة البيانات`,
         type: 'success',
       })
       resetFormForNewTicket()
@@ -431,13 +432,29 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
   }
 
   function handlePrintTicket(ticket: SupportTicket) {
-    const printWindow = window.open('', '_blank', 'width=700,height=800')
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=700,height=800')
     if (!printWindow) return
+    printWindow.opener = null
+
+    const safeTicketNo = escapeHtml(ticket.ticket_number)
+    const safeName = escapeHtml(ticket.employee_name)
+    const safeCode = escapeHtml(ticket.employee_code || 'غير محدد')
+    const safeDept = escapeHtml(ticket.department)
+    const safePriority = escapeHtml(ticket.priority)
+    const safeCategory = escapeHtml(ticket.category)
+    const safeCreated = escapeHtml(new Date(ticket.created_at).toLocaleString('ar-EG'))
+    const safeStatus = escapeHtml(ticket.status)
+    const safeSubject = escapeHtml(ticket.subject)
+    const safeDescription = escapeHtml(ticket.description)
+    const safeAttachment = ticket.attachment_name ? escapeHtml(ticket.attachment_name) : ''
+    const safeAdminNotes = ticket.admin_notes ? escapeHtml(ticket.admin_notes) : ''
+    const safeSupportContact = escapeHtml([SUPPORT_PHONE, SUPPORT_EMAIL].filter(Boolean).join(' - '))
 
     printWindow.document.write(`
       <html dir="rtl" lang="ar">
         <head>
-          <title>تذكرة دعم فني #${ticket.ticket_number}</title>
+          <meta charset="utf-8" />
+          <title>تذكرة دعم فني #${safeTicketNo}</title>
           <style>
             body { font-family: Cairo, Tahoma, sans-serif; padding: 24px; color: #1e293b; line-height: 1.6; }
             .header { border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
@@ -452,46 +469,46 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
         <body>
           <div class="header">
             <h2>نظام إدارة المخازن (Warehouse Ledger) - إيصال تذكرة دعم فني</h2>
-            <span class="ticket-badge">رقم التذكرة: #${ticket.ticket_number}</span>
+            <span class="ticket-badge">رقم التذكرة: #${safeTicketNo}</span>
           </div>
 
           <table class="meta-table">
             <tr>
               <td class="label">اسم الموظف:</td>
-              <td>${ticket.employee_name}</td>
+              <td>${safeName}</td>
               <td class="label">كود الموظف / الهاتف:</td>
-              <td>${ticket.employee_code || 'غير محدد'}</td>
+              <td>${safeCode}</td>
             </tr>
             <tr>
               <td class="label">القسم / الإدارة:</td>
-              <td>${ticket.department}</td>
+              <td>${safeDept}</td>
               <td class="label">درجة الأولوية:</td>
-              <td>${ticket.priority}</td>
+              <td>${safePriority}</td>
             </tr>
             <tr>
               <td class="label">نوع المشكلة:</td>
-              <td>${ticket.category}</td>
+              <td>${safeCategory}</td>
               <td class="label">تاريخ الإنشاء:</td>
-              <td>${new Date(ticket.created_at).toLocaleString('ar-EG')}</td>
+              <td>${safeCreated}</td>
             </tr>
             <tr>
               <td class="label">الحالة الحالية:</td>
-              <td colspan="3"><strong>${ticket.status}</strong></td>
+              <td colspan="3"><strong>${safeStatus}</strong></td>
             </tr>
             <tr>
               <td class="label">عنوان البلاغ:</td>
-              <td colspan="3"><strong>${ticket.subject}</strong></td>
+              <td colspan="3"><strong>${safeSubject}</strong></td>
             </tr>
           </table>
 
           <h3>تفاصيل المشكلة والشكوى:</h3>
-          <div class="content-box">${ticket.description}</div>
+          <div class="content-box">${safeDescription}</div>
 
-          ${ticket.attachment_name ? `<p><strong>المرفق:</strong> ${ticket.attachment_name}</p>` : ''}
-          ${ticket.admin_notes ? `<p><strong>رد وملاحظات الدعم الفني:</strong> ${ticket.admin_notes}</p>` : ''}
+          ${safeAttachment ? `<p><strong>المرفق:</strong> ${safeAttachment}</p>` : ''}
+          ${safeAdminNotes ? `<p><strong>رد وملاحظات الدعم الفني:</strong> ${safeAdminNotes}</p>` : ''}
 
           <div class="footer">
-            تم تسجيل وحفظ هذه التذكرة مركزياً بقاعدة بيانات النظام | مسؤول الدعم: ${SUPPORT_PHONE} - ${SUPPORT_EMAIL}
+            تم تسجيل وحفظ هذه التذكرة مركزياً بقاعدة بيانات النظام${safeSupportContact ? ` | مسؤول الدعم: ${safeSupportContact}` : ''}
           </div>
         </body>
       </html>
@@ -506,6 +523,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
   // Admin Actions: Update status & notes
   async function handleUpdateStatus(ticketId: string, newStatus: TicketStatus, notes?: string) {
+    if (!isSysAdmin) return
     const adminName =
       session?.user?.user_metadata?.name ||
       session?.user?.email ||
@@ -1992,11 +2010,11 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                 <span style={{ fontSize: '12px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>الملف المرفق:</span>
                 <div style={{ fontSize: '12px', padding: '8px 10px', borderRadius: '6px', background: 'var(--surface-sunken, #f8fafc)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>{selectedTicket.attachment_name || 'ملف مرفق'}</span>
-                  {selectedTicket.attachment_url && (
+                  {selectedTicket.attachment_url && isSafeExternalUrl(selectedTicket.attachment_url) && (
                     <a
                       href={selectedTicket.attachment_url}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       style={{ color: 'var(--accent, #3b82f6)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 700 }}
                     >
                       <ExternalLink size={13} />
@@ -2004,7 +2022,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
                     </a>
                   )}
                 </div>
-                {selectedTicket.attachment_url && selectedTicket.attachment_type?.startsWith('image/') && (
+                {selectedTicket.attachment_url && selectedTicket.attachment_type?.startsWith('image/') && isSafeImageUrl(selectedTicket.attachment_url) && (
                   <div style={{ marginTop: '8px', textAlign: 'center' }}>
                     <img
                       src={selectedTicket.attachment_url}

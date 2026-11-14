@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './supabase'
+import { isSafeExternalUrl } from './security'
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
@@ -21,6 +22,9 @@ export const ALLOWED_ATTACHMENT_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
 ]
+
+const ALLOWED_ATTACHMENT_EXT_RE = /\.(pdf|doc|docx|xls|xlsx|txt|png|jpg|jpeg|webp|gif)$/i
+const SAFE_DATA_ATTACHMENT_RE = /^data:(image\/(png|jpeg|jpg|webp|gif)|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet)|application\/vnd\.ms-excel|text\/plain);base64,[A-Za-z0-9+/=]+$/i
 
 export interface AttachmentValidationResult {
   isValid: boolean
@@ -42,15 +46,22 @@ export function validateAttachmentFile(file: File): AttachmentValidationResult {
     }
   }
 
-  // السماح بملفات الصور والمستندات
-  if (
-    !ALLOWED_ATTACHMENT_MIME_TYPES.includes(file.type) &&
-    !file.type.startsWith('image/') &&
-    !file.name.match(/\.(pdf|doc|docx|xls|xlsx|txt|png|jpg|jpeg|webp)$/i)
-  ) {
+  const lowerMime = (file.type || '').toLowerCase()
+  const lowerName = (file.name || '').toLowerCase()
+
+  // Strictly block SVG/HTML/scriptable formats to prevent Stored XSS
+  if (lowerMime.includes('svg') || lowerName.endsWith('.svg') || lowerName.endsWith('.html') || lowerName.endsWith('.htm')) {
     return {
       isValid: false,
-      error: 'نوع الملف غير مدعوم. يرجى اختيار ملف مستند (PDF, Word, Excel) أو صورة (JPG, PNG, WebP).',
+      error: 'ملفات SVG أو HTML غير مسموح برفعها لأسباب أمنية. يُرجى استخدام PNG أو JPG أو PDF.',
+    }
+  }
+
+  // السماح فقط بالصور النقطية والمستندات المعتمدة
+  if (!ALLOWED_ATTACHMENT_MIME_TYPES.includes(lowerMime) || !ALLOWED_ATTACHMENT_EXT_RE.test(lowerName)) {
+    return {
+      isValid: false,
+      error: 'نوع الملف غير مدعوم. يرجى اختيار ملف مستند (PDF, Word, Excel, TXT) أو صورة (JPG, PNG, WebP, GIF).',
     }
   }
 
@@ -80,9 +91,13 @@ export function fileToDataUrl(file: File): Promise<string> {
  */
 export function downloadAttachment(urlOrDataUrl: string, fileName: string): void {
   if (typeof document === 'undefined') return
+  const trimmed = (urlOrDataUrl || '').trim()
+  if (!isSafeExternalUrl(trimmed, { allowHttpLocalhost: true }) && !SAFE_DATA_ATTACHMENT_RE.test(trimmed)) {
+    return
+  }
   const anchor = document.createElement('a')
-  anchor.href = urlOrDataUrl
-  anchor.download = fileName || 'مستند_مرفق'
+  anchor.href = trimmed
+  anchor.download = (fileName || 'مستند_مرفق').replace(/[\\/:*?"<>|]/g, '_')
   anchor.target = '_blank'
   anchor.rel = 'noopener noreferrer'
   document.body.appendChild(anchor)

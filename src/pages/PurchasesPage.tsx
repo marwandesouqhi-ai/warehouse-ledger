@@ -16,7 +16,6 @@ import {
   Search,
   ShoppingCart,
   Sparkles,
-  Trash2,
   UserCheck,
   X,
 } from 'lucide-react'
@@ -35,7 +34,6 @@ type PurchasesPageProps = {
   currency: AppSettings['currency']
   onSaveMovement: (movement: FixtureMovement) => Promise<void>
   onEdit: (movement: FixtureMovement) => void
-  onDelete: (movement: FixtureMovement) => void
   onLoadDemoData: () => void
   canEdit?: boolean
   isSystemAdmin?: boolean
@@ -56,7 +54,6 @@ export default function PurchasesPage({
   currency,
   onSaveMovement,
   onEdit,
-  onDelete,
   onLoadDemoData,
   isSystemAdmin = false,
   session,
@@ -740,16 +737,6 @@ export default function PurchasesPage({
                               >
                                 <Pencil size={15} />
                                 <span>تعديل</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="table-action-btn delete-action-btn"
-                                onClick={() => onDelete(movement)}
-                                title="حذف الفاتورة"
-                                aria-label={`حذف حركة ${movement.item}`}
-                              >
-                                <Trash2 size={15} />
-                                <span>حذف</span>
                               </button>
                             </div>
                           ) : (

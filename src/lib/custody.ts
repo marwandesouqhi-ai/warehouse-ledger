@@ -1,6 +1,7 @@
 import { getAccessSession, canReadCurrentDepartment, assertDepartmentWrite } from './accessContext'
 import { isSystemAdmin } from './permissions'
 import { getCairoDateString } from './dateUtils'
+import { sanitizeSpreadsheetCell } from './security'
 import type { FixtureMovement } from './fixture'
 export type WarehouseDefinition = {
   id: string
@@ -1338,20 +1339,20 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
 
     return {
       'م': index + 1,
-      'كود العهدة': item.code,
-      'اسم الصنف': item.name,
-      'التصنيف': item.category,
-      'أمين العهدة': item.custodian,
+      'كود العهدة': sanitizeSpreadsheetCell(item.code),
+      'اسم الصنف': sanitizeSpreadsheetCell(item.name),
+      'التصنيف': sanitizeSpreadsheetCell(item.category),
+      'أمين العهدة': sanitizeSpreadsheetCell(item.custodian),
       'الكمية': item.quantity,
-      'الوحدة': item.unit,
+      'الوحدة': sanitizeSpreadsheetCell(item.unit),
       [`سعر الوحدة (${currency})`]: unitPrice,
       [`إجمالي القيمة (${currency})`]: item.value,
-      'نوع العهدة': item.custodyType,
+      'نوع العهدة': sanitizeSpreadsheetCell(item.custodyType),
       'الحالة الفنية': conditionText,
-      'المكان / القاعة': item.roomLocation,
-      'تاريخ القيد': item.acquisitionDate,
-      'الرقم التسلسلي': item.serialNumber || '—',
-      'ملاحظات': item.notes || '',
+      'المكان / القاعة': sanitizeSpreadsheetCell(item.roomLocation),
+      'تاريخ القيد': sanitizeSpreadsheetCell(item.acquisitionDate),
+      'الرقم التسلسلي': sanitizeSpreadsheetCell(item.serialNumber || '—'),
+      'ملاحظات': sanitizeSpreadsheetCell(item.notes || ''),
     }
   })
 
@@ -1360,7 +1361,7 @@ export async function exportCustodyToExcel(warehouseName: string, items: Custody
     rows.push({
       'م': ('—' as unknown as number),
       'كود العهدة': 'الإجمالي العام',
-      'اسم الصنف': `إجمالي ${items.length} صنف مسجل في ${warehouseName}`,
+      'اسم الصنف': sanitizeSpreadsheetCell(`إجمالي ${items.length} صنف مسجل في ${warehouseName}`),
       'التصنيف': '',
       'أمين العهدة': '',
       'الكمية': totalUnits,
@@ -1415,9 +1416,9 @@ export async function exportComprehensiveCustodyWorkbook(
     const stats = getWarehouseStats(whItems)
     return {
       'م': idx + 1,
-      'المخزن / الكلية': wh.name,
+      'المخزن / الكلية': sanitizeSpreadsheetCell(wh.name),
       'الصفة': wh.isHub ? 'المخزن الرئيسي المغذي' : 'كلية / مخزن فرعي',
-      'الموقع': wh.building,
+      'الموقع': sanitizeSpreadsheetCell(wh.building),
       'عدد بنود الأصناف': stats.totalItems,
       'إجمالي عدد الوحدات والأجهزة': stats.totalUnits,
       [`إجمالي القيمة الدفترية (${currency})`]: stats.totalValue,
@@ -1434,7 +1435,7 @@ export async function exportComprehensiveCustodyWorkbook(
     'م': ('—' as unknown as number),
     'المخزن / الكلية': 'الإجمالي العام لكافة المخازن والكليات',
     'الصفة': `${WAREHOUSES.length} مخزن وكلية`,
-    'الموقع': organizationName,
+    'الموقع': sanitizeSpreadsheetCell(organizationName),
     'عدد بنود الأصناف': overallStats.totalItems,
     'إجمالي عدد الوحدات والأجهزة': overallStats.totalUnits,
     [`إجمالي القيمة الدفترية (${currency})`]: overallStats.totalValue,
@@ -1475,20 +1476,20 @@ export async function exportComprehensiveCustodyWorkbook(
 
       return {
         'م': index + 1,
-        'كود العهدة': item.code,
-        'اسم الصنف': item.name,
-        'التصنيف': item.category,
-        'أمين العهدة': item.custodian,
+        'كود العهدة': sanitizeSpreadsheetCell(item.code),
+        'اسم الصنف': sanitizeSpreadsheetCell(item.name),
+        'التصنيف': sanitizeSpreadsheetCell(item.category),
+        'أمين العهدة': sanitizeSpreadsheetCell(item.custodian),
         'الكمية': item.quantity,
-        'الوحدة': item.unit,
+        'الوحدة': sanitizeSpreadsheetCell(item.unit),
         [`سعر الوحدة (${currency})`]: unitPrice,
         [`إجمالي القيمة (${currency})`]: item.value,
-        'نوع العهدة': item.custodyType,
+        'نوع العهدة': sanitizeSpreadsheetCell(item.custodyType),
         'الحالة الفنية': conditionText,
-        'المكان / القاعة': item.roomLocation,
-        'تاريخ القيد': item.acquisitionDate,
-        'الرقم التسلسلي': item.serialNumber || '—',
-        'ملاحظات': item.notes || '',
+        'المكان / القاعة': sanitizeSpreadsheetCell(item.roomLocation),
+        'تاريخ القيد': sanitizeSpreadsheetCell(item.acquisitionDate),
+        'الرقم التسلسلي': sanitizeSpreadsheetCell(item.serialNumber || '—'),
+        'ملاحظات': sanitizeSpreadsheetCell(item.notes || ''),
       }
     })
 

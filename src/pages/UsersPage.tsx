@@ -42,9 +42,7 @@ import {
 } from '../lib/permissions'
 import {
     addLocalUser,
-    changeUserPassword,
     deleteUserPermanently,
-    getLocalSession,
     isLastActiveSystemAdmin,
     loadLocalUsers,
     saveUserToCloud,
@@ -84,22 +82,19 @@ type UsersPageProps = {
 
 export default function UsersPage({ session }: UsersPageProps) {
     const isSystemAdmin = checkIsSystemAdmin(session)
-    const localSess = getLocalSession()
     const activeUserEmail = (
         (session?.user?.app_metadata as any)?.username ||
         session?.user?.email ||
-        (localSess?.user?.app_metadata as any)?.username ||
-        localSess?.user?.email ||
         ''
     )
-    const currentSession = localSess || session
+    const currentSession = session
 
     // Check if current caller is marwan-desouky (protected System Admin)
     const isCallerProtected = isProtectedUsername(activeUserEmail) || isProtectedUsername(session?.user?.email)
 
-    const activeUserRole = ((session?.user?.app_metadata as any)?.role as string) || ((localSess?.user?.app_metadata as any)?.role as string) || ''
+    const activeUserRole = ((session?.user?.app_metadata as any)?.role as string) || ''
     const isDepartmentAdmin = activeUserRole === 'admin' || activeUserRole === 'warehouse_admin' || activeUserRole === 'procurement_admin'
-    const rawDept = ((session?.user?.app_metadata as any)?.department as string) || ((localSess?.user?.app_metadata as any)?.department as string) || ''
+    const rawDept = ((session?.user?.app_metadata as any)?.department as string) || ''
     const userDepartment = rawDept || (activeUserRole === 'warehouse_admin' ? 'المخازن' : activeUserRole === 'procurement_admin' ? 'المشتريات' : '')
 
     // Navigation Tab & Filter States
@@ -265,9 +260,11 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     function generateRandomPassword() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*'
+        const randomValues = new Uint32Array(16)
+        globalThis.crypto.getRandomValues(randomValues)
         let pwd = ''
         for (let i = 0; i < 16; i++) {
-            pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+            pwd += chars.charAt(randomValues[i] % chars.length)
         }
         setNewPassword(pwd)
     }
@@ -312,11 +309,11 @@ export default function UsersPage({ session }: UsersPageProps) {
                 }
             }
 
-            // 2. Add to local registry and sync to app_users table
+            // 2. Add to local registry and sync to app_users table (never persist plaintext password locally)
             const added = addLocalUser({
                 username: newUsername,
                 displayName: newDisplayName,
-                password: newPassword,
+                password: 'server-managed-password',
                 role: newRole,
                 department: newDepartment,
                 email: newEmail || undefined,
@@ -673,9 +670,11 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     function handleGenerateModalPassword() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*'
+        const randomValues = new Uint32Array(16)
+        globalThis.crypto.getRandomValues(randomValues)
         let pwd = ''
         for (let i = 0; i < 16; i++) {
-            pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+            pwd += chars.charAt(randomValues[i] % chars.length)
         }
         setModalNewPassword(pwd)
     }
@@ -691,15 +690,15 @@ export default function UsersPage({ session }: UsersPageProps) {
             return
         }
 
-        if (!modalNewPassword || modalNewPassword.length < 6) {
-            setPwdModalError('كلمة المرور يجب أن لا تقل عن 6 أحرف أو أرقام للأمان.')
+        if (!modalNewPassword || modalNewPassword.length < 10) {
+            setPwdModalError('كلمة المرور يجب أن لا تقل عن 10 أحرف أو أرقام للأمان.')
             return
         }
 
         try {
             setPwdModalSaving(true)
 
-            // 1. Sync new password to Supabase Auth via admin-users Edge Function
+            // Sync new password exclusively to Supabase Auth via admin-users Edge Function (never persist plaintext passwords locally)
             if (supabase && (isSystemAdmin || session)) {
                 const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-users', {
                     body: {
@@ -707,7 +706,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                         username: pwdModalUser.username,
                         userId: pwdModalUser.id,
                         newPassword: modalNewPassword,
-                        mustChangePassword: false,
+                        mustChangePassword: true,
                     },
                 })
                 if (edgeErr || !edgeData?.success) {
@@ -715,8 +714,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                 }
             }
 
-            // 2. Update local state and mirror database row
-            changeUserPassword(pwdModalUser.id, modalNewPassword)
             reloadUsers()
             setPwdModalSuccess(`تم تحديث كلمة المرور للمستخدم "${pwdModalUser.username}" بنجاح! يمكنه تسجيل الدخول بها فوراً.`)
             void logAuditEvent({
@@ -742,8 +739,8 @@ export default function UsersPage({ session }: UsersPageProps) {
             setSelfPasswordError('يرجى كتابة كلمة المرور الجديدة.')
             return
         }
-        if (selfPassword.length < 6) {
-            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام للأمان.')
+        if (selfPassword.length < 10) {
+            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 10 أحرف أو أرقام للأمان.')
             return
         }
         if (selfPassword !== selfConfirm) {
@@ -758,19 +755,6 @@ export default function UsersPage({ session }: UsersPageProps) {
                 if (authErr) throw authErr
             }
 
-            const currentId = currentSession?.user?.id
-            const currentEmail = currentSession?.user?.email || 'admin'
-
-            // Find matching user in localUsers
-            const found = localUsers.find(
-                (u) =>
-                    (u.id === currentId && u.username.toLowerCase() !== 'marwandesouqhi@gmail.com') ||
-                    (u.username.toLowerCase() === currentEmail.toLowerCase() && currentEmail.toLowerCase() !== 'marwandesouqhi@gmail.com')
-            ) || localUsers.find((u) => u.username.toLowerCase() === 'marwan-desouky')
-
-            if (found) {
-                updateLocalUser(found.id, { password: selfPassword })
-            }
             setSelfPasswordSuccess('تم حفظ وتحديث كلمة المرور الجديدة لحسابك بنجاح!')
             void logAuditEvent({
                 action: `تغيير كلمة المرور الشخصية للمستخدم الحالي`,

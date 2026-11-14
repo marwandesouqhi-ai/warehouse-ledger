@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef, lazy, Suspense, type FormEvent } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
+import { sanitizeSpreadsheetCell } from '../lib/security'
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -624,15 +625,15 @@ export default function CustodyPage({
     const XLSX = await import('xlsx')
     const rows = filteredDisbursements.map((m, idx) => ({
       'م': idx + 1,
-      'تاريخ الصرف': m.date || '—',
-      'اسم الصنف': m.item,
+      'تاريخ الصرف': sanitizeSpreadsheetCell(m.date || '—'),
+      'اسم الصنف': sanitizeSpreadsheetCell(m.item),
       'الكمية المنصرفة': Number(m.qout) || 0,
       'سعر الوحدة': Number(m.price) || 0,
       'إجمالي القيمة': (Number(m.qout) || 0) * (Number(m.price) || 0),
-      'المخزن المصدر': m.from || 'المخزن الرئيسي',
-      'الوجهة / المستلم': m.to || '—',
-      'رقم الإذن': m.permit || m.issue || '—',
-      'ملاحظات': m.notes || '',
+      'المخزن المصدر': sanitizeSpreadsheetCell(m.from || 'المخزن الرئيسي'),
+      'الوجهة / المستلم': sanitizeSpreadsheetCell(m.to || '—'),
+      'رقم الإذن': sanitizeSpreadsheetCell(m.permit || m.issue || '—'),
+      'ملاحظات': sanitizeSpreadsheetCell(m.notes || ''),
     }))
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()

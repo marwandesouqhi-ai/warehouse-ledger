@@ -5,6 +5,7 @@ import {
   isProtectedUsername,
   canDeleteUser,
   normalizeUsername,
+  PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL,
 } from './protectedAccounts'
 
 export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
@@ -109,7 +110,6 @@ export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutco
       username: user.username.toLowerCase(),
       display_name: user.displayName,
       role: user.role,
-      activation_code: user.activationCode,
       status: user.status,
       notes: user.notes || '',
       permissions: user.permissions || [],
@@ -121,13 +121,10 @@ export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutco
       department: user.department || null,
       telegram_user_id: user.telegramUserId || null,
     }
-    if (user.password && user.password.trim().length > 0) {
-      payload.password = user.password
-    }
 
     const { data: existing, error: selectErr } = await supabase
       .from('app_users')
-      .select('id, password')
+      .select('id')
       .eq('username', user.username.toLowerCase())
       .maybeSingle()
 
@@ -136,9 +133,6 @@ export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutco
     }
 
     if (existing) {
-      if (!payload.password && existing.password) {
-        payload.password = existing.password
-      }
       const { error: updateErr } = await supabase.from('app_users').update(payload).eq('id', existing.id)
       if (updateErr) {
         return { status: 'saved_locally', error: `تعذر تحديث بيانات المستخدم سحابياً: ${updateErr.message}` }
@@ -287,7 +281,7 @@ const DEFAULT_ADMIN: LocalUser = {
   createdAt: new Date().toISOString(),
   permissions: ['view_audit', 'view_settings', 'manage_records'],
   employeeId: 'SYS-ADM-000001',
-  email: 'marwandesouqhi@gmail.com',
+  email: 'marwan-desouky@warehouse.local',
   department: 'الإدارة العامة',
 }
 
@@ -309,7 +303,7 @@ export function purgeDeletedAccount(emailOrUsername = ''): void {
   // Purging system administrator session or account is strictly forbidden.
   if (!emailOrUsername) return
   const target = emailOrUsername.toLowerCase().trim()
-  if (target === 'marwandesouqhi@gmail.com' || target === 'marwan-desouky') {
+  if (target === PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL || target === 'marwan-desouky') {
     return
   }
 
@@ -368,8 +362,13 @@ export function purgeDeletedAccount(emailOrUsername = ''): void {
 }
 
 export function generateActivationPin(): string {
-  // Generate a clean 6-digit numeric activation code
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  // Generate a cryptographically random 6-digit numeric activation code
+  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.getRandomValues === 'function') {
+    const buf = new Uint32Array(1)
+    globalThis.crypto.getRandomValues(buf)
+    return String(100000 + (buf[0] % 900000))
+  }
+  return String(100000 + Math.floor(Math.random() * 900000))
 }
 
 export function loadLocalUsers(): LocalUser[] {
@@ -383,8 +382,8 @@ export function loadLocalUsers(): LocalUser[] {
         // Completely purge the deleted old account marwandesouqhi@gmail.com if present
         const filtered = users.filter(
           (u) =>
-            u.username?.toLowerCase() !== 'marwandesouqhi@gmail.com' &&
-            u.displayName?.toLowerCase() !== 'marwandesouqhi@gmail.com'
+            u.username?.toLowerCase() !== PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL &&
+            u.displayName?.toLowerCase() !== PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL
         )
         let needsSave = filtered.length !== users.length
         users = filtered
@@ -428,28 +427,7 @@ export function loadLocalUsers(): LocalUser[] {
           }
         }
 
-        // If Ahmad Hussein Salah is not yet in users, insert him
-        const ahmadIdx = users.findIndex(
-          (u) => u.email?.toLowerCase() === 'marwandesouky507@gmail.com' || u.employeeId === 'WH-EMP-000002'
-        )
-        if (ahmadIdx === -1) {
-          users.push({
-            id: 'usr-38d3e5f8-6eb2-433b-be39-c088558c3237',
-            username: 'ahmed-hussain',
-            displayName: 'أحمد حسين صلاح',
-            password: '',
-            role: 'warehouse_employee',
-            status: 'active',
-            activationCode: '',
-            createdAt: '2026-10-30T00:00:00.000Z',
-            employeeId: 'WH-EMP-000002',
-            email: 'marwandesouky507@gmail.com',
-            department: 'المخازن',
-            telegramUserId: 1200587150,
-            permissions: [],
-          })
-          needsSave = true
-        }
+        // Remove any legacy hardcoded default employee seed mutation from local storage
 
         if (needsSave) {
           saveLocalUsers(users)
@@ -552,8 +530,12 @@ export function addLocalUser(data: {
     allocatedEmpId = `${prefix}-${String(maxNum + 1).padStart(6, '0')}`
   }
 
+  const randomIdSuffix =
+    typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID().slice(0, 8)
+      : `${Date.now()}`
   const newUser: LocalUser = {
-    id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `usr-${Date.now()}-${randomIdSuffix}`,
     username: cleanUsername,
     displayName: data.displayName?.trim() || cleanUsername,
     password: data.password,
@@ -579,7 +561,6 @@ export function addLocalUser(data: {
       displayName: newUser.displayName,
       role: newUser.role,
       status: newUser.status,
-      activationCode: newUser.activationCode,
       permissions: newUser.permissions,
     },
   })

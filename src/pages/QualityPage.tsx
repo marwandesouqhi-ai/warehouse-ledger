@@ -95,8 +95,8 @@ export default function QualityPage({ movements, onInspect, session }: QualityPa
       const res = await runDataQualityAutoRepair(session?.user?.id)
       setRepairNotice(res.message)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setRepairNotice('حدث خطأ أثناء تشغيل أداة الإصلاح الذاتي: ' + msg)
+      console.error('Quality auto-repair failed:', err)
+      setRepairNotice('حدث خطأ أثناء تشغيل أداة الإصلاح الذاتي.')
     } finally {
       setIsRepairing(false)
     }

@@ -16,12 +16,12 @@ import {
   RotateCw,
   CheckCircle2,
   FileCheck,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react'
 import {
   fetchAssetMovements,
   createAssetMovement,
-  deleteAssetMovement,
   type AssetMovement,
 } from '../lib/assetMovementRepository'
 import { purgeDatabaseDemoData } from '../lib/purgeDemoData'
@@ -136,21 +136,6 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const handleDeleteMovement = async (id: string, code: string) => {
-    if (!canModify) return
-    if (!window.confirm(`هل أنت متأكد من حذف حركة الأصل (${code})؟`)) {
-      return
-    }
-    await deleteAssetMovement(id)
-    setMovements((prev) => prev.filter((m) => m.id !== id))
-    setSuccessMessage(`تم حذف حركة الأصل (${code}) بنجاح.`)
-    void logAuditEvent({
-      action: `حذف حركة الأصل: ${code}`,
-      entity_type: 'asset_history',
-      user: session?.user,
-    })
   }
 
   const handlePurgeDemo = async () => {
@@ -274,7 +259,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                 <th>الكمية</th>
                 <th>الحالة والملاحظات</th>
                 <th>المسؤول / التاريخ</th>
-                <th className="w-16 text-center">إجراءات</th>
+                <th className="w-24 text-center">حالة القيد</th>
               </tr>
             </thead>
             <tbody>
@@ -328,14 +313,9 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                         </time>
                       </td>
                       <td className="text-center">
-                        <button hidden={!canModify}
-                          type="button"
-                          className="icon-action-btn hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded transition-colors"
-                          onClick={() => handleDeleteMovement(m.id, m.asset_code)}
-                          title="حذف حركة الأصل"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800" title="سجل حركة الأصل دائم ومحفوظ بالكامل وغير قابل للحذف">
+                          <ShieldCheck size={12} className="text-emerald-600" /> موثق دائم
+                        </span>
                       </td>
                     </tr>
                   )

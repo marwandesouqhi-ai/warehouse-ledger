@@ -40,6 +40,7 @@ import type { FixtureMovement } from '../lib/fixture'
 import { getDashboardScope } from '../lib/permissions'
 import { extractSuppliersFromMovements } from '../lib/suppliersRepository'
 import { loadAppSettings, type AppSettings } from '../lib/settings'
+import { sanitizeSpreadsheetCell } from '../lib/security'
 import { AnimatePresence } from 'motion/react'
 import { OfficialDisbursementPermitModal } from '../components/OfficialDisbursementPermitModal'
 import { InventorySettlementModal } from '../components/InventorySettlementModal'
@@ -110,14 +111,14 @@ export default function ReportsPage({
     const XLSX = await import('xlsx')
     const rows = purchaseMovements.map((m, idx) => ({
       'م': idx + 1,
-      'تاريخ التوريد': m.date || '—',
-      'رقم الفاتورة': m.inv || '—',
-      'المورد / الشركة': m.from || '—',
-      'الصنف': m.item || '—',
+      'تاريخ التوريد': sanitizeSpreadsheetCell(m.date || '—'),
+      'رقم الفاتورة': sanitizeSpreadsheetCell(m.inv || '—'),
+      'المورد / الشركة': sanitizeSpreadsheetCell(m.from || '—'),
+      'الصنف': sanitizeSpreadsheetCell(m.item || '—'),
       'الكمية الواردة': Number(m.qin) || 0,
       'سعر الوحدة': Number(m.price) || 0,
       'القيمة الإجمالية': (Number(m.qin) || 0) * (Number(m.price) || 0),
-      'ملاحظات': m.notes || '',
+      'ملاحظات': sanitizeSpreadsheetCell(m.notes || ''),
     }))
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -129,15 +130,15 @@ export default function ReportsPage({
     const XLSX = await import('xlsx')
     const rows = procurementSuppliers.map((s, idx) => ({
       'م': idx + 1,
-      'اسم المورد / الشركة': s.name,
-      'تصنيف التوريد': s.category || 'عام',
+      'اسم المورد / الشركة': sanitizeSpreadsheetCell(s.name),
+      'تصنيف التوريد': sanitizeSpreadsheetCell(s.category || 'عام'),
       'فواتير الشراء': s.invoices_count,
       'أوامر الشراء': s.po_count,
       'إجمالي الإنفاق المالي': s.total_spend,
       'حالة الاعتماد': s.status === 'active' ? 'معتمد نشط' : s.status === 'under_review' ? 'تحت المراجعة' : 'معلق',
-      'مسؤول الاتصال': s.contact_name || '—',
-      'رقم الهاتف': s.phone || '—',
-      'السجل التجاري': s.commercial_register || '—',
+      'مسؤول الاتصال': sanitizeSpreadsheetCell(s.contact_name || '—'),
+      'رقم الهاتف': sanitizeSpreadsheetCell(s.phone || '—'),
+      'السجل التجاري': sanitizeSpreadsheetCell(s.commercial_register || '—'),
     }))
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(rows)

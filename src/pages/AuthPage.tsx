@@ -90,11 +90,13 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             const raw = hash.includes('error=') ? hash.replace(/^#/, '') : search.replace(/^\?/, '')
             const params = new URLSearchParams(raw)
             const code = params.get('error_code') || ''
-            const desc = params.get('error_description') || params.get('error') || ''
-            if (code === 'otp_expired' || desc.toLowerCase().includes('expired') || desc.toLowerCase().includes('invalid')) {
+            const desc = (params.get('error_description') || params.get('error') || '').toLowerCase()
+            if (code === 'otp_expired' || desc.includes('expired') || desc.includes('invalid')) {
                 setError('⚠️ رابط تفعيل الحساب أو استعادة كلمة المرور غير صالح أو انتهت صلاحيته (الروابط صالحة للاستخدام لمرة واحدة فقط). إذا كنت بحاجة لرابط جديد، يمكنك طلبه مجدداً.')
-            } else if (desc) {
-                setError(decodeURIComponent(desc.replace(/\+/g, ' ')))
+            } else if (code === 'access_denied' || desc.includes('denied')) {
+                setError('تم رفض طلب المصادقة أو إلغاؤه.')
+            } else if (code || desc) {
+                setError('تعذر إتمام عملية المصادقة عبر الرابط. يرجى المحاولة مرة أخرى أو طلب رابط جديد.')
             }
             // Clean URL hash so back/refresh doesn't re-trigger error state
             window.history.replaceState(null, '', window.location.pathname)
@@ -449,23 +451,9 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     }
                 }
 
-                // 2. Fallback path if login-bridge Edge Function is unreachable in this environment
+                // 2. Fail closed when login-bridge is unavailable instead of bypassing server-side lockouts
                 if (!signInData && bridgeUnavailable) {
-                    const targetAuthEmail = cleanUser.includes('@')
-                        ? cleanUser.toLowerCase()
-                        : `${cleanUser.toLowerCase()}@warehouse.local`
-
-                    const directRes = await supabase.auth.signInWithPassword({
-                        email: targetAuthEmail,
-                        password,
-                    })
-
-                    if (!directRes.error && directRes.data?.session) {
-                        signInData = directRes.data
-                        signInError = null
-                    } else {
-                        signInError = directRes.error
-                    }
+                    throw new Error('خدمة التحقق من الدخول غير متاحة حالياً. يرجى المحاولة بعد قليل أو مراجعة مسؤول النظام.')
                 }
             }
 
@@ -804,8 +792,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={6}
-                                        placeholder="6 أحرف أو أرقام على الأقل"
+                                        minLength={10}
+                                        placeholder="10 أحرف أو أرقام على الأقل"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         required
@@ -828,8 +816,8 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                                     <input
                                         type={showConfirmPassword ? 'text' : 'password'}
                                         autoComplete="new-password"
-                                        minLength={6}
-                                        placeholder="أعد كتابة كلمة المرور (6 أحرف على الأقل)"
+                                        minLength={10}
+                                        placeholder="أعد كتابة كلمة المرور (10 أحرف على الأقل)"
                                         value={confirmPassword}
                                         onChange={(event) => setConfirmPassword(event.target.value)}
                                         required

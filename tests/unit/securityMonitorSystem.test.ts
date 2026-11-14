@@ -149,7 +149,8 @@ async function createSecurityTestDatabase() {
       email TEXT DEFAULT '',
       auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
       permissions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-      last_login_at TIMESTAMPTZ
+      last_login_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
     CREATE TABLE public.movements (
@@ -164,7 +165,10 @@ async function createSecurityTestDatabase() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL,
       subject TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'open'
+      status TEXT NOT NULL DEFAULT 'open',
+      admin_notes TEXT DEFAULT NULL,
+      resolved_by UUID DEFAULT NULL,
+      resolved_at TIMESTAMPTZ DEFAULT NULL
     );
 
     CREATE TABLE public.purchase_requests (
@@ -221,17 +225,23 @@ async function createSecurityTestDatabase() {
     join(ROOT_DIR, 'supabase', 'migrations', '20261111163000_n8n_security_events_bridge.sql'),
     'utf8'
   )
+  const mig5 = readFileSync(
+    join(ROOT_DIR, 'supabase', 'migrations', '20261112160000_security_audit_remediation.sql'),
+    'utf8'
+  )
 
   await db.exec(mig1)
   await db.exec(mig2)
   await db.exec(mig3)
   await db.exec(mig4)
+  await db.exec(mig5)
 
-  // Assert all 4 security migrations are safely re-runnable (idempotent)
+  // Assert all 5 security migrations are safely re-runnable (idempotent)
   await db.exec(mig1)
   await db.exec(mig2)
   await db.exec(mig3)
   await db.exec(mig4)
+  await db.exec(mig5)
 
   return db
 }
@@ -270,6 +280,10 @@ describe('PostgreSQL Security Monitor Schema, Triggers, RLS & Retention (PGlite)
         staffId,
         'staff@warehouse.local',
       ])
+      await db.query(
+        `INSERT INTO public.app_users (id, username, role, status, email, auth_user_id) VALUES ($1, 'sysadmin', 'system_admin', 'active', $2, $3), ($4, 'staff1', 'warehouse_employee', 'active', $5, $6)`,
+        ['row-admin', 'admin@warehouse.local', adminId, 'row-staff', 'staff@warehouse.local', staffId]
+      )
 
       // Verify required indexes exist
       const idxRes = await db.query<{ indexname: string }>(
@@ -315,7 +329,7 @@ describe('PostgreSQL Security Monitor Schema, Triggers, RLS & Retention (PGlite)
       // Verify row was stored with authentic staffId & downgraded severity = 'warning'
       await setDbClaims(db, { sub: adminId, email: 'admin@warehouse.local', role: 'system_admin', system_admin: true }, 'authenticated')
       const adminVisible = await db.query<{ actor_id: string; actor_role: string; severity: string }>(
-        `SELECT actor_id, actor_role, severity FROM public.audit_logs`
+        `SELECT actor_id, actor_role, severity FROM public.audit_logs WHERE action = 'client spoof attempt'`
       )
       expect(adminVisible.rows[0]).toMatchObject({
         actor_id: staffId,
@@ -418,7 +432,15 @@ describe('PostgreSQL Security Monitor Schema, Triggers, RLS & Retention (PGlite)
       expect(after11.rows[0].severity).toBe('critical')
       expect(after11.rows[0].details.recent_deletes_count).toBe(11)
 
-      // 5. Brute-force failed logins via record_security_event (5 within 10 mins -> CRITICAL)
+      // 5. Non-service callers cannot forge security events directly; service_role invokes record_security_event
+      await expect(
+        db.query(
+          `SELECT public.record_security_event('failed_login', 'دخول فاشل', $1::jsonb, 'warning', 'auth', 'usera', '192.168.1.50', 'Vitest') AS res`,
+          [JSON.stringify({ identifier: 'usera' })]
+        )
+      ).rejects.toThrow(/غير مصرح|42501/)
+
+      await setDbClaims(db, { sub: adminId, email: 'admin@warehouse.local', role: 'system_admin', system_admin: true }, 'service_role')
       for (let attempt = 1; attempt <= 4; attempt++) {
         const res = await db.query<{ res: { severity: string; event_type: string } }>(
           `SELECT public.record_security_event('failed_login', 'دخول فاشل', $1::jsonb, 'warning', 'auth', 'usera', '192.168.1.50', 'Vitest') AS res`,
@@ -434,6 +456,7 @@ describe('PostgreSQL Security Monitor Schema, Triggers, RLS & Retention (PGlite)
       expect(fifth.rows[0].res.event_type).toBe('brute_force_failed_logins')
 
       // 6. Retention policy purge_expired_audit_logs: non-admin denied; admin archives & removes > 180d rows
+      await setDbClaims(db, { sub: userB, email: 'userb@warehouse.local', role: 'warehouse_employee' }, 'authenticated')
       await expect(db.query(`SELECT public.purge_expired_audit_logs(180)`)).rejects.toThrow(/غير مصرح|42501/)
 
       await setDbClaims(db, { sub: adminId, email: 'admin@warehouse.local', role: 'system_admin', system_admin: true }, 'service_role')
@@ -902,7 +925,8 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
       await setDbClaims(db, { sub: staffAuthId, email: 'ali@znu.edu.eg', role: 'viewer' }, 'authenticated')
       await db.query(`UPDATE public.app_users SET role = 'system_admin' WHERE id = 'usr-staff'`)
 
-      // 4. Unauthorized API denial, mass delete & login anomaly via record_security_event
+      // 4. Unauthorized API denial, mass delete & login anomaly via record_security_event (service_role only)
+      await setDbClaims(db, { sub: ownerAuthId, email: 'admin@warehouse.local', role: 'system_admin', system_admin: true }, 'service_role')
       await db.query(
         `SELECT public.record_security_event('unauthorized_api_access', 'محاولة محظورة', '{}'::jsonb, 'critical', 'movements', '', '10.0.0.5', 'vitest')`
       )
@@ -917,7 +941,7 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
       // 5. Same login_failed via audit_logs within 10s must NOT duplicate login_attempts row
       await db.query(
         `SELECT public.record_security_event('failed_login', 'فشل دخول', $1::jsonb, 'warning', 'login_attempts', '', '41.33.1.2', 'vitest')`,
-        [JSON.stringify({ username: 'ali@znu.edu.eg' })]
+        [JSON.stringify({ target_username: 'ali@znu.edu.eg', username: 'ali@znu.edu.eg' })]
       )
 
       const allEvents = await db.query<{
@@ -1024,7 +1048,7 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
 
     const successAfterFail = incidents.find((i) => i.json.raw_rule === 'تسجيل دخول ناجح بعد محاولات فاشلة')!
     expect(successAfterFail.json.severity).toBe('CRITICAL')
-    expect(successAfterFail.json.can_block).toBe(true)
+    expect(successAfterFail.json.can_block).toBe(false)
     expect(successAfterFail.json.email).toContain('&lt;script&gt;')
 
     const runStats = new Function('$input', statsNode.parameters.jsCode as string)

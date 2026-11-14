@@ -9,7 +9,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
   },
   server: {
-    host: true,
+    host: process.env.VITE_HOST || '127.0.0.1',
     open: true,
   },
   test: {
