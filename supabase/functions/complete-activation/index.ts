@@ -399,6 +399,15 @@ serve(async (req: Request) => {
         },
       })
 
+      // RLS reads the per-user access matrix (set by the system admin at approval) from app_users.
+      const grantedAccess = (caller.app_metadata as Record<string, unknown> | undefined)?.access
+      if (grantedAccess && typeof grantedAccess === "object") {
+        await supabaseAdmin
+          .from("app_users")
+          .update({ access_matrix: grantedAccess })
+          .eq("employee_id", userRow.employee_id)
+      }
+
       // Send confirmation to Telegram if registered
       const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")
       if (botToken && userRow.telegram_user_id) {
