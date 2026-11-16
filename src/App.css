@@ -13102,10 +13102,15 @@ a {
     display: flex !important;
     align-items: center !important;
     justify-content: space-around !important;
-    z-index: 1050 !important;
+    z-index: 900 !important; /* below modals (1000) so form actions are never covered */
     box-shadow: 0 10px 35px rgba(16, 37, 39, 0.12) !important;
     padding: 0 6px !important;
     box-sizing: border-box !important;
+  }
+
+  /* Hide the floating assistant while a modal is open so it never covers form fields/actions */
+  body:has(.modal-backdrop, .disbursement-modal-backdrop, [role='dialog']) .chatbot-trigger-btn {
+    display: none !important;
   }
 
   :root[data-theme='dark'] .mobile-bottom-dock {

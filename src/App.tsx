@@ -3239,10 +3239,12 @@ function App() {
           <Receipt size={20} />
           <span>المشتريات</span>
         </NavLink>
-        <NavLink to="/movements" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
-          <Boxes size={20} />
-          <span>المخازن</span>
-        </NavLink>
+        {canViewPage(session, 'custody') && (
+          <NavLink to="/custody" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+            <Boxes size={20} />
+            <span>المخازن</span>
+          </NavLink>
+        )}
         <NavLink to="/reports" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
           <FileSpreadsheet size={20} />
           <span>التقارير</span>
