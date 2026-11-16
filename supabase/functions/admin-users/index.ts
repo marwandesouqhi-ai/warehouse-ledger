@@ -4,6 +4,47 @@ import nodemailer from "npm:nodemailer"
 
 const DEFAULT_APP_ORIGIN = "https://warehouse-ledger-vert.vercel.app"
 
+// Per-user access matrix (set by system admin). Keep keys in sync with MATRIX_PAGES in src/lib/permissions.ts.
+const ACCESS_MATRIX_PAGES: Record<string, string[] | null> = {
+  purchases: ["list", "add"],
+  suppliers: null,
+  quotes: null,
+  contracts: null,
+  custody: ["items", "disbursements"],
+  requests: null,
+  quality: null,
+  analytics: null,
+  asset_history: null,
+  reports: null,
+  financial_reports: null,
+  budget: null,
+  imports: null,
+}
+
+function sanitizeAccessMatrix(raw: unknown): { v: 1; pages: Record<string, Record<string, unknown>> } | null {
+  if (!raw || typeof raw !== "object") return null
+  const pagesRaw = (raw as { pages?: unknown }).pages
+  if (!pagesRaw || typeof pagesRaw !== "object") return null
+  const pages: Record<string, Record<string, unknown>> = {}
+  for (const [key, tabs] of Object.entries(ACCESS_MATRIX_PAGES)) {
+    const src = (pagesRaw as Record<string, unknown>)[key]
+    if (!src || typeof src !== "object") continue
+    const s = src as Record<string, unknown>
+    const view = s.view === true
+    const entry: Record<string, unknown> = {
+      view,
+      create: view && s.create === true,
+      update: view && s.update === true,
+      delete: view && s.delete === true,
+    }
+    if (Array.isArray(s.tabs) && tabs) {
+      entry.tabs = s.tabs.filter((t): t is string => typeof t === "string" && tabs.includes(t))
+    }
+    pages[key] = entry
+  }
+  return { v: 1, pages }
+}
+
 function getAllowedOrigins(): string[] {
   const origins = new Set<string>([DEFAULT_APP_ORIGIN])
   const envUrl = (Deno.env.get("APP_BASE_URL") || Deno.env.get("SITE_URL") || "").trim()
@@ -1006,6 +1047,7 @@ ${recoveryLink}
           department,
           telegramUserId: mirror?.telegram_user_id || null,
           permissions: (u.app_metadata?.permissions as string[]) || mirror?.permissions || [],
+          accessMatrix: u.app_metadata?.access ?? mirror?.access_matrix ?? null,
           mustChangePassword: Boolean(u.app_metadata?.must_change_password ?? mirror?.must_change_password),
           createdAt: u.created_at,
           lastSignInAt: u.last_sign_in_at || mirror?.last_login_at,
@@ -1146,6 +1188,8 @@ ${recoveryLink}
           employee_id: assignedEmployeeId,
           permissions: permissions || [],
           must_change_password: Boolean(requirePasswordChange),
+          ...(isSystemAdmin && body.accessMatrix && sanitizeAccessMatrix(body.accessMatrix)
+            ? { access: sanitizeAccessMatrix(body.accessMatrix) } : {}),
         },
       })
 
@@ -1167,6 +1211,7 @@ ${recoveryLink}
         employee_id: assignedEmployeeId,
         status: "active",
         permissions: permissions || [],
+        ...(isSystemAdmin && body.accessMatrix ? { access_matrix: sanitizeAccessMatrix(body.accessMatrix) } : {}),
         auth_user_id: createData.user?.id,
         must_change_password: Boolean(requirePasswordChange),
       }, { onConflict: "username" })
@@ -1414,29 +1459,45 @@ ${recoveryLink}
         : (permissions ?? oldPermissions)
 
       const newDepartment = body.department || oldDepartment
+
+      // Access matrix: only a system admin may set it; `null` clears it (role defaults apply again).
+      const matrixProvided = Object.prototype.hasOwnProperty.call(body, "accessMatrix") && !isTargetProtected
+      if (matrixProvided && !isSystemAdmin) {
+        return new Response(JSON.stringify({ error: "غير مصرح: تخصيص صلاحيات الصفحات والإجراءات لمدير النظام فقط." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+      const newMatrix = matrixProvided ? sanitizeAccessMatrix(body.accessMatrix) : (targetUser.user.app_metadata?.access ?? null)
+      const nextAppMetadata: Record<string, unknown> = {
+        ...targetUser.user.app_metadata,
+        role: newRole,
+        department: newDepartment,
+        system_admin: isTargetProtected,
+        permissions: newPermissions,
+      }
+      if (newMatrix) nextAppMetadata.access = newMatrix
+      else delete nextAppMetadata.access
+
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: {
           ...targetUser.user.user_metadata,
           displayName: displayName || targetUser.user.user_metadata?.displayName,
         },
-        app_metadata: {
-          ...targetUser.user.app_metadata,
-          role: newRole,
-          department: newDepartment,
-          system_admin: isTargetProtected,
-          permissions: newPermissions,
-        },
+        app_metadata: nextAppMetadata,
       })
 
       if (updateError) throw updateError
 
       // Mirror to app_users
-      await supabaseAdmin.from("app_users").update({
+      const mirrorPatch: Record<string, unknown> = {
         display_name: displayName || targetUser.user.user_metadata?.displayName,
         role: newRole,
         department: newDepartment,
         permissions: newPermissions,
-      }).eq("username", targetUsername.toLowerCase())
+      }
+      if (matrixProvided) mirrorPatch.access_matrix = newMatrix
+      await supabaseAdmin.from("app_users").update(mirrorPatch).eq("username", targetUsername.toLowerCase())
 
       const roleChanged = oldRole !== newRole
       const permsChanged = JSON.stringify(oldPermissions) !== JSON.stringify(newPermissions)
@@ -2048,6 +2109,8 @@ ${recoveryLink}
       }
 
       const roleToAssign = approvedRole || regReq.requested_role
+      // Per-user access matrix chosen by the system admin at approval time (ignored for department admins).
+      const approvalMatrix = isSystemAdmin && body.accessMatrix ? sanitizeAccessMatrix(body.accessMatrix) : null
 
       if (roleToAssign === "system_admin") {
         return new Response(JSON.stringify({
@@ -2268,6 +2331,7 @@ ${recoveryLink}
             department: regReq.requested_department,
             system_admin: false,
             status: "pending_activation",
+            ...(approvalMatrix ? { access: approvalMatrix } : {}),
           },
         })
 
@@ -2277,6 +2341,7 @@ ${recoveryLink}
           .update({
             auth_user_id: targetAuthUser.id,
             status: "pending_activation",
+            ...(approvalMatrix ? { access_matrix: approvalMatrix } : {}),
           })
           .eq("employee_id", allocatedEmployeeId)
       }

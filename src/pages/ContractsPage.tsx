@@ -30,7 +30,7 @@ import {
   fileToDataUrl,
   downloadAttachment,
 } from '../lib/procurementAttachments'
-import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
+import { isSystemAdmin, canAddDepartment, canPageAction } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 import { getCairoDateString } from '../lib/dateUtils'
 import { notify, confirmDialog } from '../lib/dialogs'
@@ -85,7 +85,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
   const [isReadingFile, setIsReadingFile] = useState(false)
   const [attachmentError, setAttachmentError] = useState('')
 
-  const isAdmin = isSystemAdmin(session)
+  const isAdmin = isSystemAdmin(session) || canPageAction(session, 'contracts', 'delete')
 
   const loadData = async () => {
     setIsLoading(true)

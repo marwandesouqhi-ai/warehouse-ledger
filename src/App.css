@@ -13512,3 +13512,17 @@ html:root[data-theme] .mobile-greeting-subtitle,
 html:root[data-theme] .mobile-greeting-date {
   font-size: 0.92rem !important;
 }
+
+/* Per-user access matrix editor */
+.access-matrix { border: 1px solid var(--line, rgba(128,128,128,.3)); border-radius: 12px; padding: 12px; margin: 12px 0; min-width: 0; }
+.access-matrix-title { font-weight: 600; padding: 0 6px; }
+.access-matrix-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 4px 0; }
+.access-matrix-hint { font-size: .85rem; opacity: .75; margin: 4px 0 8px; }
+.access-matrix-scroll { overflow-x: auto; }
+.access-matrix-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.access-matrix-table th, .access-matrix-table td { padding: 6px 8px; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); text-align: center; }
+.access-matrix-table th[scope="row"] { text-align: right; font-weight: 500; }
+.access-matrix-table thead th { font-weight: 600; white-space: nowrap; }
+.access-matrix-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent, #2a9d8f); }
+.access-matrix-tabs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: .8rem; font-weight: 400; opacity: .85; }
+.access-matrix-tab { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }

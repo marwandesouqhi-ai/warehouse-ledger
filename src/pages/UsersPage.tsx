@@ -28,6 +28,8 @@ import { matchesSearch } from '../lib/searchUtils'
 import { supabase, checkIsSystemAdmin } from '../lib/supabase'
 import { logAuditEvent } from '../lib/auditLogger'
 import { AccessibleDialog } from '../components/AccessibleDialog'
+import AccessMatrixEditor from '../components/AccessMatrixEditor'
+import type { AccessMatrix } from '../lib/permissions'
 import {
     isProtectedUsername,
     canDeleteUser,
@@ -113,6 +115,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [requestsLoading, setRequestsLoading] = useState(false)
     const [approvingReq, setApprovingReq] = useState<RegistrationRequest | null>(null)
     const [selectedApprovedRole, setSelectedApprovedRole] = useState<string>('')
+    const [approveMatrix, setApproveMatrix] = useState<AccessMatrix | null>(null)
     const [rejectingReq, setRejectingReq] = useState<RegistrationRequest | null>(null)
     const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('')
     const [suspendingUser, setSuspendingUser] = useState<LocalUser | null>(null)
@@ -162,6 +165,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [editRole, setEditRole] = useState<UserRole>('editor')
     const [editDepartment, setEditDepartment] = useState<'المخازن' | 'المشتريات' | 'الإدارة العامة'>('المخازن')
     const [editPermissions, setEditPermissions] = useState<string[]>([])
+    const [editMatrix, setEditMatrix] = useState<AccessMatrix | null>(null)
     const [editPassword, setEditPassword] = useState('')
     const [showEditPassword, setShowEditPassword] = useState(false)
     const [editStatus, setEditStatus] = useState<UserStatus>('active')
@@ -354,6 +358,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setEditRole(user.role)
         setEditDepartment((user.department as any) || (user.role.startsWith('procurement') ? 'المشتريات' : 'المخازن'))
         setEditPermissions(user.permissions || [])
+        setEditMatrix(user.accessMatrix ?? null)
         setEditPassword('')
         setEditStatus(user.status)
         setEditError('')
@@ -400,7 +405,9 @@ export default function UsersPage({ session }: UsersPageProps) {
             // 2. Sync role and permissions to Supabase Auth
             if (supabase && (isSystemAdmin || session)) {
                 try {
-                    await supabase.functions.invoke('admin-users', {
+                    const matrixChanged = isSystemAdmin
+                        && JSON.stringify(editMatrix) !== JSON.stringify(editingUser.accessMatrix ?? null)
+                    const { data: updData, error: updErr } = await supabase.functions.invoke('admin-users', {
                         body: {
                             action: 'update_user',
                             userId: editingUser.id,
@@ -409,9 +416,14 @@ export default function UsersPage({ session }: UsersPageProps) {
                             role: editRole,
                             department: editDepartment,
                             permissions: editPermissions,
+                            ...(matrixChanged ? { accessMatrix: editMatrix } : {}),
                         },
                     })
+                    if (matrixChanged && (updErr || !updData?.success)) {
+                        throw new Error(updData?.error || updErr?.message || 'تعذر حفظ صلاحيات الصفحات والإجراءات.')
+                    }
                 } catch (edgeCatch) {
+                    if (edgeCatch instanceof Error && edgeCatch.message.includes('صلاحيات الصفحات')) throw edgeCatch
                     console.warn('admin-users update_user fallback:', edgeCatch)
                 }
             }
@@ -421,6 +433,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                 role: editRole,
                 department: editDepartment,
                 permissions: editPermissions,
+                ...(isSystemAdmin ? { accessMatrix: editMatrix } : {}),
                 status: editStatus,
                 ...(editPassword ? { password: editPassword } : {}),
             })
@@ -466,7 +479,7 @@ export default function UsersPage({ session }: UsersPageProps) {
         setActionFeedback(null)
         try {
             const roleToAssign = selectedApprovedRole || approvingReq.requestedRole || 'warehouse_employee'
-            const res = await approveRegistrationRequest(approvingReq.id, roleToAssign)
+            const res = await approveRegistrationRequest(approvingReq.id, roleToAssign, undefined, isSystemAdmin ? approveMatrix : null)
             if (res.success) {
                 setActionFeedback({
                     message: `تم اعتماد وتسجيل الموظف "${approvingReq.fullName}" بنجاح! تم تخصيص الرقم الوظيفي (${res.employeeId || 'تم تخصيصه'}) وإرسال رابط الدعوة إلى بريده الإلكتروني (${approvingReq.email}) عبر Google SMTP.`,
@@ -1659,6 +1672,7 @@ export default function UsersPage({ session }: UsersPageProps) {
                                                             className="primary-btn btn-sm"
                                                             onClick={() => {
                                                                 setApprovingReq(req)
+                                                                setApproveMatrix(null)
                                                                 setSelectedApprovedRole(req.requestedRole || 'warehouse_employee')
                                                             }}
                                                             aria-label={`قبول وإرسال الدعوة للمتقدم ${req.fullName}`}
@@ -1874,6 +1888,10 @@ export default function UsersPage({ session }: UsersPageProps) {
                                         ))}
                                     </div>
                                 </div>
+
+                                {isSystemAdmin && !isProtectedUsername(editingUser.username) && (
+                                    <AccessMatrixEditor value={editMatrix} onChange={setEditMatrix} />
+                                )}
 
                                 <label className="form-label-block">
                                     تغيير كلمة المرور (اتركه فارغاً للإبقاء على الحالية)
@@ -2110,6 +2128,10 @@ export default function UsersPage({ session }: UsersPageProps) {
                                 سيتم توليد الرقم الوظيفي الموحد (Unique ID) فورياً، وإنشاء ملف الموظف بحالة بانتظار التفعيل، وإرسال رابط دعوة إلى بريده الإلكتروني ({approvingReq.email}) عبر Google SMTP لاختيار اسم المستخدم وكلمة المرور.
                             </span>
                         </label>
+
+                        {isSystemAdmin && (
+                            <AccessMatrixEditor value={approveMatrix} onChange={setApproveMatrix} disabled={isActionLoading} />
+                        )}
 
                         <div className="form-actions mt-3">
                             <button

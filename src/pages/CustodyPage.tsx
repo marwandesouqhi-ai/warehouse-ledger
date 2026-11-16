@@ -89,7 +89,7 @@ import { matchesSearch } from '../lib/searchUtils'
 import { canEditInventory, checkIsSystemAdmin } from '../lib/supabase'
 import type { FixtureMovement } from '../lib/fixture'
 import { getStoredMovements } from '../lib/backup'
-import { canCreateDisbursement } from '../lib/permissions'
+import { canCreateDisbursement, canPageAction, canViewTab } from '../lib/permissions'
 import { getCairoDateString } from '../lib/dateUtils'
 import { notify } from '../lib/dialogs'
 
@@ -126,6 +126,8 @@ export default function CustodyPage({
   const canEdit = canEditInventory(session)
   const canDisburse = canCreateDisbursement(session)
   const isSystemAdmin = checkIsSystemAdmin(session)
+  const canUpdateItem = isSystemAdmin || canPageAction(session, 'custody', 'update')
+  const canDeleteItem = isSystemAdmin || canPageAction(session, 'custody', 'delete')
   const settings = propSettings || loadAppSettings()
   const currency = propCurrency || settings.currency || 'EGP'
   const [items, setItems] = useState<CustodyItem[]>(loadCustodyItems)
@@ -134,6 +136,13 @@ export default function CustodyPage({
   const [mainTab, setMainTab] = useState<'items' | 'disbursements'>(() => {
     return searchParams.get('tab') === 'disbursements' ? 'disbursements' : 'items'
   })
+
+  const showItemsTab = canViewTab(session, 'custody', 'items')
+  const showDisbTab = canViewTab(session, 'custody', 'disbursements')
+  useEffect(() => {
+    if (mainTab === 'items' && !showItemsTab && showDisbTab) setMainTab('disbursements')
+    if (mainTab === 'disbursements' && !showDisbTab && showItemsTab) setMainTab('items')
+  }, [mainTab, showItemsTab, showDisbTab])
 
   useEffect(() => {
     const tabParam = searchParams.get('tab')
@@ -360,8 +369,8 @@ export default function CustodyPage({
   function handleSaveItem(item: CustodyItem) {
     if (!canEdit) return
     const exists = items.some((i) => i.id === item.id)
-    if (exists && !isSystemAdmin) {
-      notify('تعديل الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
+    if (exists && !canUpdateItem) {
+      notify('ليست لديك صلاحية تعديل الأصناف. يحددها مدير النظام.')
       return
     }
 
@@ -392,8 +401,8 @@ export default function CustodyPage({
   }
 
   function handleDeleteItem(item: CustodyItem) {
-    if (!isSystemAdmin) {
-      notify('حذف الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
+    if (!canDeleteItem) {
+      notify('ليست لديك صلاحية حذف الأصناف. يحددها مدير النظام.')
       return
     }
 
@@ -916,7 +925,7 @@ export default function CustodyPage({
 
       {/* 1.5 Primary View Navigation Tabs */}
       <div className="custody-nav-tabs-bar no-print" role="tablist">
-        <button
+        {showItemsTab && <button
           type="button"
           role="tab"
           aria-selected={mainTab === 'items'}
@@ -927,9 +936,9 @@ export default function CustodyPage({
           <Package size={18} />
           <span>الأصناف والعهدة الحالية</span>
           <span className="badge-pill">{items.length}</span>
-        </button>
+        </button>}
 
-        <button
+        {showDisbTab && <button
           type="button"
           role="tab"
           aria-selected={mainTab === 'disbursements'}
@@ -940,7 +949,7 @@ export default function CustodyPage({
           <ArrowLeftRight size={18} />
           <span>حركات المنصرف والتحويل</span>
           <span className="badge-pill">{outwardMovements.length}</span>
-        </button>
+        </button>}
       </div>
 
       {mainTab === 'items' ? (
@@ -1249,7 +1258,7 @@ export default function CustodyPage({
                                       <span>صرف لفرعي</span>
                                     </button>
                                   )}
-                                  {isSystemAdmin && (
+                                  {canUpdateItem && (
                                     <button
                                       type="button"
                                       className="table-action-btn edit-action-btn"
@@ -1271,7 +1280,7 @@ export default function CustodyPage({
                                     <ArrowLeftRight size={14} />
                                     <span>نقل</span>
                                   </button>
-                                  {isSystemAdmin && (
+                                  {canDeleteItem && (
                                     <button
                                       type="button"
                                       className="table-action-btn delete-action-btn"
@@ -1283,9 +1292,9 @@ export default function CustodyPage({
                                       <span>حذف</span>
                                     </button>
                                   )}
-                                  {!isSystemAdmin && (
-                                    <span className="read-only-badge" title="التعديل والحذف لمدير النظام فقط">
-                                      <Eye size={12} /> تعديل/حذف: للمدير فقط
+                                  {!canUpdateItem && !canDeleteItem && (
+                                    <span className="read-only-badge" title="التعديل والحذف يحددهما مدير النظام">
+                                      <Eye size={12} /> تعديل/حذف: غير مصرح
                                     </span>
                                   )}
                                 </>
@@ -1528,7 +1537,7 @@ export default function CustodyPage({
       )}
 
       {/* 6. Add/Edit Modal */}
-      {(isAddingNew || (isSystemAdmin && editingItem)) && (
+      {(isAddingNew || (canUpdateItem && editingItem)) && (
         <CustodyItemModal
           initialItem={editingItem}
           defaultWarehouseId={activeWarehouseId}
@@ -1565,7 +1574,7 @@ export default function CustodyPage({
       )}
 
       {/* 9. Delete Confirmation Modal */}
-      {isSystemAdmin && deletingItem && (
+      {canDeleteItem && deletingItem && (
         <div className="modal-backdrop" onClick={() => setDeletingItem(null)}>
           <div className="modal-dialog modal-dialog-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">

@@ -139,7 +139,8 @@ export async function fetchRegistrationRequests(): Promise<RegistrationRequest[]
 export async function approveRegistrationRequest(
   requestId: string,
   approvedRole: string,
-  reviewerId: string = 'system-admin'
+  reviewerId: string = 'system-admin',
+  accessMatrix?: unknown
 ): Promise<{ success: boolean; employeeId: string; message: string; error?: string }> {
   if (approvedRole === 'system_admin') {
     throw new Error('غير مصرح: لا يمكن منح دور مدير النظام الرئيسي من خلال طلبات تسجيل الموظفين.')
@@ -154,6 +155,7 @@ export async function approveRegistrationRequest(
           requestId,
           approvedRole,
           reviewerId,
+          ...(accessMatrix ? { accessMatrix } : {}),
         },
       })
 

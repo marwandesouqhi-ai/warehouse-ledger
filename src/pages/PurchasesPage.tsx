@@ -24,7 +24,7 @@ import type { FixtureMovement } from '../lib/fixture'
 import type { AppSettings } from '../lib/settings'
 import { deriveMovement } from '../lib/derive'
 import { getCairoDateString, parseDateToTimestamp } from '../lib/dateUtils'
-import { canCreatePurchase } from '../lib/permissions'
+import { canCreatePurchase, canPageAction, canViewTab } from '../lib/permissions'
 import { matchesSearch } from '../lib/searchUtils'
 
 import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
@@ -139,8 +139,8 @@ export default function PurchasesPage({
     }
   }, [purchases])
 
-  const userCanAdd = canCreatePurchase(session)
-  const canManageRecords = isSystemAdmin
+  const userCanAdd = canCreatePurchase(session) && canViewTab(session, 'purchases', 'add')
+  const canManageRecords = isSystemAdmin || canPageAction(session, 'purchases', 'update')
 
   // Search and staff filtering
   const filteredPurchases = useMemo(() => {

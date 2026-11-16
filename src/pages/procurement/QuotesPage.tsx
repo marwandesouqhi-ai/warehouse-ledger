@@ -1,4 +1,4 @@
-import { canAddDepartment, isSystemAdmin } from '../../lib/permissions'
+import { canAddDepartment, canPageAction, isSystemAdmin } from '../../lib/permissions'
 import { getCairoDateString } from '../../lib/dateUtils'
 import { useState, useEffect, useMemo } from 'react'
 import type { Session } from '@supabase/supabase-js'
@@ -55,7 +55,7 @@ function sanitizeExcelCell<T>(value: T): T {
 
 export default function QuotesPage({ session, currency }: QuotesPageProps) {
   const canAdd = canAddDepartment(session, 'procurement')
-  const isSysAdmin = isSystemAdmin(session)
+  const isSysAdmin = isSystemAdmin(session) || canPageAction(session, 'quotes', 'update')
   const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [selectedRequestId, setSelectedRequestId] = useState<string>('')
   const [quotes, setQuotes] = useState<SupplierQuote[]>([])

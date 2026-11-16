@@ -23,7 +23,7 @@ import {
   type SupplierStats,
   type SupplierStatus,
 } from '../../lib/suppliersRepository'
-import { isSystemAdmin, canAddDepartment } from '../../lib/permissions'
+import { isSystemAdmin, canAddDepartment, canPageAction } from '../../lib/permissions'
 import { logAuditEvent } from '../../lib/auditLogger'
 import { matchesSearch } from '../../lib/searchUtils'
 import { notify, confirmDialog } from '../../lib/dialogs'
@@ -60,7 +60,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   const [formRating, setFormRating] = useState<string>('')
   const [formNotes, setFormNotes] = useState('')
 
-  const isSysAdmin = isSystemAdmin(session)
+  const isSysAdmin = isSystemAdmin(session) || canPageAction(session, 'suppliers', 'update')
+  const canDeleteSupplier = isSystemAdmin(session) || canPageAction(session, 'suppliers', 'delete')
 
   async function loadData() {
     setLoading(true)
@@ -567,8 +568,8 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
                         <option value="suspended">موقوف</option>
                       </select>
 
-                      {isSysAdmin && (
-                        <button hidden={!isSysAdmin}
+                      {canDeleteSupplier && (
+                        <button hidden={!canDeleteSupplier}
                           type="button"
                           className="suppliers-icon-btn danger"
                           title="حذف المورد نهائياً (متاح فقط إذا لم تكن له حركات)"

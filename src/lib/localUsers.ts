@@ -1,6 +1,7 @@
 import { logAuditEvent } from './auditLogger'
 import { supabase } from './supabase'
 import type { PersistenceOutcome } from './settings'
+import { sanitizeAccessMatrix } from './permissions'
 import {
   isProtectedUsername,
   canDeleteUser,
@@ -20,7 +21,7 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
 
     const { data, error } = await supabase
       .from('app_users')
-      .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions, employee_id, email, department, telegram_user_id')
+      .select('id, username, display_name, role, activation_code, status, created_at, activated_at, last_login_at, notes, permissions, access_matrix, employee_id, email, department, telegram_user_id')
       .order('created_at', { ascending: true })
     if (error) {
       console.warn('Could not query app_users from cloud:', error)
@@ -41,6 +42,7 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
       email: row.email || undefined,
       department: row.department || undefined,
       telegramUserId: row.telegram_user_id || undefined,
+      accessMatrix: sanitizeAccessMatrix(row.access_matrix),
       permissions: Array.isArray(row.permissions)
         ? row.permissions
         : typeof row.permissions === 'string'
@@ -217,6 +219,8 @@ export type LocalUser = {
   lastLoginAt?: string
   notes?: string
   permissions?: string[]
+  /** Per-user page/tab/action matrix set by the system admin (null = role defaults). */
+  accessMatrix?: import('./permissions').AccessMatrix | null
   employeeId?: string
   email?: string
   department?: string
@@ -239,6 +243,7 @@ export type LocalUserSession = {
       role: UserRole
       system_admin: boolean
       permissions?: string[]
+      access?: unknown
       username?: string
       employeeId?: string
     }
@@ -633,6 +638,7 @@ export function setLocalSession(user: LocalUser): LocalUserSession {
         role: effectiveRole,
         system_admin: isSysAdmin,
         permissions: effectivePermissions,
+        ...(user.accessMatrix && !isSysAdmin ? { access: user.accessMatrix } : {}),
         username: user.username,
       },
     },
