@@ -179,9 +179,6 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [pwdModalSaving, setPwdModalSaving] = useState(false)
 
     // Self Password Change State
-    const [selfPassword, setSelfPassword] = useState('')
-    const [selfConfirm, setSelfConfirm] = useState('')
-    const [showSelfPassword, setShowSelfPassword] = useState(false)
     const [selfPasswordSaving, setSelfPasswordSaving] = useState(false)
     const [selfPasswordSuccess, setSelfPasswordSuccess] = useState('')
     const [selfPasswordError, setSelfPasswordError] = useState('')
@@ -745,38 +742,25 @@ export default function UsersPage({ session }: UsersPageProps) {
     async function handleSaveSelfPassword() {
         setSelfPasswordError('')
         setSelfPasswordSuccess('')
-        if (!selfPassword) {
-            setSelfPasswordError('يرجى كتابة كلمة المرور الجديدة.')
-            return
-        }
-        if (selfPassword.length < 10) {
-            setSelfPasswordError('كلمة المرور يجب ألا تقل عن 10 أحرف أو أرقام للأمان.')
-            return
-        }
-        if (selfPassword !== selfConfirm) {
-            setSelfPasswordError('كلمة المرور وتأكيدها غير متطابقين.')
+        const email = String(session?.user?.email || '').trim().toLowerCase()
+        if (!email || !email.includes('@')) {
+            setSelfPasswordError('لا يوجد بريد إلكتروني مسجل لحسابك.')
             return
         }
 
         setSelfPasswordSaving(true)
         try {
-            if (supabase && session) {
-                const { error: authErr } = await supabase.auth.updateUser({ password: selfPassword })
-                if (authErr) throw authErr
-            }
-
-            setSelfPasswordSuccess('تم حفظ وتحديث كلمة المرور الجديدة لحسابك بنجاح!')
+            const res = await sendPasswordRecovery({ email })
+            if (!res.success) throw new Error(res.error || res.message)
+            setSelfPasswordSuccess(`تم إرسال رابط تغيير كلمة المرور إلى ${email}. الرابط صالح لمدة 15 دقيقة.`)
             void logAuditEvent({
-                action: `تغيير كلمة المرور الشخصية للمستخدم الحالي`,
+                action: `طلب تغيير كلمة المرور الشخصية عبر البريد`,
                 entity_type: 'user',
                 details: { username: activeUserEmail },
                 user: currentSession?.user,
             })
-            setSelfPassword('')
-            setSelfConfirm('')
-            reloadUsers()
         } catch (err) {
-            setSelfPasswordError(err instanceof Error ? err.message : 'تعذر تحديث كلمة المرور.')
+            setSelfPasswordError(err instanceof Error ? err.message : 'تعذر إرسال رابط تغيير كلمة المرور.')
         } finally {
             setSelfPasswordSaving(false)
         }
@@ -1776,50 +1760,19 @@ export default function UsersPage({ session }: UsersPageProps) {
                     </div>
 
                     <div className="users-security-box">
-                        <div className="form-grid-2col">
-                            <label className="user-field-group">
-                                <span>كلمة المرور الجديدة <span className="req-star">*</span></span>
-                                <div className="users-input-wrapper">
-                                    <input
-                                        type={showSelfPassword ? 'text' : 'password'}
-                                        value={selfPassword}
-                                        onChange={(e) => setSelfPassword(e.target.value)}
-                                        placeholder="أدخل كلمة المرور الجديدة"
-                                        className="user-field-input input-with-end-padding"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowSelfPassword(!showSelfPassword)}
-                                        className="users-pw-toggle-btn"
-                                        title={showSelfPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                                        aria-label={showSelfPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                                    >
-                                        {showSelfPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                    </button>
-                                </div>
-                            </label>
-
-                            <label className="user-field-group">
-                                <span>تأكيد كلمة المرور <span className="req-star">*</span></span>
-                                <input
-                                    type={showSelfPassword ? 'text' : 'password'}
-                                    value={selfConfirm}
-                                    onChange={(e) => setSelfConfirm(e.target.value)}
-                                    placeholder="أعد كتابة كلمة المرور"
-                                    className="user-field-input"
-                                />
-                            </label>
-                        </div>
+                        <p className="font-sm text-muted">
+                            لأمان حسابك، يتم تغيير كلمة المرور عبر رابط يُرسل إلى بريدك الإلكتروني المسجل{session?.user?.email ? ` (${session.user.email})` : ''}.
+                        </p>
 
                         <div className="users-btn-submit-row">
                             <button
                                 type="button"
                                 className="primary-btn"
                                 onClick={handleSaveSelfPassword}
-                                disabled={selfPasswordSaving || !selfPassword}
+                                disabled={selfPasswordSaving}
                             >
                                 <Lock size={16} />
-                                {selfPasswordSaving ? 'جارٍ الحفظ...' : 'تحديث كلمة المرور الآن'}
+                                {selfPasswordSaving ? 'جارٍ الإرسال...' : 'إرسال رابط تغيير كلمة المرور'}
                             </button>
                         </div>
                     </div>
