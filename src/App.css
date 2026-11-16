@@ -49,7 +49,7 @@
   transform: translateY(-100%);
   inset-inline-start: 16px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--text-on-accent);
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-sm);
   z-index: 10000;
@@ -2487,6 +2487,7 @@ select:focus-visible,
 
 .page-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: 16px;
 }
@@ -6665,7 +6666,7 @@ select:focus-visible,
   border-radius: var(--r-md);
   border: 1px solid transparent;
   background: transparent;
-  color: #334155;
+  color: var(--ink-soft);
   cursor: pointer;
   font-weight: 700;
   font-size: var(--text-sm);
@@ -6681,7 +6682,7 @@ select:focus-visible,
 
 .users-nav-tab-btn.active {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--text-on-accent);
   border-color: var(--accent);
   box-shadow: 0 4px 14px rgba(14, 124, 134, 0.28);
 }
@@ -6697,7 +6698,7 @@ select:focus-visible,
 
 .users-nav-tab-btn.active .badge-pill {
   background: rgba(255, 255, 255, 0.25);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .users-tag-pill-danger {

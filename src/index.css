@@ -7,14 +7,15 @@
   --surface-soft: #f8fafb;
   --surface-strong: #edf3f3;
   --surface-raised: #ffffff;
+  --surface-sunken: #f1f6f6;
   --ink: #102527;
   --ink-soft: #2d4649;
-  --muted: #5f7376;
+  --muted: #526669;
   --line: #dce5e5;
   --line-strong: #bdcccc;
 
   /* Brand primary */
-  --accent: #0e7c86;
+  --accent: #0b737d;
   --accent-hover: #096b74;
   --accent-active: #075a62;
   --accent-700: #09646c;
@@ -147,6 +148,7 @@
   --surface-soft: #162527;
   --surface-strong: #1c3032;
   --surface-raised: #172729;
+  --surface-sunken: #0d191b;
   --ink: #edf7f6;
   --ink-soft: #c7d8d7;
   --muted: #93a9aa;
@@ -210,6 +212,20 @@
   --chart-4: #a78bfa;
   --chart-5: #4ade80;
 }
+
+/* Contrast fixes: hard-coded Tailwind/inline status colors per theme */
+:root[data-theme='dark'] .text-emerald-600,
+:root[data-theme='dark'] .text-emerald-500 { color: #34d399; }
+:root[data-theme='dark'] .text-amber-600,
+:root[data-theme='dark'] .text-amber-500 { color: #fbbf24; }
+:root[data-theme='dark'] .text-red-600,
+:root[data-theme='dark'] .text-red-500,
+:root[data-theme='dark'] .text-rose-600 { color: #f87171; }
+:root[data-theme='dark'] .text-blue-600,
+:root[data-theme='dark'] .text-sky-600 { color: #7dd3fc; }
+:root:not([data-theme='dark']) [style*='color: rgb(22, 163, 74)'] { color: #15803d !important; }
+:root:not([data-theme='dark']) [style*='color: rgb(239, 68, 68)'] { color: #b91c1c !important; }
+:root:not([data-theme='dark']) [style*='color: rgb(245, 158, 11)'] { color: #b45309 !important; }
 
 html {
   background:
