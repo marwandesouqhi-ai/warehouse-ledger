@@ -1497,7 +1497,11 @@ ${recoveryLink}
         permissions: newPermissions,
       }
       if (matrixProvided) mirrorPatch.access_matrix = newMatrix
-      await supabaseAdmin.from("app_users").update(mirrorPatch).eq("username", targetUsername.toLowerCase())
+      // Match by auth id (email-only accounts have a username unrelated to the email prefix); legacy rows by username.
+      const { data: mirrored } = await supabaseAdmin.from("app_users").update(mirrorPatch).eq("auth_user_id", userId).select("id")
+      if (!mirrored || mirrored.length === 0) {
+        await supabaseAdmin.from("app_users").update(mirrorPatch).eq("username", targetUsername.toLowerCase())
+      }
 
       const roleChanged = oldRole !== newRole
       const permsChanged = JSON.stringify(oldPermissions) !== JSON.stringify(newPermissions)
