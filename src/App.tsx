@@ -1585,19 +1585,6 @@ function App() {
       <main id="main-content" className="main-panel">
         <header className="topbar">
           <div className="mobile-topbar-row">
-            <button
-              type="button"
-              className="mobile-menu-trigger-btn"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="فتح القائمة الرئيسية"
-              aria-expanded={mobileMenuOpen}
-              aria-controls="app-sidebar"
-              title="القائمة الرئيسية"
-            >
-              <Menu size={20} />
-              <span>القائمة</span>
-            </button>
-
             <div className="mobile-brand-pill">
               <Warehouse size={15} className="text-accent" />
               <span>{systemDisplayName}</span>
