@@ -106,4 +106,22 @@ describe('accessScopedFetch: expired session signal', () => {
 
     window.removeEventListener('znu-session-invalid', onInvalid)
   })
+  it('also signals an invalid session when the admin-users edge function answers 401, but not for login-bridge', async () => {
+    vi.resetModules()
+    const { accessScopedFetch, prepareAccessContext } = await import('../../src/lib/accessContext')
+    prepareAccessContext({ user: { id: 'u-fn-401', app_metadata: { role: 'system_admin' } } } as never)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('{}', { status: 401 }))
+    const signals: number[] = []
+    const onInvalid = () => signals.push(1)
+    window.addEventListener('znu-session-invalid', onInvalid)
+
+    await accessScopedFetch('https://example.supabase.co/functions/v1/login-bridge')
+    expect(signals.length).toBe(0)
+
+    await accessScopedFetch('https://example.supabase.co/functions/v1/admin-users')
+    expect(signals.length).toBe(1)
+
+    window.removeEventListener('znu-session-invalid', onInvalid)
+  })
 })

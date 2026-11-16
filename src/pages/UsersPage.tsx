@@ -52,6 +52,7 @@ import {
     type UserRole,
     type UserStatus,
 } from '../lib/localUsers'
+import { buildEmployeeDirectory } from '../lib/employeeDirectory'
 import {
     fetchRegistrationRequests,
     approveRegistrationRequest,
@@ -781,47 +782,11 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    // Merge visibleLocalUsers with approved registrationRequests so all approved employees are always displayed
-    const allEmployeesDirectory = useMemo(() => {
-        const list = [...visibleLocalUsers]
-        for (const req of registrationRequests) {
-            if (req.approvalStatus === 'approved' || req.invitationStatus === 'accepted') {
-                const reqEmail = (req.email || '').trim().toLowerCase()
-                let reqEmpId = (req.employeeId || '').trim().toUpperCase()
-                if (reqEmail.includes('507') && reqEmpId === 'WH-EMP-000001') {
-                    reqEmpId = 'WH-EMP-000002'
-                }
-
-                const existingIdx = list.findIndex(
-                    (u) => (reqEmail && u.email && u.email.trim().toLowerCase() === reqEmail) ||
-                           (reqEmpId && u.employeeId && u.employeeId.trim().toUpperCase() === reqEmpId)
-                )
-
-                if (existingIdx !== -1) {
-                    if (reqEmpId && list[existingIdx].employeeId !== reqEmpId) {
-                        list[existingIdx] = { ...list[existingIdx], employeeId: reqEmpId }
-                    }
-                } else {
-                    list.push({
-                        id: req.id || `usr-${(reqEmpId || 'reg').toLowerCase()}`,
-                        username: reqEmail.split('@')[0] || reqEmpId || 'employee',
-                        displayName: req.fullName || req.email,
-                        password: '',
-                        role: (req.approvedRole || req.requestedRole || 'warehouse_employee') as UserRole,
-                        activationCode: '',
-                        status: 'active',
-                        createdAt: req.createdAt || new Date().toISOString(),
-                        employeeId: reqEmpId,
-                        email: req.email,
-                        department: req.requestedDepartment === 'procurement' ? 'المشتريات' : 'المخازن',
-                        telegramUserId: req.telegramUserId,
-                        permissions: [],
-                    })
-                }
-            }
-        }
-        return list
-    }, [visibleLocalUsers, registrationRequests])
+    // Approved employees whose account row is temporarily missing still appear; rejected/cancelled requests never do.
+    const allEmployeesDirectory = useMemo(
+        () => buildEmployeeDirectory(visibleLocalUsers, registrationRequests),
+        [visibleLocalUsers, registrationRequests],
+    )
 
     const filteredUsers = useMemo(() => {
         return allEmployeesDirectory.filter((u) => {

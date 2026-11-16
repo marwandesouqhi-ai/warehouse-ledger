@@ -51,7 +51,7 @@ export async function accessScopedFetch(input: RequestInfo | URL, init?: Request
     typeof window !== 'undefined' &&
     currentSession &&
     response.status === 401 &&
-    /\/(rest|storage)\/v1\//.test(url) &&
+    /\/(rest|storage)\/v1\/|\/functions\/v1\/(admin-users|invite-user|migrate-users|gemini-chat)/.test(url) &&
     !/\/(audit_logs|login_attempts|rpc\/record_security_event)/.test(url)
   ) {
     const now = Date.now()
