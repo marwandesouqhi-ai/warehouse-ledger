@@ -33,8 +33,6 @@ function normalizeUsername(input: string | null | undefined): string {
   return normalized.replace(/[асеорхуіјѕԁԛԝαου]/g, (char) => homoglyphs[char] || char)
 }
 
-const EMPLOYEE_ID_REGEX = /^[A-Z]{2,3}-[A-Z]{3}-\d{6}$/
-const USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,50}$/
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
 
 interface SecurityMonitorConfig {
@@ -317,11 +315,8 @@ async function recordSuccessfulLogin(params: {
 
 function isValidIdentifier(identifier: string): boolean {
   if (!identifier || identifier.length > 254) return false
-  const upper = identifier.toUpperCase().trim()
-  if (EMPLOYEE_ID_REGEX.test(upper)) return true
-  if (EMAIL_REGEX.test(identifier.trim())) return true
-  if (USERNAME_REGEX.test(identifier.trim())) return true
-  return false
+  // Email-only sign-in: usernames and employee IDs are no longer accepted.
+  return EMAIL_REGEX.test(identifier.trim())
 }
 
 serve(async (req: Request) => {
@@ -408,74 +403,6 @@ serve(async (req: Request) => {
 
     // 3. Parameterized server-side lookup in app_users (No PostgREST filter injection!)
     let appUser = null
-
-    // A. Search by username
-    const { data: userByUsername } = await supabaseAdmin
-      .from("app_users")
-      .select("id, username, role, status, auth_user_id, employee_id, email")
-      .eq("username", normalizedIdentifier)
-      .maybeSingle()
-
-    if (userByUsername) {
-      appUser = userByUsername
-    }
-
-    // B. If not found, search by employee_id if identifier matches employee code format
-    if (!appUser && EMPLOYEE_ID_REGEX.test(cleanIdentifier.toUpperCase())) {
-      const { data: usersByEmpId } = await supabaseAdmin
-        .from("app_users")
-        .select("id, username, role, status, auth_user_id, employee_id, email")
-        .eq("employee_id", cleanIdentifier.toUpperCase())
-
-      if (usersByEmpId && usersByEmpId.length > 0) {
-        if (usersByEmpId.length === 1) {
-          appUser = usersByEmpId[0]
-        } else {
-          // In case multiple users were assigned the same employee_id, verify password against candidates
-          const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey)
-          for (const candidate of usersByEmpId) {
-            if (candidate.status !== "active") continue
-            let candidateEmail = candidate.email
-            if (!candidateEmail && candidate.auth_user_id) {
-              const { data: authData } = await supabaseAdmin.auth.admin.getUserById(candidate.auth_user_id)
-              candidateEmail = authData?.user?.email
-            }
-            if (candidateEmail) {
-              const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({
-                email: candidateEmail,
-                password: password,
-              })
-              if (!signInError && signInData?.session) {
-                // Successfully authenticated with one of the candidates!
-                await recordSuccessfulLogin({
-                  supabaseAdmin,
-                  username: candidate.username || normalizedIdentifier,
-                  authUserId: signInData.user?.id || candidate.auth_user_id || "",
-                  role: candidate.role || "authenticated",
-                  email: candidate.email || candidateEmail,
-                  clientIp,
-                  userAgent,
-                  config: securityConfig,
-                })
-                await supabaseAdmin
-                  .from("app_users")
-                  .update({ last_login_at: new Date().toISOString() })
-                  .eq("id", candidate.id)
-                return new Response(JSON.stringify({
-                  session: signInData.session,
-                  user: candidate,
-                }), {
-                  status: 200,
-                  headers: { ...corsHeaders, "Content-Type": "application/json" },
-                })
-              }
-            }
-          }
-          // If none matched password, pick the first active candidate so standard auth flow handles the error
-          appUser = usersByEmpId.find((u: any) => u.status === "active") || usersByEmpId[0]
-        }
-      }
-    }
 
     // C. If not found, search by email if identifier matches email format
     if (!appUser && EMAIL_REGEX.test(cleanIdentifier.toLowerCase())) {

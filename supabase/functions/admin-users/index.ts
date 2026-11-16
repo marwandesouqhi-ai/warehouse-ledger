@@ -696,7 +696,7 @@ serve(async (req: Request) => {
     if (action === "send_password_recovery") {
       const rawIdentifier = String(body.identifier || body.email || body.username || "").trim()
       if (!rawIdentifier) {
-        return new Response(JSON.stringify({ error: "يُرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني." }), {
+        return new Response(JSON.stringify({ error: "يُرجى إدخال البريد الإلكتروني المسجل." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
@@ -762,22 +762,8 @@ serve(async (req: Request) => {
           .ilike("email", cleanIdent)
           .maybeSingle()
         dbUser = data
-      } else {
-        const { data: byUsername } = await supabaseAdmin
-          .from("app_users")
-          .select("id, auth_user_id, display_name, email, employee_id, username, role, department, status")
-          .ilike("username", cleanIdent)
-          .maybeSingle()
-        dbUser = byUsername
-        if (!dbUser) {
-          const { data: byEmpId } = await supabaseAdmin
-            .from("app_users")
-            .select("id, auth_user_id, display_name, email, employee_id, username, role, department, status")
-            .ilike("employee_id", cleanIdent)
-            .maybeSingle()
-          dbUser = byEmpId
-        }
       }
+      // Email-only recovery: usernames and employee IDs are no longer accepted.
 
       if (dbUser?.email && dbUser.status === "active") {
         targetEmail = dbUser.email.trim().toLowerCase()

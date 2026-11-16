@@ -360,15 +360,15 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'forgotPassword') {
-                const identifier = username.trim()
-                if (!identifier) {
-                    throw new Error('يرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني.')
+                const email = username.trim().toLowerCase()
+                if (!email) {
+                    throw new Error('يرجى إدخال البريد الإلكتروني المسجل في النظام.')
                 }
-                if (identifier.length < 3) {
-                    throw new Error('البيانات المدخلة قصيرة جداً. يرجى إدخال اسم مستخدم أو رقم وظيفي أو بريد إلكتروني مسجل بالمنظومة.')
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    throw new Error('يرجى إدخال بريد إلكتروني صحيح.')
                 }
 
-                const res = await sendPasswordRecovery({ identifier })
+                const res = await sendPasswordRecovery({ email })
                 if (!res.success) {
                     throw new Error(res.error || res.message || 'تعذر إرسال رابط تعيين كلمة المرور. يرجى التحقق من البيانات المدخلة.')
                 }
@@ -378,9 +378,12 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             // Mode: signIn
-            const cleanUser = username.trim()
+            const cleanUser = username.trim().toLowerCase()
             if (!cleanUser) {
-                throw new Error('يرجى إدخال اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني.')
+                throw new Error('يرجى إدخال البريد الإلكتروني المسجل في النظام.')
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanUser)) {
+                throw new Error('يرجى إدخال بريد إلكتروني صحيح.')
             }
             if (!password) {
                 throw new Error('يرجى إدخال كلمة المرور.')
@@ -431,7 +434,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             if (status === 429 || bridgeError.message?.includes('429')) {
                                 throw new Error('تم تجاوز الحد الأقصى للمحاولات الفاشلة. تم تعليق المحاولة مؤقتاً لمدة 15 دقيقة لحماية الحساب.')
                             }
-                            throw new Error(parsedMsg || 'بيانات الدخول غير صحيحة. يرجى التأكد من اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
+                            throw new Error(parsedMsg || 'بيانات الدخول غير صحيحة. يرجى التأكد من البريد الإلكتروني وكلمة المرور.')
                         }
                     } else if (bridgeData?.session) {
                         // Establish authoritative Supabase session (login-bridge already recorded login_success/new_ip/unusual_hour)
@@ -467,7 +470,7 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         severity: 'warning',
                         details: { identifier: cleanUser, source: 'direct_auth_fallback' },
                     })
-                    throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة اسم المستخدم أو الرقم الوظيفي وكلمة المرور.')
+                    throw new Error('بيانات الدخول غير صحيحة: يُرجى التأكد من صحة البريد الإلكتروني وكلمة المرور.')
                 }
                 if (signInError.message.toLowerCase().includes('email not confirmed')) {
                     throw new Error('الحساب قيد الانتظار أو لم يتم تأكيد بريده. يرجى مراجعة إدارة النظام.')
@@ -850,18 +853,19 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                             <strong>استعادة كلمة المرور</strong>
                         </div>
                         <h1>نسيت كلمة المرور؟</h1>
-                        <p>أدخل اسم المستخدم أو الرقم الوظيفي أو البريد الإلكتروني المسجل في المنظومة، وسيقوم النظام بالتحقق وإرسال رابط آمن لإعادة تعيين كلمة المرور إلى بريدك الإلكتروني (Gmail) فوراً.</p>
+                        <p>أدخل البريد الإلكتروني المسجل في المنظومة، وسيقوم النظام بالتحقق وإرسال رابط آمن لإعادة تعيين كلمة المرور إلى بريدك الإلكتروني (Gmail) فوراً.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
                             <label htmlFor="recovery-username-input">
-                                اسم المستخدم، الرقم الوظيفي، أو البريد الإلكتروني
+                                البريد الإلكتروني
                                 <input
                                     id="recovery-username-input"
-                                    name="username"
-                                    type="text"
-                                    autoComplete="username"
-                                    dir="auto"
-                                    placeholder="أدخل اسم المستخدم أو الرقم الوظيفي أو البريد"
+                                    name="email"
+                                    type="email"
+                                    inputMode="email"
+                                    autoComplete="email"
+                                    dir="ltr"
+                                    placeholder="name@example.com"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required
@@ -888,18 +892,19 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                 ) : (
                     <>
                         <h1>تسجيل الدخول</h1>
-                        <p>سجّل الدخول باسم المستخدم أو الرقم الوظيفي وكلمة المرور للوصول إلى منظومة حركة المخازن والعهدة.</p>
+                        <p>سجّل الدخول بالبريد الإلكتروني المسجل في النظام وكلمة المرور للوصول إلى منظومة حركة المخازن والعهدة.</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
                             <label htmlFor="username-input">
-                                اسم المستخدم أو الرقم الوظيفي
+                                البريد الإلكتروني
                                 <input
                                     id="username-input"
-                                    name="username"
-                                    type="text"
-                                    autoComplete="username"
-                                    dir="auto"
-                                    placeholder="أدخل اسم المستخدم أو الرقم الوظيفي"
+                                    name="email"
+                                    type="email"
+                                    inputMode="email"
+                                    autoComplete="email"
+                                    dir="ltr"
+                                    placeholder="name@example.com"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}
                                     required
