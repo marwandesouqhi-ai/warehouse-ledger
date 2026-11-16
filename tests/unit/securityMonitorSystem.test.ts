@@ -585,7 +585,7 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
         new Request('https://example.supabase.co/functions/v1/login-bridge', {
           method: 'POST',
           headers: { 'x-forwarded-for': '10.0.0.50', 'user-agent': 'Vitest/1.0', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: 'ahmed', password: 'WrongPassword123!' }),
+          body: JSON.stringify({ identifier: 'ahmed@warehouse.local', password: 'WrongPassword123!' }),
         })
       )
       expect([401, 429]).toContain(res.status)
@@ -605,7 +605,7 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
       new Request('https://example.supabase.co/functions/v1/login-bridge', {
         method: 'POST',
         headers: { 'x-forwarded-for': '10.0.0.99', 'user-agent': 'Vitest/1.0', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: 'ahmed', password: 'CorrectPass!9' }),
+        body: JSON.stringify({ identifier: 'ahmed@warehouse.local', password: 'CorrectPass!9' }),
       })
     )
     expect(okRes.status).toBe(200)
@@ -613,6 +613,19 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
     expect(successAudit.severity).toBe('warning')
     expect(successAudit.event_type).toMatch(/^login_/)
     expect(JSON.stringify(successAudit)).not.toContain('CorrectPass!9')
+
+    // Email-only sign-in: usernames and employee IDs are rejected without any account lookup or session
+    for (const identifier of ['ahmed', 'PUR-ADM-000001']) {
+      const res = await handler(
+        new Request('https://example.supabase.co/functions/v1/login-bridge', {
+          method: 'POST',
+          headers: { 'x-forwarded-for': '10.0.0.77', 'user-agent': 'Vitest/1.0', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password: 'CorrectPass!9' }),
+        })
+      )
+      expect(res.status).toBe(401)
+      expect((await res.json()).session).toBeUndefined()
+    }
   })
 
   it('daily-report rejects unauthorized callers, aggregates metrics, escapes HTML, and splits >3800 char Telegram messages', async () => {
@@ -704,6 +717,92 @@ describe('Edge Function Handlers: login-bridge, daily-report & critical-alerts',
       expect(msg.text).not.toContain('<tag>')
     }
     expect(sentMessages.map((m) => m.text).join('\n')).toContain('&lt;tag&gt;&amp;')
+  })
+
+  it('daily-report records sent message ids and deletes monitor messages older than 24h (reports and critical alerts)', async () => {
+    const deletedMessageIds: number[] = []
+    const insertedTracked: Array<Record<string, any>> = []
+    const marked: string[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      if (String(url).endsWith('/deleteMessage')) {
+        deletedMessageIds.push(body.message_id)
+        return new Response(JSON.stringify({ ok: true, result: true }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 777 } }), { status: 200 })
+    })
+
+    const mockSupabase = {
+      from: (table: string) => {
+        if (table === 'security_monitor_config') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { telegram_notifications_enabled: true, daily_report_enabled: true }, error: null }),
+              }),
+            }),
+          }
+        }
+        if (table === 'telegram_monitor_messages') {
+          return {
+            select: () => {
+              const chain: any = {
+                is: () => chain,
+                lt: () => chain,
+                order: () => chain,
+                limit: async () => ({
+                  data: [
+                    { id: 'r1', chat_id: '-100123456', message_id: 111 },
+                    { id: 'r2', chat_id: '-100123456', message_id: 112 },
+                  ],
+                  error: null,
+                }),
+              }
+              return chain
+            },
+            update: () => ({ eq: async (_column: string, id: string) => { marked.push(`telegram_monitor_messages:${id}`); return { error: null } } }),
+            insert: async (rows: Array<Record<string, any>>) => { insertedTracked.push(...rows); return { error: null } },
+          }
+        }
+        if (table === 'audit_alert_deliveries') {
+          return {
+            select: () => {
+              const chain: any = {
+                is: () => chain,
+                not: () => chain,
+                lt: () => chain,
+                limit: async () => ({ data: [{ audit_log_id: 'a1', telegram_message_id: '222' }], error: null }),
+              }
+              return chain
+            },
+            update: () => ({ eq: async (_column: string, id: string) => { marked.push(`audit_alert_deliveries:${id}`); return { error: null } } }),
+          }
+        }
+        return { select: () => ({ gte: () => ({ order: async () => ({ data: [], error: null }) }) }) }
+      },
+    }
+
+    const handler = loadEdgeHandler('daily-report', mockSupabase, {
+      TELEGRAM_BOT_TOKEN: 'bot-token-test',
+      TELEGRAM_CHAT_ID: '-100123456',
+      CRON_WEBHOOK_SECRET: 'cron-secret-test',
+    })
+
+    const res = await handler(
+      new Request('https://example.supabase.co/functions/v1/daily-report', {
+        method: 'POST',
+        headers: { 'x-cron-secret': 'cron-secret-test' },
+      })
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.period).toBe('last_6_hours')
+    expect(body.purgedMessages).toBe(3)
+    expect(deletedMessageIds.sort()).toEqual([111, 112, 222])
+    expect(marked.sort()).toEqual(['audit_alert_deliveries:a1', 'telegram_monitor_messages:r1', 'telegram_monitor_messages:r2'])
+    expect(insertedTracked).toEqual([{ chat_id: '-100123456', message_id: 777, kind: 'security-report' }])
   })
 
   it('critical-alerts sends once per critical event and deduplicates subsequent runs via audit_alert_deliveries', async () => {

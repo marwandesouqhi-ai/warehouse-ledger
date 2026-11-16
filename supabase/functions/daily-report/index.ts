@@ -57,7 +57,75 @@ function formatCairoDate(isoString: string): string {
   }
 }
 
-async function sendTelegramMessage(botToken: string, chatId: string, text: string): Promise<boolean> {
+// The monitor report runs every REPORT_INTERVAL_HOURS (see the pg_cron job) and covers exactly that window.
+const REPORT_INTERVAL_HOURS = 6
+// Monitor messages older than this are deleted from the Telegram chat.
+const MESSAGE_RETENTION_HOURS = 24
+
+async function deleteTelegramMessage(botToken: string, chatId: string, messageId: string | number): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: Number(messageId) }),
+    })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.ok) return true
+    // Already deleted / too old for the bot to delete (Telegram allows 48h): nothing more to do for this message.
+    const desc = String(data?.description || "").toLowerCase()
+    return desc.includes("message to delete not found") || desc.includes("can't be deleted") || desc.includes("message can't be deleted")
+  } catch (err) {
+    console.error("deleteTelegramMessage failed:", err)
+    return false
+  }
+}
+
+// Deletes monitor messages (reports + critical alerts) older than MESSAGE_RETENTION_HOURS from the chat.
+// Rows are only marked as deleted (never removed) so critical alerts are never re-sent.
+async function purgeOldMonitorMessages(supabaseAdmin: any, botToken: string, chatId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - MESSAGE_RETENTION_HOURS * 60 * 60 * 1000).toISOString()
+  let purged = 0
+
+  const { data: reportRows } = await supabaseAdmin
+    .from("telegram_monitor_messages")
+    .select("id, chat_id, message_id")
+    .is("deleted_at", null)
+    .lt("sent_at", cutoff)
+    .order("sent_at", { ascending: true })
+    .limit(200)
+
+  for (const row of reportRows || []) {
+    if (await deleteTelegramMessage(botToken, row.chat_id || chatId, row.message_id)) {
+      await supabaseAdmin
+        .from("telegram_monitor_messages")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", row.id)
+      purged++
+    }
+  }
+
+  const { data: alertRows } = await supabaseAdmin
+    .from("audit_alert_deliveries")
+    .select("audit_log_id, telegram_message_id")
+    .is("telegram_deleted_at", null)
+    .not("telegram_message_id", "is", null)
+    .lt("delivered_at", cutoff)
+    .limit(200)
+
+  for (const row of alertRows || []) {
+    if (await deleteTelegramMessage(botToken, chatId, row.telegram_message_id)) {
+      await supabaseAdmin
+        .from("audit_alert_deliveries")
+        .update({ telegram_deleted_at: new Date().toISOString() })
+        .eq("audit_log_id", row.audit_log_id)
+      purged++
+    }
+  }
+
+  return purged
+}
+
+async function sendTelegramMessage(botToken: string, chatId: string, text: string): Promise<{ success: boolean; messageIds: number[] }> {
   // Telegram max length per message is 4096 characters.
   const MAX_CHUNK = 3800
   const chunks: string[] = []
@@ -89,6 +157,7 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
   }
 
   let allSuccess = true
+  const messageIds: number[] = []
   for (const chunk of chunks) {
     try {
       const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -106,6 +175,8 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
       if (!res.ok || !data?.ok) {
         console.error("Telegram API Error:", data?.description || res.statusText)
         allSuccess = false
+      } else if (data.result?.message_id) {
+        messageIds.push(Number(data.result.message_id))
       }
     } catch (err) {
       console.error("Failed to send telegram chunk:", err)
@@ -113,7 +184,7 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
     }
   }
 
-  return allSuccess
+  return { success: allSuccess, messageIds }
 }
 
 serve(async (req: Request) => {
@@ -160,6 +231,14 @@ serve(async (req: Request) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
+    // Remove monitor messages older than 24h from the chat (runs on every scheduled report, even if reporting is disabled).
+    let purgedMessages = 0
+    try {
+      purgedMessages = await purgeOldMonitorMessages(supabaseAdmin, botToken, chatId)
+    } catch (purgeErr) {
+      console.error("daily-report: purge of old Telegram messages failed:", purgeErr instanceof Error ? purgeErr.message : String(purgeErr))
+    }
+
     // Check if security reporting is enabled in config
     const { data: configRow } = await supabaseAdmin
       .from("security_monitor_config")
@@ -174,12 +253,12 @@ serve(async (req: Request) => {
       })
     }
 
-    // 1. Fetch audit logs for the last 24 hours
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    // 1. Fetch audit logs for the report window (last REPORT_INTERVAL_HOURS hours)
+    const windowStart = new Date(Date.now() - REPORT_INTERVAL_HOURS * 60 * 60 * 1000).toISOString()
     const { data: logs, error: logsErr } = await supabaseAdmin
       .from("audit_logs")
       .select("id, created_at, actor_id, actor_role, event_type, table_name, record_id, severity, user_id, user_email, action, entity_type, ip, details")
-      .gte("created_at", twentyFourHoursAgo)
+      .gte("created_at", windowStart)
       .order("created_at", { ascending: true })
 
     if (logsErr) {
@@ -253,9 +332,9 @@ serve(async (req: Request) => {
       ? `🚨 <b>أحداث حرجة:</b> ${criticalEvents.length}`
       : "✅ <b>لا توجد أحداث حرجة</b>"
 
-    let message = `📊 <b>التقرير الأمني والرقابي اليومي</b>\n`
+    let message = `📊 <b>التقرير الأمني والرقابي الدوري</b>\n`
     message += `🏛️ <b>جامعة الزقازيق الأهلية - منظومة المخازن والمشتريات</b>\n`
-    message += `🗓️ <i>توقيت التقرير: ${escapeTelegramHtml(reportDateStr)} (آخر 24 ساعة)</i>\n\n`
+    message += `🗓️ <i>توقيت التقرير: ${escapeTelegramHtml(reportDateStr)} (آخر ${REPORT_INTERVAL_HOURS} ساعات)</i>\n\n`
 
     message += `📈 <b>ملخص المؤشرات العامة:</b>\n`
     message += `• تسجيلات الدخول الناجحة: <b>${totalLogins}</b>\n`
@@ -297,11 +376,26 @@ serve(async (req: Request) => {
     message += `🤖 <i>نظام الرقابة والأمان التلقائي — ZNU Warehouse Security Monitor</i>`
 
     // 4. Send message to Telegram
-    const sent = await sendTelegramMessage(botToken, chatId, message)
+    const sendResult = await sendTelegramMessage(botToken, chatId, message)
+    const sent = sendResult.success
+
+    // Remember the message ids so they can be deleted after MESSAGE_RETENTION_HOURS
+    // (a tracking failure must never turn a delivered report into an error response)
+    if (sendResult.messageIds.length > 0) {
+      try {
+        const { error: trackErr } = await supabaseAdmin.from("telegram_monitor_messages").insert(
+          sendResult.messageIds.map((id) => ({ chat_id: chatId, message_id: id, kind: "security-report" })),
+        )
+        if (trackErr) console.error("daily-report: could not record sent message ids:", trackErr.message)
+      } catch (trackException) {
+        console.error("daily-report: could not record sent message ids:", trackException instanceof Error ? trackException.message : String(trackException))
+      }
+    }
 
     return new Response(JSON.stringify({
       success: sent,
-      period: "last_24_hours",
+      period: `last_${REPORT_INTERVAL_HOURS}_hours`,
+      purgedMessages,
       totalLogs: allLogs.length,
       criticalEventsCount: criticalEvents.length,
       metrics: {
