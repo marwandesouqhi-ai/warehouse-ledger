@@ -1349,8 +1349,8 @@ select:focus-visible,
 }
 
 :root[data-theme='dark'] .hero-overview-card {
-  background: linear-gradient(135deg, rgba(86, 185, 158, 0.08) 0%, rgba(14, 124, 134, 0.05) 100%), var(--surface);
-  border-color: rgba(86, 185, 158, 0.25);
+  background: linear-gradient(135deg, rgba(92, 200, 208, 0.08) 0%, rgba(14, 124, 134, 0.05) 100%), var(--surface);
+  border-color: rgba(92, 200, 208, 0.25);
 }
 
 .hero-main-content {
@@ -13109,7 +13109,7 @@ a {
   }
 
   :root[data-theme='dark'] .mobile-bottom-dock {
-    background: rgba(17, 30, 32, 0.94) !important;
+    background: rgba(17, 26, 44, 0.94) !important;
     border-color: rgba(255, 255, 255, 0.12) !important;
     box-shadow: 0 10px 35px rgba(0, 0, 0, 0.5) !important;
   }
