@@ -1558,6 +1558,26 @@ function App() {
               </div>
             ))}
           </nav>
+
+          {mobileMenuOpen && session && (
+            <div className="drawer-user-card">
+              <div className="drawer-user-info">
+                <strong>{activeUserDisplayName}</strong>
+                <span>{ROLE_LABELS[effectiveRole] || effectiveRole}</span>
+              </div>
+              <button
+                type="button"
+                className="drawer-logout-btn"
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  signOut()
+                }}
+              >
+                <LogOut size={16} aria-hidden="true" />
+                تسجيل الخروج
+              </button>
+            </div>
+          )}
         </div>
 
         {!isInstalled ? (
