@@ -1457,6 +1457,7 @@ function App() {
       <AuthPage
         initialMode="setNewPassword"
         settings={settings}
+        requireCurrentPasswordChange={requiresPasswordChange && !isSettingPassword}
         onPasswordSet={() => {
           setIsSettingPassword(false)
           if (typeof window !== 'undefined') {

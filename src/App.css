@@ -7095,6 +7095,7 @@ select:focus-visible,
 /* Enhanced Table Typography & Spacing for UsersPage */
 .users-section-card .custody-table {
   width: 100%;
+  min-width: 1060px;
   border-collapse: collapse;
   font-size: 0.875rem;
 }

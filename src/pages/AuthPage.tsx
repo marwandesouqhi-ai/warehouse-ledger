@@ -59,13 +59,15 @@ type AuthPageProps = {
     initialMode?: AuthMode
     onPasswordSet?: () => void
     settings?: AppSettings
+    requireCurrentPasswordChange?: boolean
 }
 
-export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settings }: AuthPageProps) {
+export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settings, requireCurrentPasswordChange = false }: AuthPageProps) {
     const [mode, setMode] = useState<AuthMode>(initialMode)
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
+    const [currentPassword, setCurrentPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [activeUserEmail, setActiveUserEmail] = useState('')
@@ -300,6 +302,9 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
             }
 
             if (mode === 'setNewPassword') {
+                if (requireCurrentPasswordChange && !currentPassword) {
+                    throw new Error('أدخل كلمة المرور المؤقتة الحالية أولاً.')
+                }
                 const pValidation = await validateChosenPasswordAsync(password)
                 if (!pValidation.valid) {
                     throw new Error(pValidation.error || 'كلمة المرور غير مستوفية للشروط.')
@@ -313,10 +318,17 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                     throw new Error('انتهت صلاحية جلسة التحقق أو رابط الاستعادة. يُرجى فتح الرابط من بريدك الإلكتروني مرة أخرى أو طلب رابط جديد.')
                 }
 
-                const { error: updateError } = await supabase.auth.updateUser({
-                    password,
-                    data: { must_change_password: false },
-                })
+                const updateError = requireCurrentPasswordChange
+                    ? await (async () => {
+                        const { data, error } = await supabase.functions.invoke('admin-users', {
+                            body: { action: 'change_own_password', currentPassword, newPassword: password },
+                        })
+                        return error || (!data?.success ? new Error(data?.error || 'تعذر تعيين كلمة المرور الجديدة.') : null)
+                    })()
+                    : (await supabase.auth.updateUser({
+                        password,
+                        data: { must_change_password: false },
+                    })).error
                 if (updateError) {
                     const errMsg = (updateError.message || '').toLowerCase()
                     if (errMsg.includes('session missing') || errMsg.includes('jwt') || errMsg.includes('unauthorized')) {
@@ -347,9 +359,17 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
 
                 // Refresh session so user_metadata is updated locally
                 try {
-                    await supabase.auth.refreshSession()
+                    if (requireCurrentPasswordChange && activeUserEmail) {
+                        const { error: signInError } = await supabase.auth.signInWithPassword({
+                            email: activeUserEmail,
+                            password,
+                        })
+                        if (signInError) throw signInError
+                    } else {
+                        await supabase.auth.refreshSession()
+                    }
                 } catch {
-                    // Non-blocking
+                    throw new Error('تم حفظ كلمة المرور، لكن تعذر تجديد جلسة الدخول. سجّل الدخول بكلمة المرور الجديدة.')
                 }
 
                 setNotice('تم تعيين كلمة المرور بنجاح! جاري تحويلك إلى لوحة التحكم...')
@@ -789,6 +809,20 @@ export default function AuthPage({ initialMode = 'signIn', onPasswordSet, settin
                         )}
 
                         <form className="auth-form" onSubmit={handleSubmit}>
+                            {requireCurrentPasswordChange && (
+                                <label>
+                                    كلمة المرور المؤقتة الحالية
+                                    <div className="password-input-wrap">
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            autoComplete="current-password"
+                                            value={currentPassword}
+                                            onChange={(event) => setCurrentPassword(event.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                </label>
+                            )}
                             <label>
                                 كلمة المرور الجديدة
                                 <div className="password-input-wrap">

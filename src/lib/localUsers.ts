@@ -97,7 +97,7 @@ export async function fetchUsersFromCloud(): Promise<LocalUser[]> {
 }
 
 export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutcome> {
-  if (!supabase) return { status: 'saved_locally' }
+  if (!supabase) throw new Error('خدمة حفظ المستخدمين غير متاحة.')
   // 1. Protected system accounts (e.g. marwan-desouky) are provisioned exclusively via cloud migrations/bootstrap
   // and must never be queried or mutated via client-side sync, which would trigger 403 under RLS.
   if (isProtectedUsername(user.username)) {
@@ -151,64 +151,43 @@ export async function saveUserToCloud(user: LocalUser): Promise<PersistenceOutco
   }
 }
 
-export async function deleteUserFromCloud(id: string, username?: string): Promise<void> {
-  if (!supabase) return
-  if (isProtectedUsername(username)) return
-
-  try {
-    // Invoke admin-users Edge Function for clean Auth + Database cascade
-    await supabase.functions.invoke('admin-users', {
-      body: {
-        action: 'delete_user',
-        userId: id,
-        username,
-      },
-    })
-  } catch (err) {
-    console.warn('Could not delete user from cloud:', err)
+export async function deleteUserFromCloud(id: string, username?: string, email?: string): Promise<void> {
+  if (!supabase) throw new Error('خدمة حذف المستخدمين غير متاحة.')
+  if (isProtectedUsername(username)) throw new Error('لا يمكن حذف الحساب المحمي.')
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action: 'delete_user', userId: id, username, email },
+  })
+  if (error) {
+    const context = (error as { context?: unknown }).context
+    if (context instanceof Response) {
+      const detail: unknown = await context.clone().json().catch(() => null)
+      if (detail && typeof detail === 'object' && 'error' in detail && typeof detail.error === 'string') {
+        throw new Error(detail.error)
+      }
+    }
+    throw error
   }
+  if (!data?.success) throw new Error(data?.error || 'تعذر تأكيد حذف المستخدم.')
+
 }
 
 export async function syncUsersWithCloud(): Promise<LocalUser[]> {
-  try {
-    const cloudUsers = await fetchUsersFromCloud()
-    if (cloudUsers.length > 0) {
-      const local = loadLocalUsers()
-      const mergedMap = new Map<string, LocalUser>()
-
-      // Cloud users take priority
-      cloudUsers.forEach((u) => mergedMap.set(u.username.toLowerCase(), u))
-      // Add local users that might not have been pushed yet (excluding protected accounts)
-      local.forEach((u) => {
-        if (!mergedMap.has(u.username.toLowerCase())) {
-          mergedMap.set(u.username.toLowerCase(), u)
-          if (!isProtectedUsername(u.username)) {
-            void saveUserToCloud(u)
-          }
-        }
-      })
-
-      const merged = Array.from(mergedMap.values())
-      try {
-        if (typeof window !== 'undefined') {
-          const hasChanged = local.length !== merged.length || JSON.stringify(merged) !== JSON.stringify(local)
-          localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(merged))
-          if (hasChanged) {
-            window.dispatchEvent(new CustomEvent('local-users-changed'))
-          }
-        }
-      } catch {
-        // ignore
-      }
-      return merged
-    } else {
-      // If cloud is empty or inaccessible (e.g. unauthenticated or restricted RLS),
-      // rely on local users without attempting unauthorized direct inserts
-      return loadLocalUsers()
+  if (!supabase) throw new Error('خدمة المستخدمين غير متاحة.')
+  const users: LocalUser[] = []
+  for (let page = 1; ; page++) {
+    let { data, error } = await supabase.functions.invoke('admin-users', { body: { action: 'list_users', page, perPage: 100 } })
+    // The edge function can answer 503/network errors while it cold-starts; retry once before giving up.
+    if (error) {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+      ;({ data, error } = await supabase.functions.invoke('admin-users', { body: { action: 'list_users', page, perPage: 100 } }))
     }
-  } catch {
-    return loadLocalUsers()
+    if (error) throw error
+    if (!data?.success || !Array.isArray(data.users)) throw new Error('تعذر تحميل المستخدمين.')
+    users.push(...data.users.map((u: LocalUser) => ({ ...u, password: '', activationCode: '' })))
+    if (data.users.length < 100) break
   }
+  saveLocalUsers(users)
+  return users
 }
 
 export type UserRole =
@@ -270,20 +249,7 @@ export type LocalUserSession = {
 export const LOCAL_USERS_STORAGE_KEY = 'warehouse-ledger-local-users'
 export const LOCAL_SESSION_STORAGE_KEY = 'warehouse-ledger-local-session'
 
-const DEFAULT_ADMIN: LocalUser = {
-  id: 'usr-admin-marwan',
-  username: 'marwan-desouky',
-  displayName: 'مروان دسوقي (مدير النظام)',
-  password: '', // Redacted / passwordless in code
-  role: 'system_admin',
-  activationCode: '',
-  status: 'active',
-  createdAt: new Date().toISOString(),
-  permissions: ['view_audit', 'view_settings', 'manage_records'],
-  employeeId: 'SYS-ADM-000001',
-  email: 'marwan-desouky@warehouse.local',
-  department: 'الإدارة العامة',
-}
+
 
 export function isLastActiveSystemAdmin(userId: string, users: LocalUser[]): boolean {
   const activeAdmins = users.filter(
@@ -310,25 +276,8 @@ export function purgeDeletedAccount(emailOrUsername = ''): void {
   try {
     if (typeof window === 'undefined') return
 
-    // 1. Purge from local storage users
-    const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as unknown
-        if (Array.isArray(parsed)) {
-          const filtered = (parsed as LocalUser[]).filter(
-            (u) =>
-              u.username.toLowerCase() !== target &&
-              u.displayName.toLowerCase() !== target
-          )
-          if (filtered.length !== parsed.length) {
-            localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(filtered))
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
+    localStorage.removeItem(LOCAL_USERS_STORAGE_KEY)
+    sessionStorage.removeItem(LOCAL_USERS_STORAGE_KEY)
 
     // 2. Purge local session if it matches
     const sessionRaw = sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY) || localStorage.getItem(LOCAL_SESSION_STORAGE_KEY)
@@ -371,96 +320,17 @@ export function generateActivationPin(): string {
   return String(100000 + Math.floor(Math.random() * 900000))
 }
 
+let directoryUsers: LocalUser[] = []
 export function loadLocalUsers(): LocalUser[] {
-  try {
-    if (typeof window === 'undefined') return [DEFAULT_ADMIN]
-    const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        let users = parsed as LocalUser[]
-        // Completely purge the deleted old account marwandesouqhi@gmail.com if present
-        const filtered = users.filter(
-          (u) =>
-            u.username?.toLowerCase() !== PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL &&
-            u.displayName?.toLowerCase() !== PROTECTED_SYSTEM_ADMIN_LEGACY_EMAIL
-        )
-        let needsSave = filtered.length !== users.length
-        users = filtered
-
-        const marwanIdx = users.findIndex((u) => u.username?.toLowerCase() === 'marwan-desouky')
-
-        if (marwanIdx === -1) {
-          users.unshift(DEFAULT_ADMIN)
-          needsSave = true
-        } else {
-          // Ensure system admin status and active state without overwriting custom password
-          if (users[marwanIdx].role !== 'system_admin') {
-            users[marwanIdx].role = 'system_admin'
-            needsSave = true
-          }
-          if (users[marwanIdx].status !== 'active') {
-            users[marwanIdx].status = 'active'
-            needsSave = true
-          }
-          if (!users[marwanIdx].permissions || users[marwanIdx].permissions.length === 0) {
-            users[marwanIdx].permissions = ['view_audit', 'view_settings', 'manage_records']
-            needsSave = true
-          }
-        }
-
-        // Ensure employee ID sanity and clean up legacy activation codes
-        for (const u of users) {
-          if (u.activationCode) {
-            u.activationCode = ''
-            needsSave = true
-          }
-          if (u.email?.toLowerCase().includes('507') || u.displayName?.includes('أحمد حسين')) {
-            if (u.employeeId !== 'WH-EMP-000002') {
-              u.employeeId = 'WH-EMP-000002'
-              needsSave = true
-            }
-            if (u.status !== 'active') {
-              u.status = 'active'
-              needsSave = true
-            }
-          }
-        }
-
-        // Remove any legacy hardcoded default employee seed mutation from local storage
-
-        if (needsSave) {
-          saveLocalUsers(users)
-        }
-        return users
-      }
-    }
-  } catch (err) {
-    console.warn('Could not read local users from localStorage:', err)
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(LOCAL_USERS_STORAGE_KEY)
+    sessionStorage.removeItem(LOCAL_USERS_STORAGE_KEY)
   }
-
-  // Seed default admin user if list is empty
-  const initial = [DEFAULT_ADMIN]
-  saveLocalUsers(initial)
-  return initial
+  return directoryUsers.map((u) => ({ ...u }))
 }
-
 export function saveLocalUsers(users: LocalUser[]): void {
-  try {
-    if (typeof window !== 'undefined') {
-      // Strip plaintext passwords from localStorage records permanently
-      const storageUsers = users.map((u) => ({ ...u, password: '' }))
-      localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(storageUsers))
-      window.dispatchEvent(new CustomEvent('local-users-changed'))
-    }
-  } catch (err) {
-    console.error('Could not save local users:', err)
-  }
-
-  // Asynchronously sync users to Supabase cloud
-  for (const user of users) {
-    void saveUserToCloud(user)
-  }
+  loadLocalUsers()
+  directoryUsers = users.map((u) => ({ ...u, password: '' }))
 }
 
 export function addLocalUser(data: {
@@ -656,10 +526,10 @@ export function deleteLocalUser(id: string): void {
   })
 }
 
-export async function deleteUserPermanently(id: string): Promise<void> {
+export async function deleteUserPermanently(id: string, selectedUser?: LocalUser): Promise<void> {
   const users = loadLocalUsers()
-  const target = users.find((u) => u.id === id)
-  if (!target) return
+  const target = selectedUser?.id === id ? selectedUser : users.find((u) => u.id === id)
+  if (!target) throw new Error('تعذر العثور على بيانات المستخدم المطلوب حذفه.')
 
   const delCheck = canDeleteUser(target.username)
   if (!delCheck.allowed) {
@@ -671,11 +541,14 @@ export async function deleteUserPermanently(id: string): Promise<void> {
   }
 
   // 1. Await cloud deletion from auth and database
-  await deleteUserFromCloud(id, target.username)
+  await deleteUserFromCloud(id, target.username, target.email)
 
-  // 2. Remove locally
-  const next = users.filter((u) => u.id !== id)
-  saveLocalUsers(next)
+  const remainingUsers = await syncUsersWithCloud()
+  if (remainingUsers.some((u) => u.id === id || u.username.toLowerCase() === target.username.toLowerCase())) {
+    throw new Error('الخادم ما زال يعرض الحساب بعد طلب الحذف؛ لم يتم تأكيد الحذف.')
+  }
+  // 2. The directory was just replaced with the authoritative server list by syncUsersWithCloud(), so nothing is left to
+  //    remove locally. (Writing back a list captured before the sync would resurrect already-deleted accounts.)
 
   void logAuditEvent({
     action: `حذف مستخدم نهائياً: ${target.username}`,

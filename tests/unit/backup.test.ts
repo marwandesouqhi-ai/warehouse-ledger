@@ -1,5 +1,6 @@
 import { prepareAccessContext } from '../../src/lib/accessContext'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadLocalUsers, saveLocalUsers } from '../../src/lib/localUsers'
 
 vi.mock('../../src/lib/settings', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/lib/settings')>()
@@ -97,13 +98,11 @@ describe('System Backup Suite', () => {
       'warehouse-ledger-custody-items',
       JSON.stringify([{ id: 'c-test-1', warehouseId: 'main', code: 'MAIN-001', name: 'شاشة', quantity: 2, value: 5000 }])
     )
-    localStorage.setItem(
-      'warehouse-ledger-local-users',
-      JSON.stringify([
-        { id: 'usr-admin-marwan', username: 'marwan-desouky', displayName: 'مدير النظام', role: 'system_admin', status: 'active' },
-        { id: 'u-1', username: 'storekeeper', role: 'editor', status: 'active' },
-      ])
-    )
+    // Users now live in the in-memory directory (filled from the server), not in localStorage.
+    saveLocalUsers([
+      { id: 'usr-admin-marwan', username: 'marwan-desouky', displayName: 'مدير النظام', role: 'system_admin', status: 'active' },
+      { id: 'u-1', username: 'storekeeper', role: 'editor', status: 'active' },
+    ] as never)
     localStorage.setItem(
       'warehouse-ledger-audit-logs',
       JSON.stringify([
@@ -248,7 +247,7 @@ describe('System Backup Suite', () => {
     expect(storedMovements.length).toBe(1)
     expect(storedMovements[0].item).toBe('كابلات شبكة')
 
-    const storedUsers = JSON.parse(localStorage.getItem('warehouse-ledger-local-users') || '[]')
+    const storedUsers = loadLocalUsers()
     expect(storedUsers.length).toBe(1)
     expect(storedUsers[0].username).toBe('admin-test')
 
@@ -375,7 +374,7 @@ describe('System Backup Suite', () => {
     expect(storedMovements[0].id).toBe('m-orig')
 
     // Users and audit logs restored
-    const storedUsers = JSON.parse(localStorage.getItem('warehouse-ledger-local-users') || '[]')
+    const storedUsers = loadLocalUsers()
     expect(storedUsers[0].username).toBe('auditor')
 
     const storedLogs = JSON.parse(localStorage.getItem('warehouse-ledger-audit-logs') || '[]')

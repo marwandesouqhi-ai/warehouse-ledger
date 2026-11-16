@@ -44,7 +44,7 @@ import {
     addLocalUser,
     deleteUserPermanently,
     isLastActiveSystemAdmin,
-    loadLocalUsers,
+
     saveUserToCloud,
     syncUsersWithCloud,
     updateLocalUser,
@@ -123,7 +123,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     const [consistencyLoading, setConsistencyLoading] = useState(false)
 
     // Local Users State
-    const [localUsers, setLocalUsers] = useState<LocalUser[]>(loadLocalUsers)
+    const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
     const [userSearchTerm, setUserSearchTerm] = useState('')
 
     // Layer 1: Hide protected System Admin marwan-desouky from all other callers
@@ -234,20 +234,18 @@ export default function UsersPage({ session }: UsersPageProps) {
         }
     }
 
-    async function reloadUsers() {
+    async function reloadUsers(): Promise<boolean> {
         setRequestsLoading(true)
         try {
             const [syncedUsers] = await Promise.all([
                 syncUsersWithCloud(),
                 loadRequests(),
             ])
-            if (syncedUsers && syncedUsers.length > 0) {
-                setLocalUsers(syncedUsers)
-            } else {
-                setLocalUsers(loadLocalUsers())
-            }
-        } catch {
-            setLocalUsers(loadLocalUsers())
+            setLocalUsers(syncedUsers)
+            return true
+        } catch (err) {
+            setActionFeedback({ type: 'error', message: err instanceof Error ? err.message : 'تعذر تحميل المستخدمين من الخادم.' })
+            return false
         } finally {
             setRequestsLoading(false)
         }
@@ -303,10 +301,10 @@ export default function UsersPage({ session }: UsersPageProps) {
                         },
                     })
                     if (edgeErr || !edgeData?.success) {
-                        console.warn('admin-users invoke fallback:', edgeErr || edgeData)
+                        throw new Error(edgeData?.error || 'تعذر إنشاء المستخدم في الخادم.')
                     }
                 } catch (edgeCatch) {
-                    console.warn('admin-users invoke error:', edgeCatch)
+                    throw edgeCatch
                 }
             }
 
@@ -640,12 +638,22 @@ export default function UsersPage({ session }: UsersPageProps) {
         setIsActionLoading(true)
         setActionFeedback(null)
         try {
-            await deleteUserPermanently(user.id)
-            reloadUsers()
-            setActionFeedback({
-                message: `تم حذف المستخدم "${user.username}" نهائياً من قاعدة البيانات ونظام المصادقة.`,
-                type: 'success',
-            })
+            await deleteUserPermanently(user.id, user)
+            // The server confirmed the deletion: drop the row right away so the list never shows a deleted account,
+            // even if the follow-up refresh fails.
+            setLocalUsers((current) => current.filter(
+                (u) => u.id !== user.id && u.username.toLowerCase() !== user.username.toLowerCase(),
+            ))
+            const refreshed = await reloadUsers()
+            setActionFeedback(refreshed
+                ? {
+                    message: `تم حذف المستخدم "${user.username}" نهائياً من قاعدة البيانات ونظام المصادقة.`,
+                    type: 'success',
+                }
+                : {
+                    message: `تم حذف المستخدم "${user.username}" نهائياً، لكن تعذر تحديث القائمة من الخادم. اضغط «تحديث» للتأكد.`,
+                    type: 'error',
+                })
             setDeletingUser(null)
         } catch (err) {
             setActionFeedback({

@@ -882,6 +882,50 @@ ${recoveryLink}
       })
     }
 
+    // ─── ACTION: change_own_password ────────────────────────────────────────
+    // Used for the mandatory first-login password change when Auth requires the
+    // current password. The caller must prove knowledge of the temporary one.
+    if (action === "change_own_password") {
+      const currentPassword = String(body.currentPassword || "")
+      const newPassword = String(body.newPassword || "")
+      const callerEmail = String(caller.email || "").trim().toLowerCase()
+
+      if (!callerEmail || !currentPassword || newPassword.length < 6) {
+        return new Response(JSON.stringify({ error: "بيانات تغيير كلمة المرور غير مكتملة." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const verifier = createClient(supabaseUrl, supabaseAnonKey)
+      const { data: verifiedSession, error: verifyError } = await verifier.auth.signInWithPassword({
+        email: callerEmail,
+        password: currentPassword,
+      })
+      if (verifyError || verifiedSession.user?.id !== caller.id) {
+        return new Response(JSON.stringify({ error: "كلمة المرور الحالية غير صحيحة." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        })
+      }
+
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(caller.id, {
+        password: newPassword,
+        app_metadata: { ...caller.app_metadata, must_change_password: false },
+      })
+      if (updateError) throw updateError
+
+      await supabaseAdmin
+        .from("app_users")
+        .update({ must_change_password: false })
+        .eq("auth_user_id", caller.id)
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
     // 2. Caller privilege check (System Admin or Department Admin)
     const isSystemAdmin =
       caller.app_metadata?.system_admin === true ||
@@ -1535,34 +1579,62 @@ ${recoveryLink}
         })
       }
 
+      let deletionStage = "auth"
+      try {
+      async function requireDeletion(stage: string, operation: PromiseLike<{ error: { message: string } | null }>) {
+        deletionStage = stage
+        const { error } = await operation
+        if (error) throw new Error(error.message)
+      }
       // 5. Permanent deletion from Supabase Auth (auth.users)
       if (targetAuthId) {
         try {
-          await supabaseAdmin.auth.admin.deleteUser(targetAuthId)
+          const { error } = await supabaseAdmin.auth.admin.deleteUser(targetAuthId)
+          if (error) {
+            console.error("delete_user auth deletion failed:", error.message)
+            return new Response(JSON.stringify({
+              error: "تعذر حذف حساب المصادقة بسبب سجلات مرتبطة أو قيود قاعدة البيانات. لم يكتمل الحذف.",
+              code: "AUTH_USER_DELETE_FAILED",
+            }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+          }
         } catch (authDelErr) {
-          console.warn("Could not delete from auth.users:", authDelErr)
+          throw authDelErr
         }
       }
 
       // 6. Permanent deletion from public database tables (app_users, user_invitations, registration_requests, telegram_user_sessions)
       if (targetUsername || userId) {
         if (targetUsername) {
-          await supabaseAdmin.from("app_users").delete().ilike("username", targetUsername)
-          await supabaseAdmin.from("user_invitations").delete().ilike("username", targetUsername)
-          await supabaseAdmin.from("telegram_user_sessions").delete().ilike("username", targetUsername)
+          await requireDeletion("app_users", supabaseAdmin.from("app_users").delete().ilike("username", targetUsername))
+          // Invitations are keyed by email; cleaned below, not by username.
+          // Telegram sessions have email, not username; cleaned below by email.
         }
         if (userId) {
-          await supabaseAdmin.from("app_users").delete().eq("id", userId)
+          await requireDeletion("app_users", supabaseAdmin.from("app_users").delete().eq("id", userId))
         }
         if (targetAuthId) {
-          await supabaseAdmin.from("app_users").delete().eq("auth_user_id", targetAuthId)
+          await requireDeletion("app_users", supabaseAdmin.from("app_users").delete().eq("auth_user_id", targetAuthId))
         }
       }
 
       if (targetEmail) {
-        await supabaseAdmin.from("user_invitations").delete().ilike("email", targetEmail)
-        await supabaseAdmin.from("registration_requests").delete().ilike("email", targetEmail)
-        await supabaseAdmin.from("telegram_user_sessions").delete().ilike("email", targetEmail)
+        await requireDeletion("user_invitations", supabaseAdmin.from("user_invitations").delete().ilike("email", targetEmail))
+        await requireDeletion("registration_requests", supabaseAdmin.from("registration_requests").update({ approval_status: "rejected" }).ilike("email", targetEmail))
+        await requireDeletion("telegram_user_sessions", supabaseAdmin.from("telegram_user_sessions").delete().ilike("email", targetEmail))
+      }
+
+      deletionStage = "verify_auth_users"
+      if (targetAuthId) {
+        const { data: checkAuth, error: checkError } = await supabaseAdmin.auth.admin.getUserById(targetAuthId)
+        if (checkAuth?.user && !checkAuth.user.deleted_at) throw new Error("حساب المصادقة ما زال موجوداً بعد الحذف.")
+        if (checkError && checkError.status !== 404 && checkError.code !== "user_not_found") throw checkError
+      }
+      deletionStage = "verify_app_users"
+      if (targetUsername) {
+        const { data: remaining, error: verifyError } = await supabaseAdmin.from("app_users")
+          .select("id").eq("username", targetUsername).limit(1)
+        if (verifyError) throw new Error(verifyError.message)
+        if (remaining?.length) throw new Error("الحساب ما زال موجوداً؛ لم يكتمل الحذف.")
       }
 
       await supabaseAdmin.from("audit_logs").insert({
@@ -1576,11 +1648,20 @@ ${recoveryLink}
 
       return new Response(JSON.stringify({
         success: true,
-        message: "تم حذف المستخدم وجميع سجلاته المرتبطة نهائياً من قاعدة البيانات ونظام المصادقة.",
+        message: "تم حذف حساب المستخدم وإلغاء اعتماد طلب التسجيل مع الاحتفاظ بالسجل التاريخي للأكواد الوظيفية.",
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        console.error("delete_user failed at", deletionStage, detail)
+        return new Response(JSON.stringify({
+          error: "فشل حذف المستخدم في مرحلة " + deletionStage + ": " + detail,
+          code: "USER_DELETE_FAILED",
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      }
+
     }
 
     // ─── ACTION: repair_data_quality ─────────────────────────────────────────

@@ -12,19 +12,33 @@ import {
   LOCAL_USERS_STORAGE_KEY,
 } from '../../src/lib/localUsers'
 
+const SYSTEM_ADMIN = {
+  id: 'usr-admin-marwan',
+  username: 'marwan-desouky',
+  displayName: 'Marwan',
+  password: '',
+  role: 'system_admin' as const,
+  activationCode: '',
+  status: 'active' as const,
+  createdAt: '2026-10-21T00:00:00.000Z',
+}
+
 describe('Local Users Security & Password Storage Hardening Suite', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
+    // The directory lives in memory and is filled from the server list (syncUsersWithCloud); emulate that here.
+    saveLocalUsers([SYSTEM_ADMIN])
   })
 
-  it('1. DEFAULT_ADMIN in code is passwordless and never stores plaintext passwords', () => {
+  it('1. the in-memory directory is passwordless and never persists users to storage', () => {
     const users = loadLocalUsers()
     expect(users.length).toBeGreaterThanOrEqual(1)
 
     const admin = users.find((u) => u.username === 'marwan-desouky')
     expect(admin).toBeDefined()
     expect(admin?.password).toBe('') // Zero plaintext password in code or memory
+    expect(localStorage.getItem(LOCAL_USERS_STORAGE_KEY)).toBeNull()
   })
 
   it('2. authenticateLocalUser strictly rejects all local authentication attempts', () => {
@@ -43,7 +57,7 @@ describe('Local Users Security & Password Storage Hardening Suite', () => {
     }).toThrow(/تم إلغاء التفعيل عبر الأكواد الثابتة/)
   })
 
-  it('4. saveLocalUsers strips plaintext passwords from localStorage', () => {
+  it('4. saveLocalUsers strips plaintext passwords and does not write users to localStorage', () => {
     const testUsers = [
       {
         id: 'usr-1',
@@ -60,8 +74,8 @@ describe('Local Users Security & Password Storage Hardening Suite', () => {
     saveLocalUsers(testUsers)
 
     const raw = localStorage.getItem(LOCAL_USERS_STORAGE_KEY)
-    expect(raw).not.toBeNull()
-    expect(raw).not.toContain('PlaintextPassword123!')
+    expect(raw).toBeNull()
+    expect(JSON.stringify(localStorage)).not.toContain('PlaintextPassword123!')
 
     const reloaded = loadLocalUsers()
     const target = reloaded.find((u) => u.username === 'test_user')
