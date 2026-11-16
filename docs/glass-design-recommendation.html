@@ -1,0 +1,321 @@
+<title>توصية تصميم Glassy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Concept: a design-review memo. Quiet page chrome; the live playground carries the glass. All page colors are tokens; the playground has its own scoped --g-* tokens so its light/dark toggle never changes the memo itself. */
+:root{
+  --bg:#F3F6F6; --fg:#102527; --muted:#47595C; --line:#D6E1E1; --card:#FFFFFF; --accent:#0B737D; --accent-fg:#FFFFFF; --wash:#E4F2F2;
+  --ok:#166534; --okbg:#E6F4EA; --warn:#92400E; --warnbg:#FDF1DC; --bad:#991B1B; --badbg:#FDE8E8;
+  --code-bg:#0E1A1C; --code-fg:#D7EDEB;
+  --font:'IBM Plex Sans Arabic','Segoe UI',Tahoma,system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#080E1A; --fg:#E8EEF9; --muted:#9AA9C4; --line:#222F47; --card:#0E1626; --accent:#5CC8D0; --accent-fg:#06161F; --wash:#13263A;
+  --ok:#34D399; --okbg:#0F2F2C; --warn:#FBBF24; --warnbg:#33290F; --bad:#F87171; --badbg:#3A1B24; --code-bg:#050A14; --code-fg:#D7E4F7; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#080E1A; --fg:#E8EEF9; --muted:#9AA9C4; --line:#222F47; --card:#0E1626; --accent:#5CC8D0; --accent-fg:#06161F; --wash:#13263A;
+  --ok:#34D399; --okbg:#0F2F2C; --warn:#FBBF24; --warnbg:#33290F; --bad:#F87171; --badbg:#3A1B24; --code-bg:#050A14; --code-fg:#D7E4F7; color-scheme:dark; }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.75;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:40px 80px;display:grid;gap:56px}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(28px,4.4vw,44px);line-height:1.25;font-weight:700;text-wrap:balance}
+h2{font-size:clamp(21px,2.6vw,27px);font-weight:700;text-wrap:balance}
+h3{font-size:16px;font-weight:600}
+.eyebrow{font-size:13px;font-weight:600;color:var(--accent)}
+.lede{color:var(--muted);font-size:17px;max-width:64ch}
+.head{display:grid;gap:14px}
+.sec-head{display:grid;gap:8px;margin-bottom:22px}.sec-head p{color:var(--muted);max-width:68ch}
+
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.v{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:8px;align-content:start;min-width:0}
+.v b{font-size:15px}.v span{color:var(--muted);font-size:14px}
+.pill{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 10px;justify-self:start}
+.pill.ok{background:var(--okbg);color:var(--ok)}.pill.no{background:var(--badbg);color:var(--bad)}.pill.mid{background:var(--warnbg);color:var(--warn)}
+
+/* playground */
+.lab{display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:960px){.lab{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:16px}
+.ctl{display:grid;gap:6px;font-size:13px;font-weight:600}
+.ctl .row{display:flex;justify-content:space-between;color:var(--muted);font-weight:500;font-family:var(--mono);font-size:12px;direction:ltr}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--bg)}
+.seg button{font:inherit;font-weight:600;font-size:14px;border:0;background:transparent;color:var(--muted);padding:6px 18px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ratios{display:grid;gap:8px}
+.ratio{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.ratio b{font-family:var(--mono);font-variant-numeric:tabular-nums;direction:ltr}
+.note{font-size:12.5px;color:var(--muted)}
+
+.stage{border-radius:18px;overflow:hidden;border:1px solid var(--line);position:relative;min-width:0}
+/* scoped glass tokens */
+.stage[data-g="light"]{--g-base:#E7F1F3;--g-b1:#8FCBD1;--g-b2:#B6C6F2;--g-surface:255,255,255;--g-edge:255,255,255;--g-ink:#102527;--g-ink2:#2D4649;--g-muted:#47595C;--g-accent:#0B737D;--g-on:#fff;--g-solid:#FFFFFF;--g-line:#DCE5E5;--g-ok:#166534;--g-okbg:#E6F4EA;--g-warn:#92400E;--g-warnbg:#FDF1DC;--g-shadow:0 8px 32px rgba(16,37,39,.12)}
+.stage[data-g="dark"]{--g-base:#08101C;--g-b1:#1B5E68;--g-b2:#2F4AA8;--g-surface:17,26,44;--g-edge:255,255,255;--g-ink:#E8EEF9;--g-ink2:#C3CFE3;--g-muted:#9AA9C4;--g-accent:#5CC8D0;--g-on:#06161F;--g-solid:#111A2C;--g-line:#26344D;--g-ok:#34D399;--g-okbg:#0F2F2C;--g-warn:#FBBF24;--g-warnbg:#33290F;--g-shadow:0 8px 32px rgba(0,0,0,.45)}
+.stage{--blur:16px;--sat:160%;--alpha:.62;--edge:.5;
+  background:
+    radial-gradient(520px 340px at 85% 10%,var(--g-b1),transparent 70%),
+    radial-gradient(560px 420px at 8% 88%,var(--g-b2),transparent 70%),
+    var(--g-base);
+  color:var(--g-ink);direction:rtl;text-align:right;padding:18px;display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:14px;font-size:13.5px;line-height:1.6}
+@media (max-width:620px){.stage{grid-template-columns:1fr}}
+.glass{
+  background:rgba(var(--g-surface),var(--alpha));
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(var(--sat));backdrop-filter:blur(var(--blur)) saturate(var(--sat));
+  border:1px solid rgba(var(--g-edge),calc(var(--edge) * .6));
+  box-shadow:var(--g-shadow), inset 0 1px 0 rgba(var(--g-edge),calc(var(--edge) * .8));
+  border-radius:16px}
+.stage.nofx .glass{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--g-solid);border-color:var(--g-line)}
+.s-side{padding:14px;display:grid;gap:6px;align-content:start;order:2}
+.s-side b{display:block;margin-bottom:6px}
+.s-side a{display:block;padding:7px 10px;border-radius:10px;color:var(--g-ink2);font-weight:500}
+.s-side a.on{background:rgba(var(--g-edge),.0);background:color-mix(in srgb,var(--g-accent) 16%,transparent);color:var(--g-accent);font-weight:700}
+.s-main{display:grid;gap:12px;align-content:start;min-width:0;order:1}
+.s-top{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.s-top .search{flex:1;color:var(--g-muted);background:color-mix(in srgb,var(--g-ink) 6%,transparent);border-radius:10px;padding:6px 12px}
+.s-top .av{width:30px;height:30px;border-radius:50%;background:var(--g-accent);color:var(--g-on);display:grid;place-items:center;font-weight:700}
+.s-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:620px){.s-kpis{grid-template-columns:1fr}}
+.s-kpi{padding:14px;display:grid;gap:2px}
+.s-kpi small{color:var(--g-muted)}.s-kpi strong{font-size:20px;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;font-size:11.5px;font-weight:700;border-radius:99px;padding:1px 9px}
+.chip.ok{background:var(--g-okbg);color:var(--g-ok)}.chip.warn{background:var(--g-warnbg);color:var(--g-warn)}
+.s-table{background:var(--g-solid);border:1px solid var(--g-line);border-radius:16px;padding:6px 14px;overflow:auto}
+.s-table table{width:100%;border-collapse:collapse;min-width:380px}
+.s-table th{font-size:12px;color:var(--g-muted);text-align:right;padding:8px 6px;border-bottom:1px solid var(--g-line)}
+.s-table td{padding:9px 6px;border-bottom:1px solid var(--g-line)}
+.s-table tr:last-child td{border-bottom:0}
+.s-cap{grid-column:1/-1;font-size:12px;color:var(--g-ink2);opacity:.9}
+
+/* table of areas */
+.areas{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:auto}
+.areas table{width:100%;border-collapse:collapse;min-width:560px}
+.areas th{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:10px 14px;background:var(--wash);border-bottom:1px solid var(--line)}
+.areas td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+.areas tr:last-child td{border-bottom:0}
+
+/* code */
+.codewrap{background:var(--code-bg);border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.codebar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.1);color:var(--code-fg);font-size:12px}
+.codebar button{font:inherit;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,.25);background:transparent;color:var(--code-fg);border-radius:8px;padding:3px 12px;cursor:pointer}
+pre{margin:0;padding:14px 16px;overflow:auto;color:var(--code-fg);font-family:var(--mono);font-size:12.5px;line-height:1.65;direction:ltr;text-align:left}
+
+.steps{counter-reset:s;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px;list-style:none;margin:0;padding:0}
+.steps li{counter-increment:s;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:8px;align-content:start}
+.steps li::before{content:"المرحلة " counter(s);font-size:12px;font-weight:700;color:var(--accent)}
+.steps b{font-size:16px}.steps span{color:var(--muted);font-size:14px}
+.risks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<main class="wrap" dir="rtl" lang="ar">
+
+<header class="head">
+  <span class="eyebrow">توصية تصميم · منظومة حركة المخازن والعهدة</span>
+  <h1>هل نحوّل واجهة النظام إلى Glassy؟ نعم، بشروط وفي أماكن محددة</h1>
+  <p class="lede">الزجاجية (شفافية مع blur خلف السطح) تعطي النظام شكلاً أحدث وعمقاً بصرياً، لكنها تضرّ بقراءة الجداول والنماذج لو عُمّمت. التوصية: نطبّقها على الأسطح «الإطارية» (القائمة والشريط العلوي والكروت العلوية والنوافذ) ونترك الجداول والحقول على أسطح مصمتة. جرّب القيم بنفسك في المختبر أدناه.</p>
+</header>
+
+<section>
+  <div class="sec-head"><h2>الخلاصة</h2><p>ثلاثة قرارات تحدد نجاح التحويل.</p></div>
+  <div class="verdict">
+    <div class="v"><span class="pill ok">يُطبَّق</span><b>الإطار والتنقل</b><span>القائمة الجانبية، الشريط العلوي، الشريط السفلي على الموبايل، النوافذ المنبثقة، وكروت المؤشرات العلوية.</span></div>
+    <div class="v"><span class="pill no">لا يُطبَّق</span><b>الجداول والنماذج</b><span>الجداول وحقول الإدخال وسجل الحركات تبقى على أسطح مصمتة: القراءة والدقة أهم من الشكل في الشاشات المحاسبية.</span></div>
+    <div class="v"><span class="pill mid">بشرط</span><b>تباين وأداء</b><span>نسبة تباين ٤٫٥:١ على أسوأ نقطة في الخلفية، وبديل مصمت للأجهزة الضعيفة ولمن يفضّل تقليل الشفافية.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>مختبر الزجاج</h2><p>غيّر الـ blur والشفافية ونسبة الحافة. النسب تُحسب على <strong>أسوأ نقطة</strong> في الخلفية (أفتح أو أغمق لون في التدرّج)، لأن النص الزجاجي يُقرأ على ما خلفه وليس على لون السطح وحده.</p></div>
+  <div class="lab">
+    <div class="panel">
+      <div class="seg" role="group" aria-label="وضع المعاينة"><button id="m-light" aria-pressed="true">فاتح</button><button id="m-dark" aria-pressed="false">داكن</button></div>
+      <label class="ctl" for="r-blur"><span class="row"><span>blur</span><span id="v-blur">16px</span></span><input id="r-blur" type="range" min="0" max="40" value="16"></label>
+      <label class="ctl" for="r-alpha"><span class="row"><span>surface opacity</span><span id="v-alpha">62%</span></span><input id="r-alpha" type="range" min="25" max="95" value="62"></label>
+      <label class="ctl" for="r-edge"><span class="row"><span>edge highlight</span><span id="v-edge">50%</span></span><input id="r-edge" type="range" min="0" max="100" value="50"></label>
+      <label class="ctl" for="r-sat"><span class="row"><span>saturate</span><span id="v-sat">160%</span></span><input id="r-sat" type="range" min="100" max="220" value="160"></label>
+      <div class="seg" role="group" aria-label="دعم التأثير"><button id="fx-on" aria-pressed="true">مع الزجاج</button><button id="fx-off" aria-pressed="false">بديل مصمت</button></div>
+      <div class="ratios" aria-live="polite">
+        <div class="ratio"><span>النص الأساسي</span><b id="c-ink"></b></div>
+        <div class="ratio"><span>النص الثانوي</span><b id="c-muted"></b></div>
+        <div class="ratio"><span>اللون الرئيسي</span><b id="c-accent"></b></div>
+      </div>
+      <p class="note">«البديل المصمت» هو ما يراه من فعّل «تقليل الشفافية» أو متصفح لا يدعم backdrop-filter.</p>
+    </div>
+
+    <div class="stage" id="stage" data-g="light">
+      <aside class="glass s-side" aria-label="قائمة جانبية زجاجية">
+        <b>دفتر المخازن</b>
+        <a class="on">الرئيسية</a><a>طلبات الصرف</a><a>عهدة المخازن</a><a>المشتريات</a><a>التقارير</a>
+      </aside>
+      <div class="s-main">
+        <div class="glass s-top"><div class="search">ابحث عن صنف أو إذن صرف…</div><div class="av">م</div></div>
+        <div class="s-kpis">
+          <div class="glass s-kpi"><small>قيمة المخزون</small><strong>١٠٠٬٧١٠ ج.م</strong><span class="chip ok">▲ ٤٫٢٪</span></div>
+          <div class="glass s-kpi"><small>بانتظار الاعتماد</small><strong>٧</strong><span class="chip warn">٢ متأخرة</span></div>
+          <div class="glass s-kpi"><small>الأصناف المسجّلة</small><strong>٣٢</strong><span class="chip ok">مكتمل</span></div>
+        </div>
+        <div class="s-table"><table><thead><tr><th>التاريخ</th><th>الصنف</th><th>الكمية</th><th>الحالة</th></tr></thead><tbody>
+          <tr><td>١٦ نوفمبر</td><td>حبر طابعة HP 85A</td><td>٤٠</td><td><span class="chip ok">مكتمل</span></td></tr>
+          <tr><td>١٥ نوفمبر</td><td>ورق A4 (علبة)</td><td>١٢</td><td><span class="chip warn">معلّق</span></td></tr>
+          <tr><td>١٣ نوفمبر</td><td>مصابيح LED 18W</td><td>٢٠٠</td><td><span class="chip ok">مكتمل</span></td></tr>
+        </tbody></table></div>
+      </div>
+      <div class="s-cap">الجدول على سطح مصمت عن قصد: الزجاج للإطار، والمصمت للبيانات. بيانات توضيحية.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>أين نطبّق الزجاج وأين لا</h2><p>القاعدة: كل ما يحمل أرقاماً يُقرأ ويُقارَن يبقى مصمتاً.</p></div>
+  <div class="areas"><table>
+    <thead><tr><th>العنصر</th><th>القرار</th><th>السبب</th></tr></thead>
+    <tbody>
+      <tr><td>القائمة الجانبية والدرج على الموبايل</td><td><span class="pill ok">زجاج</span></td><td>عناصر تنقل بنص كبير، والخلفية خلفها ثابتة.</td></tr>
+      <tr><td>الشريط العلوي والشريط السفلي</td><td><span class="pill ok">زجاج</span></td><td>يطفوان فوق المحتوى، والـ blur يفصلهما بصرياً دون حدود ثقيلة.</td></tr>
+      <tr><td>كروت المؤشرات العلوية (KPI)</td><td><span class="pill ok">زجاج</span></td><td>أرقام كبيرة بخط عريض، فتتحمل الشفافية.</td></tr>
+      <tr><td>النوافذ المنبثقة (Modals)</td><td><span class="pill mid">زجاج خفيف</span></td><td>الخلفية المموّهة تحافظ على السياق، لكن الحقول داخلها مصمتة.</td></tr>
+      <tr><td>الجداول وسجل الحركات والجرد</td><td><span class="pill no">مصمت</span></td><td>مقارنة أرقام صف بصف؛ أي تدرّج خلفي يشوّش القراءة.</td></tr>
+      <tr><td>الفورمات وحقول الإدخال</td><td><span class="pill no">مصمت</span></td><td>الحدود والتركيز يجب أن يكونا واضحين في كل الظروف.</td></tr>
+      <tr><td>الطباعة والتقارير الرسمية (A4)</td><td><span class="pill no">مصمت</span></td><td>الطباعة لا تدعم backdrop-filter وتحتاج أبيض نقياً.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>المخاطر وكيف نتفاداها</h2></div>
+  <div class="risks">
+    <div class="v"><span class="pill no">تباين</span><b>نص يضيع فوق خلفية فاتحة أو غامقة</b><span>نختبر النسبة على أسوأ نقطة في التدرّج، ونرفع شفافية السطح لـ ٦٠٪ على الأقل في النصوص الصغيرة.</span></div>
+    <div class="v"><span class="pill no">أداء</span><b>backdrop-filter مكلف على الأجهزة الضعيفة</b><span>نحدّ عدد الطبقات الزجاجية في الشاشة (٥–٦ كحد أقصى)، ونتجنب blur أكبر من ٢٠px، ونعطّله عند <code>prefers-reduced-transparency</code>.</span></div>
+    <div class="v"><span class="pill no">توافق</span><b>متصفحات بلا دعم أو وضع توفير الطاقة</b><span>نكتب القيمة المصمتة أولاً، ونضيف الزجاج داخل <code>@supports</code> فقط، فلا يتغير شيء لمن لا يدعمه.</span></div>
+    <div class="v"><span class="pill mid">اتساق</span><b>خلط الزجاجي والمصمت عشوائياً</b><span>نعرّف ثلاثة مستويات فقط (مصمت، زجاج، زجاج خفيف) كتوكنات، ولا يُسمح بقيم شفافية حرفية داخل المكوّنات.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>التوكنات المقترحة</h2><p>تتوافق مع أسماء المتغيرات الحالية في <code>index.css</code> (<code>--surface</code>, <code>--line</code>) وتُضاف فوقها دون تغيير المكوّنات القائمة.</p></div>
+  <div class="codewrap">
+    <div class="codebar"><span>index.css</span><button id="copy" type="button">نسخ الكود</button></div>
+<pre id="code">/* 1) Solid defaults first (works everywhere, incl. print and old browsers) */
+:root {
+  --glass-bg: var(--surface);
+  --glass-border: var(--line);
+  --glass-shadow: var(--shadow-sm);
+  --glass-blur: 0px;
+}
+
+/* 2) Glass only where backdrop-filter is supported */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-border: rgba(255, 255, 255, 0.55);
+    --glass-shadow: 0 8px 32px rgba(16, 37, 39, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    --glass-blur: 16px;
+  }
+  :root[data-theme='dark'] {
+    --glass-bg: rgba(17, 26, 44, 0.58);
+    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* 3) One utility, used only on frame surfaces */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+}
+
+/* 4) Respect users who ask for less transparency */
+@media (prefers-reduced-transparency: reduce) {
+  :root, :root[data-theme='dark'] {
+    --glass-bg: var(--surface);
+    --glass-border: var(--line);
+    --glass-blur: 0px;
+  }
+}
+
+/* 5) Page background that gives the glass something to blur */
+body {
+  background:
+    radial-gradient(900px 600px at 85% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(900px 700px at 0% 100%, color-mix(in srgb, var(--info) 18%, transparent), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Apply to: .sidebar, .topbar, .mobile-bottom-dock, .kpi-card, modal panels.
+   Never to: tables, inputs, print styles. */</pre>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>خطة التنفيذ</h2><p>كل مرحلة قابلة للتراجع بمفردها.</p></div>
+  <ol class="steps">
+    <li><b>التوكنات والخلفية</b><span>إضافة متغيرات الزجاج والخلفية المتدرجة مع البديل المصمت، دون لمس المكوّنات.</span></li>
+    <li><b>الإطار والتنقل</b><span>تطبيق <code>.glass</code> على القائمة والشريطين والدرج، واختبار التباين في الوضعين.</span></li>
+    <li><b>الكروت والنوافذ</b><span>كروت المؤشرات والنوافذ المنبثقة، مع إبقاء الحقول والجداول مصمتة.</span></li>
+    <li><b>التدقيق والأداء</b><span>قياس الأداء على جهاز متوسط، وإضافة مفتاح «تقليل الشفافية» في الإعدادات.</span></li>
+  </ol>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage');
+  var S={mode:'light',blur:16,alpha:62,edge:50,sat:160,fx:true};
+  var BG={light:{base:'#E7F1F3',lo:'#8FCBD1',hi:'#E7F1F3',surface:[255,255,255],ink:'#102527',muted:'#47595C',accent:'#0B737D'},
+          dark:{base:'#08101C',lo:'#08101C',hi:'#2F4AA8',surface:[17,26,44],ink:'#E8EEF9',muted:'#9AA9C4',accent:'#5CC8D0'}};
+  function rgb(h){h=h.replace('#','');return [0,2,4].map(function(i){return parseInt(h.substr(i,2),16)})}
+  function lum(c){var a=c.map(function(v){v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*a[0]+.7152*a[1]+.0722*a[2]}
+  function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+  function blend(sur,bg,al){return [0,1,2].map(function(i){return Math.round(sur[i]*al+bg[i]*(1-al))})}
+  function fmt(n){return n.toFixed(1)+':1'}
+  function row(id,fg,worst,limit){var r=worst,ok=r>=limit;var el=document.getElementById(id);el.textContent=fmt(r)+(ok?'  ✓':'  ✕');el.style.color=ok?'var(--ok)':'var(--bad)'}
+  function update(){
+    var P=BG[S.mode],al=S.fx?S.alpha/100:1;
+    stage.setAttribute('data-g',S.mode);
+    stage.classList.toggle('nofx',!S.fx);
+    stage.style.setProperty('--blur',S.blur+'px');
+    stage.style.setProperty('--alpha',al);
+    stage.style.setProperty('--edge',S.edge/100);
+    stage.style.setProperty('--sat',S.sat+'%');
+    document.getElementById('v-blur').textContent=S.blur+'px';
+    document.getElementById('v-alpha').textContent=S.alpha+'%';
+    document.getElementById('v-edge').textContent=S.edge+'%';
+    document.getElementById('v-sat').textContent=S.sat+'%';
+    var backs=[rgb(P.lo),rgb(P.hi)];
+    function worst(fg,limit){var w=1e9;backs.forEach(function(b){var s=blend(P.surface,b,al);w=Math.min(w,ratio(rgb(fg),s))});return w}
+    row('c-ink',P.ink,worst(P.ink),4.5);
+    row('c-muted',P.muted,worst(P.muted),4.5);
+    row('c-accent',P.accent,worst(P.accent),3);
+    document.getElementById('m-light').setAttribute('aria-pressed',S.mode==='light');
+    document.getElementById('m-dark').setAttribute('aria-pressed',S.mode==='dark');
+    document.getElementById('fx-on').setAttribute('aria-pressed',S.fx);
+    document.getElementById('fx-off').setAttribute('aria-pressed',!S.fx);
+  }
+  [['r-blur','blur'],['r-alpha','alpha'],['r-edge','edge'],['r-sat','sat']].forEach(function(p){
+    document.getElementById(p[0]).addEventListener('input',function(e){S[p[1]]=+e.target.value;update()});
+  });
+  document.getElementById('m-light').onclick=function(){S.mode='light';update()};
+  document.getElementById('m-dark').onclick=function(){S.mode='dark';update()};
+  document.getElementById('fx-on').onclick=function(){S.fx=true;update()};
+  document.getElementById('fx-off').onclick=function(){S.fx=false;update()};
+  update();
+
+  var cp=document.getElementById('copy');
+  cp.addEventListener('click',function(){
+    var t=document.getElementById('code').innerText;
+    function done(){var o=cp.textContent;cp.textContent='تم النسخ';setTimeout(function(){cp.textContent=o},1400)}
+    try{navigator.clipboard.writeText(t).then(done,function(){sel()})}catch(e){sel()}
+    function sel(){var r=document.createRange();r.selectNodeContents(document.getElementById('code'));var s=getSelection();s.removeAllRanges();s.addRange(r)}
+  });
+})();
+</script>
