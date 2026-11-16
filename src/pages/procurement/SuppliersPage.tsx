@@ -26,6 +26,7 @@ import {
 import { isSystemAdmin, canAddDepartment } from '../../lib/permissions'
 import { logAuditEvent } from '../../lib/auditLogger'
 import { matchesSearch } from '../../lib/searchUtils'
+import { notify, confirmDialog } from '../../lib/dialogs'
 
 interface SuppliersPageProps {
   session?: Session | null
@@ -246,7 +247,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
   }
 
   async function handleDeleteSupplier(supplier: SupplierStats) {
-    if (!confirm(`هل أنت متأكد من رغبتك في حذف المورد «${supplier.name}» نهائياً؟`)) return
+    if (!(await confirmDialog(`هل أنت متأكد من رغبتك في حذف المورد «${supplier.name}» نهائياً؟`, { danger: true, confirmLabel: 'حذف نهائي' }))) return
 
     setActionError('')
     try {
@@ -262,7 +263,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       setSuccessMessage(`تم حذف المورد «${supplier.name}» بنجاح.`)
       await loadData()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'تعذر حذف المورد.')
+      notify(err instanceof Error ? err.message : 'تعذر حذف المورد.')
     }
   }
 
@@ -278,7 +279,7 @@ export default function SuppliersPage({ session }: SuppliersPageProps) {
       })
       await loadData()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'تعذر تغيير حالة المورد.')
+      notify(err instanceof Error ? err.message : 'تعذر تغيير حالة المورد.')
     }
   }
 

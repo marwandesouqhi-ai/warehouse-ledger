@@ -33,6 +33,7 @@ import {
 import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 import { getCairoDateString } from '../lib/dateUtils'
+import { notify, confirmDialog } from '../lib/dialogs'
 
 type ContractsPageProps = {
   session?: Session | null
@@ -176,7 +177,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
     e.preventDefault()
     if (!canAdd) return
     if (!supplierName.trim() || !contractTitle.trim() || !startDate || !endDate) {
-      alert('يرجى تعبئة كافة الحقول الأساسية وتواريخ العقد.')
+      notify('يرجى تعبئة كافة الحقول الأساسية وتواريخ العقد.')
       return
     }
 
@@ -229,7 +230,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
 
   const handleDelete = async (contract: SupplierContract) => {
     if (!isAdmin) return
-    if (!window.confirm(`هل أنت متأكد من حذف العقد رقم ${contract.contract_number}؟`)) return
+    if (!(await confirmDialog(`هل أنت متأكد من حذف العقد رقم ${contract.contract_number}؟`, { danger: true, confirmLabel: 'حذف' }))) return
 
     try {
       await deleteContract(contract.id)
@@ -244,7 +245,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
         user: session?.user,
       })
     } catch {
-      alert('حدث خطأ أثناء حذف العقد.')
+      notify('حدث خطأ أثناء حذف العقد.')
     }
   }
 
@@ -391,7 +392,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                         <div className="flex items-center gap-2 flex-wrap">
                           <strong>{c.contract_title}</strong>
                           {hasAttachments && (
-                            <span className="inline-flex items-center gap-1 text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium" title="يحتوي على مرفقات موثقة">
+                            <span className="inline-flex items-center gap-1 text-[13px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium" title="يحتوي على مرفقات موثقة">
                               <Paperclip size={11} /> {c.attachments!.length} مرفق
                             </span>
                           )}
@@ -633,7 +634,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                   <span className="text-xs font-semibold text-foreground">
                     انقر لاختيار ملف (PDF، صور، مستندات Word/Excel) أو اسحبه هنا
                   </span>
-                  <span className="text-[11px] text-muted mt-0.5">
+                  <span className="text-[13px] text-muted mt-0.5">
                     يتم الحفظ والتشفير تلقائياً وتضمينه في النسخ الاحتياطية السحابية والمحلية
                   </span>
                   <input
@@ -672,7 +673,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                           )}
                           <div className="truncate">
                             <p className="font-semibold truncate max-w-[200px] sm:max-w-[300px]">{att.name}</p>
-                            <span className="text-muted text-[10px]">
+                            <span className="text-muted text-[13px]">
                               {(att.size / 1024).toFixed(0)} كيلوبايت • {att.type || 'مستند'}
                             </span>
                           </div>
@@ -838,7 +839,7 @@ export default function ContractsPage({ session }: ContractsPageProps) {
                             )}
                             <div className="truncate">
                               <p className="font-semibold text-xs truncate max-w-[150px]">{att.name}</p>
-                              <span className="text-[10px] text-muted block">
+                              <span className="text-[13px] text-muted block">
                                 {att.size ? `${(att.size / 1024).toFixed(0)} كيلوبايت` : 'ملف محفوظ'}
                               </span>
                             </div>

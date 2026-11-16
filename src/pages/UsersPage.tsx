@@ -66,6 +66,7 @@ import {
     type IdentityConsistencyReport,
 } from '../lib/registrationService'
 import { formatEmployeeId, type RegistrationRequest } from '../lib/employeeIdentity'
+import { notify } from '../lib/dialogs'
 
 const DEPT_DISPLAY_NAMES: Record<string, string> = {
     warehouse: 'المخازن',
@@ -349,7 +350,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     function handleOpenEdit(user: LocalUser) {
         if (isProtectedUsername(user.username) && !isCallerProtected) {
-            alert('غير مصرح: بيانات وهوية حساب مدير النظام الرئيسي محمية بالكامل ولا يمكن تعديلها إلا من قِبل صاحبه.')
+            notify('غير مصرح: بيانات وهوية حساب مدير النظام الرئيسي محمية بالكامل ولا يمكن تعديلها إلا من قِبل صاحبه.')
             return
         }
         setEditingUser(user)
@@ -599,7 +600,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     async function handleSetStatus(user: LocalUser, newStatus: 'active' | 'suspended') {
         if (isProtectedUsername(user.username)) {
-            alert('غير مصرح: حساب مدير النظام الرئيسي محمي ولا يمكن تعليقه.')
+            notify('غير مصرح: حساب مدير النظام الرئيسي محمي ولا يمكن تعليقه.')
             return
         }
         setIsActionLoading(true)
@@ -633,7 +634,7 @@ export default function UsersPage({ session }: UsersPageProps) {
     async function handleDelete(user: LocalUser) {
         const check = canDeleteUser(user.username)
         if (!check.allowed) {
-            alert(check.reason || 'غير مصرح بحذف هذا المستخدم.')
+            notify(check.reason || 'غير مصرح بحذف هذا المستخدم.')
             return
         }
         setIsActionLoading(true)
@@ -658,7 +659,7 @@ export default function UsersPage({ session }: UsersPageProps) {
 
     function handleOpenChangePassword(user: LocalUser) {
         if (isProtectedUsername(user.username)) {
-            alert('غير مصرح: لا يمكن إعادة تعيين كلمة مرور مدير النظام الرئيسي من هنا. يتم تغييرها حصرياً من قِبل صاحب الحساب من داخل جلسته الشخصية.')
+            notify('غير مصرح: لا يمكن إعادة تعيين كلمة مرور مدير النظام الرئيسي من هنا. يتم تغييرها حصرياً من قِبل صاحب الحساب من داخل جلسته الشخصية.')
             return
         }
         setPwdModalUser(user)

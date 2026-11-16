@@ -41,6 +41,7 @@ import {
 import { checkIsSystemAdmin } from '../lib/supabase'
 import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 import { escapeHtml, isSafeExternalUrl, isSafeImageUrl, safeWindowOpen } from '../lib/security'
+import { notify } from '../lib/dialogs'
 
 type SupportPageProps = {
   session?: Session | null
@@ -156,7 +157,7 @@ export default function SupportPage({ session }: SupportPageProps) {
     if (!file) return
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('حجم الملف كبير جداً. الحد الأقصى هو 10 ميجابايت.')
+      notify('حجم الملف كبير جداً. الحد الأقصى هو 10 ميجابايت.')
       return
     }
 
@@ -251,19 +252,19 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
 
   function validateForm(): boolean {
     if (!employeeName.trim()) {
-      alert('يرجى إدخال اسم الموظف / صاحب البلاغ بالكامل.')
+      notify('يرجى إدخال اسم الموظف / صاحب البلاغ بالكامل.')
       return false
     }
     if (isGuest && !employeePhone.trim() && !employeeEmail.trim()) {
-      alert('يرجى كتابة رقم الهاتف أو البريد الإلكتروني للتواصل معك ومساعدتك.')
+      notify('يرجى كتابة رقم الهاتف أو البريد الإلكتروني للتواصل معك ومساعدتك.')
       return false
     }
     if (!subject.trim()) {
-      alert('يرجى كتابة عنوان للمشكلة.')
+      notify('يرجى كتابة عنوان للمشكلة.')
       return false
     }
     if (!description.trim()) {
-      alert('يرجى توضيح تفاصيل المشكلة أو العطل.')
+      notify('يرجى توضيح تفاصيل المشكلة أو العطل.')
       return false
     }
     return true
@@ -311,7 +312,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       })
       resetFormForNewTicket()
     } catch (err) {
-      alert('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
+      notify('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setIsSubmitting(false)
     }
@@ -350,7 +351,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
 
       if (attachment.name) {
-        alert(
+        notify(
           `✓ تم تسجيل التذكرة #${savedTicket.ticket_number} وحفظها في قاعدة البيانات!\n\nملاحظة: سيتم فتح محادثة الواتساب الآن، برجاء إرفاق الصورة (${attachment.name}) مباشرة داخل شات الواتساب لتصل فوراً لمسؤول الدعم.`
         )
       }
@@ -364,7 +365,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       })
       resetFormForNewTicket()
     } catch (err) {
-      alert('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
+      notify('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setIsSubmitting(false)
     }
@@ -410,7 +411,7 @@ ${ticket.attachment_name ? `مرفق مسجل: ${ticket.attachment_name}` : 'ل�
       })
       resetFormForNewTicket()
     } catch (err) {
-      alert('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
+      notify('حدث خطأ أثناء حفظ التذكرة: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setIsSubmitting(false)
     }

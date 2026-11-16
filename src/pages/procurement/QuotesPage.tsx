@@ -39,6 +39,7 @@ import { fetchActiveSuppliers, type Supplier } from '../../lib/suppliersReposito
 import { logAuditEvent } from '../../lib/auditLogger'
 import type { AppSettings } from '../../lib/settings'
 import { formatCurrency } from '../../lib/currency'
+import { notify } from '../../lib/dialogs'
 
 interface QuotesPageProps {
   session?: Session | null
@@ -398,7 +399,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       const reloaded = await fetchPurchaseOrders()
       setPurchaseOrders(reloaded)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'تعذر تحديث حالة الاستلام.')
+      notify(err instanceof Error ? err.message : 'تعذر تحديث حالة الاستلام.')
     }
   }
 
@@ -416,7 +417,7 @@ export default function QuotesPage({ session, currency }: QuotesPageProps) {
       const reloaded = await fetchPurchaseOrders()
       setPurchaseOrders(reloaded)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'تعذر تحديث حالة الفوترة.')
+      notify(err instanceof Error ? err.message : 'تعذر تحديث حالة الفوترة.')
     }
   }
 

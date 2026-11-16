@@ -34,8 +34,8 @@
   --r-pill: 999px;
 
   /* Type scale */
-  --text-xs: 0.76rem;
-  --text-sm: 0.875rem;
+  --text-xs: 0.85rem;
+  --text-sm: 0.95rem;
   --text-base: 1rem;
   --text-md: 1.08rem;
   --text-lg: 1.25rem;
@@ -475,7 +475,7 @@ body,
 
 .status-step-arrow {
   color: var(--line-strong);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
 }
 
 /* Standard Consolidated Breakpoints: 640px, 1024px, 1280px */
@@ -570,13 +570,13 @@ html, body {
 
 @media (max-width: 768px) {
   :root {
-    font-size: 14.5px !important;
+    font-size: 16px !important; /* readable base size on phones */
   }
 }
 
 @media (max-width: 480px) {
   :root {
-    font-size: 13.5px !important;
+    font-size: 15px !important; /* readable base size on small phones */
   }
 }
 
@@ -842,3 +842,37 @@ html, body {
 
 
 
+
+/* ==========================================================================
+   Glass design tokens (frame surfaces only: sidebar, topbar, dock, KPI cards, modals).
+   Solid defaults first; glass is enabled inside @supports in App.css.
+   ========================================================================== */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 32px rgba(16, 37, 39, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --glass-blur: 16px;
+  --page-glow-1: color-mix(in srgb, var(--accent) 24%, transparent);
+  --page-glow-2: color-mix(in srgb, #6d83f2 18%, transparent);
+}
+
+:root[data-theme='dark'] {
+  --glass-bg: rgba(17, 26, 44, 0.58);
+  --glass-bg-strong: rgba(17, 26, 44, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --page-glow-1: color-mix(in srgb, var(--accent) 20%, transparent);
+  --page-glow-2: color-mix(in srgb, #2f4aa8 38%, transparent);
+}
+
+/* Users who ask for less transparency get solid surfaces. */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  :root[data-theme='dark'] {
+    --glass-bg: var(--surface);
+    --glass-bg-strong: var(--surface);
+    --glass-border: var(--line);
+    --glass-blur: 0px;
+  }
+}

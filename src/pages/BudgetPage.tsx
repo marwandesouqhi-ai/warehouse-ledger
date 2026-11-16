@@ -21,6 +21,7 @@ import {
 import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 import { formatCurrency } from '../lib/currency'
+import { notify, confirmDialog } from '../lib/dialogs'
 
 type BudgetPageProps = {
   session?: Session | null
@@ -115,7 +116,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
     e.preventDefault()
     if (!canAdd) return
     if (!allocatedAmount || Number(allocatedAmount) <= 0) {
-      alert('يرجى تحديد مبلغ الميزانية المخصصة.')
+      notify('يرجى تحديد مبلغ الميزانية المخصصة.')
       return
     }
 
@@ -176,7 +177,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
 
   const handleDelete = async (plan: BudgetPlan) => {
     if (!isAdmin) return
-    if (!window.confirm(`هل أنت متأكد من حذف بند ميزانية ${plan.department}؟`)) return
+    if (!(await confirmDialog(`هل أنت متأكد من حذف بند ميزانية ${plan.department}؟`, { danger: true, confirmLabel: 'حذف' }))) return
 
     try {
       await deleteBudgetPlan(plan.id)
@@ -190,7 +191,7 @@ export default function BudgetPage({ session, currency = 'EGP' }: BudgetPageProp
         user: session?.user,
       })
     } catch {
-      alert('حدث خطأ أثناء حذف البند.')
+      notify('حدث خطأ أثناء حذف البند.')
     }
   }
 

@@ -26,6 +26,7 @@ import {
 } from '../lib/assetMovementRepository'
 import { purgeDatabaseDemoData } from '../lib/purgeDemoData'
 import { logAuditEvent } from '../lib/auditLogger'
+import { notify, confirmDialog } from '../lib/dialogs'
 
 type AssetHistoryPageProps = {
   session?: Session | null
@@ -98,7 +99,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
     if (!canAdd) { e.preventDefault(); return }
     e.preventDefault()
     if (!assetCode.trim() || !assetName.trim() || !toLocation.trim()) {
-      alert('يرجى تعبئة كود الأصل واسمه والموقع المستلم.')
+      notify('يرجى تعبئة كود الأصل واسمه والموقع المستلم.')
       return
     }
 
@@ -140,7 +141,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
 
   const handlePurgeDemo = async () => {
     if (!canModify) return
-    if (!window.confirm('هل أنت متأكد من مسح جميع البيانات التجريبية والمحاكاة من النظام وقاعدة البيانات؟')) {
+    if (!(await confirmDialog('هل أنت متأكد من مسح جميع البيانات التجريبية والمحاكاة من النظام وقاعدة البيانات؟', { danger: true, confirmLabel: 'مسح' }))) {
       return
     }
     setIsLoading(true)
@@ -313,7 +314,7 @@ export default function AssetHistoryPage({ session }: AssetHistoryPageProps) {
                         </time>
                       </td>
                       <td className="text-center">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800" title="سجل حركة الأصل دائم ومحفوظ بالكامل وغير قابل للحذف">
+                        <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800" title="سجل حركة الأصل دائم ومحفوظ بالكامل وغير قابل للحذف">
                           <ShieldCheck size={12} className="text-emerald-600" /> موثق دائم
                         </span>
                       </td>

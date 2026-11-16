@@ -21,6 +21,7 @@ import {
   type TelegramBotSettings,
 } from '../lib/telegramSettingsRepository'
 import type { LocalUserSession } from '../lib/localUsers'
+import { confirmDialog } from '../lib/dialogs'
 
 type TelegramBotPageProps = {
   session?: Session | LocalUserSession | null
@@ -83,8 +84,8 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
     }
   }
 
-  const handleResetDefaults = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في استعادة النصوص والرسائل الافتراضية للبوت؟')) {
+  const handleResetDefaults = async () => {
+    if (await confirmDialog('هل أنت متأكد من رغبتك في استعادة النصوص والرسائل الافتراضية للبوت؟', { confirmLabel: 'استعادة' })) {
       setSettings((prev) => ({
         ...prev,
         welcome_message: DEFAULT_TELEGRAM_BOT_SETTINGS.welcome_message,
@@ -167,7 +168,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
             <CheckCircle2 size={18} className="text-emerald-600" />
             <span>تم حفظ التعديلات بنجاح! التغييرات منعكسة الآن أوتوماتيكياً في محادثات تليجرام 🟢</span>
           </div>
-          <span className="text-[11px] text-emerald-700 font-medium">محدث بقاعدة البيانات</span>
+          <span className="text-[13px] text-emerald-700 font-medium">محدث بقاعدة البيانات</span>
         </div>
       )}
 
@@ -192,7 +193,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                 <label className="flex items-center justify-between p-3 rounded-xl border border-line bg-surface-soft cursor-pointer hover:border-primary/40 transition-colors">
                   <div>
                     <span className="text-xs font-bold text-ink block">تشغيل البوت العام</span>
-                    <span className="text-[11px] text-muted">استقبال الرسائل وتفاعل الموظفين</span>
+                    <span className="text-[13px] text-muted">استقبال الرسائل وتفاعل الموظفين</span>
                   </div>
                   <input
                     type="checkbox"
@@ -208,7 +209,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                 <label className="flex items-center justify-between p-3 rounded-xl border border-line bg-surface-soft cursor-pointer hover:border-primary/40 transition-colors">
                   <div>
                     <span className="text-xs font-bold text-ink block">استقبال طلبات التسجيل</span>
-                    <span className="text-[11px] text-muted">السماح للموظفين بطلب حساب جديد</span>
+                    <span className="text-[13px] text-muted">السماح للموظفين بطلب حساب جديد</span>
                   </div>
                   <input
                     type="checkbox"
@@ -249,7 +250,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                   <MessageSquare size={17} className="text-primary" />
                   رسالة الترحيب الرئيسية (/start)
                 </h3>
-                <span className="text-[11px] text-muted font-mono">
+                <span className="text-[13px] text-muted font-mono">
                   {settings.welcome_message.length} حرف
                 </span>
               </div>
@@ -330,7 +331,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
               {showChatIdGuide && (
                 <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs space-y-1.5">
                   <p className="font-bold m-0">💡 كيفية معرفة الـ Chat ID الخاص بك على تليجرام:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-blue-800 m-0 pr-1">
+                  <ol className="list-decimal list-inside space-y-1 text-[13px] text-blue-800 m-0 pr-1">
                     <li>افتح تطبيق تليجرام وابحث عن بوت مجاني مثل <code>@userinfobot</code> أو <code>@GetMyChatID_Bot</code>.</li>
                     <li>اضغط <strong>Start</strong> سيرسل لك رقم معرفك فوراً (مثل: <code>123456789</code>).</li>
                     <li>انسخ الرقم وضعه في الحقل أدناه لتصلك إشعارات فورية بكل طلب تسجيل جديد!</li>
@@ -352,7 +353,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                   className="w-full text-xs p-2.5 border border-line rounded-xl bg-surface-soft outline-none focus:border-primary font-mono text-left"
                   dir="ltr"
                 />
-                <span className="text-[11px] text-muted block">
+                <span className="text-[13px] text-muted block">
                   سيقوم البوت بإرسال تنبيه فوري إلى هذا الحساب فور قيام أي موظف بتقديم طلب تسجيل جديد.
                 </span>
               </div>
@@ -433,7 +434,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     معاينة حية كما تظهر في تطبيق تيليجرام
                   </span>
-                  <span className="text-[10px] text-muted font-mono">Live Simulator</span>
+                  <span className="text-[13px] text-muted font-mono">Live Simulator</span>
                 </div>
 
                 {/* Simulated Smartphone Shell */}
@@ -450,9 +451,9 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                       <div>
                         <div className="text-xs font-bold leading-tight flex items-center gap-1">
                           <span>ZNU Warehouse Bot</span>
-                          <span className="text-[9px] bg-sky-500/30 text-sky-300 px-1 rounded">bot</span>
+                          <span className="text-[13px] bg-sky-500/30 text-sky-300 px-1 rounded">bot</span>
                         </div>
-                        <div className="text-[10px] text-sky-400">
+                        <div className="text-[13px] text-sky-400">
                           {settings.is_enabled ? 'متصل الآن' : 'غير متصل (صيانة)'}
                         </div>
                       </div>
@@ -464,7 +465,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                     {/* User Command bubble */}
                     <div className="self-end max-w-[70%] bg-[#005c4b] text-white p-2.5 rounded-2xl rounded-bl-sm shadow text-xs">
                       <p className="m-0 font-mono">/start</p>
-                      <span className="text-[9px] text-emerald-200 block text-left mt-0.5">
+                      <span className="text-[13px] text-emerald-200 block text-left mt-0.5">
                         {previewTime}
                       </span>
                     </div>
@@ -473,17 +474,17 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                     <div className="self-start max-w-[85%] bg-[#202c33] text-slate-100 p-3 rounded-2xl rounded-br-sm shadow space-y-2 border border-slate-700/40">
                       {settings.is_enabled ? (
                         <>
-                          <div className="whitespace-pre-line text-[11.5px] leading-relaxed text-slate-200">
+                          <div className="whitespace-pre-line text-[13px] leading-relaxed text-slate-200">
                             {settings.welcome_message}
                           </div>
 
                           {!settings.allow_registration && (
-                            <div className="p-2 rounded-lg bg-amber-900/40 border border-amber-600/40 text-[10px] text-amber-200">
+                            <div className="p-2 rounded-lg bg-amber-900/40 border border-amber-600/40 text-[13px] text-amber-200">
                               ⚠️ تنويه: باب التسجيل الإلكتروني مغلق مؤقتاً بناءً على تعليمات الإدارة.
                             </div>
                           )}
 
-                          <span className="text-[9px] text-slate-400 block text-left">
+                          <span className="text-[13px] text-slate-400 block text-left">
                             {previewTime}
                           </span>
 
@@ -505,7 +506,7 @@ export default function TelegramBotPage({ session }: TelegramBotPageProps) {
                   </div>
 
                   {/* Phone Footer */}
-                  <div className="p-2.5 bg-[#1e293b] text-center text-[10px] text-slate-400 border-t border-slate-700/60">
+                  <div className="p-2.5 bg-[#1e293b] text-center text-[13px] text-slate-400 border-t border-slate-700/60">
                     يتم تحديث هذه الرسالة فوراً داخل تطبيق تليجرام عند الضغط على حفظ
                   </div>
                 </div>

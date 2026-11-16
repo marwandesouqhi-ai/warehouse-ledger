@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react'
 import {
   Building2,
-  FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
   Package,
@@ -31,7 +30,6 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
   items,
   currency,
   onSelectWarehouse,
-  onExportAllExcel,
 }) => {
   // 1. Overall stats across all warehouses
   const overallStats = useMemo(() => {
@@ -97,15 +95,6 @@ export const CustodyAnalyticsDashboard: React.FC<CustodyAnalyticsDashboardProps>
             </span>
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={onExportAllExcel}
-          title="تصدير ملف Excel متعدد الصفحات يحتوي على صفحة لكل كلية + صفحة ملخص عام"
-         className="highlight-action-btn secondary-btn flex items-center gap-2 p-3 font-sm">
-          <FileSpreadsheet size={17} />
-          <span>تصدير سجل الجرد الموحد (Excel شامل لكافة الكليات)</span>
-        </button>
       </div>
 
       {/* 2. Grand Total KPI Cards */}

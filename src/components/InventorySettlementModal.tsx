@@ -21,6 +21,7 @@ import { logAuditEvent } from '../lib/auditLogger'
 import { AccessibleDialog } from './AccessibleDialog'
 import { formatCurrency } from '../lib/currency'
 import { safePrint } from '../lib/printUtils'
+import { confirmDialog } from '../lib/dialogs'
 
 interface InventorySettlementModalProps {
   allItems: CustodyItem[]
@@ -288,9 +289,9 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
   }
 
   const isDirty = Object.keys(actualQuantities).length > 0
-  function handleSafeClose() {
+  async function handleSafeClose() {
     if (isSaving) return
-    if (isDirty && !window.confirm('هل أنت متأكد من إغلاق نافذة التسوية وتجاهل التعديلات غير المحفوظة؟')) {
+    if (isDirty && !(await confirmDialog('هل أنت متأكد من إغلاق نافذة التسوية وتجاهل التعديلات غير المحفوظة؟', { danger: true, confirmLabel: 'تجاهل وإغلاق' }))) {
       return
     }
     onClose()
@@ -512,9 +513,9 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
                     </td>
                   </tr>
                 ) : (
-                  calculatedRows.map(({ item, actualQty, diffQty, diffValue }) => (
+                  calculatedRows.map(({ item, actualQty, diffQty, diffValue }, rowIdx) => (
                     <tr
-                      key={item.id}
+                      key={`${item.id}-${rowIdx}`}
                       style={{
                         borderBottom: '1px solid var(--line, #f1f5f9)',
                         background: diffQty < 0 ? '#fff5f5' : diffQty > 0 ? '#f0fdf4' : 'transparent',
@@ -739,7 +740,7 @@ export const InventorySettlementModal: React.FC<InventorySettlementModalProps> =
                 </tr>
               ) : (
                 calculatedRows.map((r, idx) => (
-                  <tr key={r.item.id}>
+                  <tr key={`${r.item.id}-${idx}`}>
                     <td style={{ textAlign: 'center', color: '#0f172a' }}>{idx + 1}</td>
                     <td className="print-code-cell" style={{ textAlign: 'center', color: '#0f172a', fontFamily: 'monospace', fontWeight: 700 }}>
                       {r.item.code || '—'}

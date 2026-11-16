@@ -22,6 +22,7 @@ import { logAuditEvent } from '../lib/auditLogger'
 import { AccessibleDialog } from './AccessibleDialog'
 import { formatCurrency } from '../lib/currency'
 import { safePrint } from '../lib/printUtils'
+import { confirmDialog } from '../lib/dialogs'
 
 export interface InspectionItemRow {
   id: string
@@ -298,9 +299,9 @@ export const TechnicalInspectionModal: React.FC<TechnicalInspectionModalProps> =
   }
 
   const isDirty = Boolean(supplier.trim() || invoiceNumber.trim() || items.some(i => i.name.trim()))
-  function handleSafeClose() {
+  async function handleSafeClose() {
     if (isSaving) return
-    if (isDirty && !window.confirm('هل أنت متأكد من إغلاق محضر الفحص الفني وتجاهل التعديلات؟')) {
+    if (isDirty && !(await confirmDialog('هل أنت متأكد من إغلاق محضر الفحص الفني وتجاهل التعديلات؟', { danger: true, confirmLabel: 'تجاهل وإغلاق' }))) {
       return
     }
     onClose()

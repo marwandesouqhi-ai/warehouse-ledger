@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { notify } from './dialogs'
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[]
@@ -76,7 +77,7 @@ export function usePwaInstall() {
     if (!deferredPrompt) {
       // If deferredPrompt is not available (e.g. Chrome already showing native button or iOS),
       // we can inform the user how to install directly from browser menu.
-      alert('لتثبيت التطبيق: اضغط على أيقونة التثبيت في شريط عنوان المتصفح أو اختر "تثبيت التطبيق" من قائمة المتصفح.')
+      notify('لتثبيت التطبيق: اضغط على أيقونة التثبيت في شريط عنوان المتصفح أو اختر "تثبيت التطبيق" من قائمة المتصفح.')
       return false
     }
 

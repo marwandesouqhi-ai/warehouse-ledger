@@ -17,6 +17,7 @@ import { getCairoDateString } from '../lib/dateUtils'
 import type { AppSettings } from '../lib/settings'
 import { AccessibleDialog } from './AccessibleDialog'
 import { safePrint } from '../lib/printUtils'
+import { confirmDialog } from '../lib/dialogs'
 
 export interface OfficialDisbursementPermitModalProps {
   initialItems?: CustodyItem[]
@@ -153,10 +154,10 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
 
   // Safe dismissal handler (Requirement #25)
   const isDirty = selectedItemIds.size > 0 || recipientName.trim().length > 0
-  function handleSafeClose() {
+  async function handleSafeClose() {
     if (isSubmitting) return
     if (isDirty && !isRecorded) {
-      if (!window.confirm('هل أنت متأكد من إغلاق نافذة الإذن وتجاهل التعديلات غير المسجلة؟')) {
+      if (!(await confirmDialog('هل أنت متأكد من إغلاق نافذة الإذن وتجاهل التعديلات غير المسجلة؟', { danger: true, confirmLabel: 'تجاهل وإغلاق' }))) {
         return
       }
     }
@@ -498,13 +499,13 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                       لا توجد أصناف متوفرة في مخزن "{sourceWh.name}" مطابقة للبحث.
                     </div>
                   ) : (
-                    candidateItems.map((item) => {
+                    candidateItems.map((item, itemIdx) => {
                       const isSelected = selectedItemIds.has(item.id)
                       const disburseQty = itemQuantities[item.id] ?? item.quantity
 
                       return (
                         <div
-                          key={item.id}
+                          key={`${item.id}-${itemIdx}`}
                           className={`permit-item-row ${isSelected ? 'selected' : ''}`}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -721,7 +722,7 @@ export const OfficialDisbursementPermitModal: React.FC<OfficialDisbursementPermi
                             ? 'تحتاج صيانة'
                             : 'كهنة'
                         return (
-                          <tr key={item.id}>
+                          <tr key={`${item.id}-${idx}`}>
                             <td style={{ textAlign: 'center' }}>{idx + 1}</td>
                             <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 600 }}>{item.code || '—'}</td>
                             <td style={{ fontWeight: 700 }}>{item.name}</td>

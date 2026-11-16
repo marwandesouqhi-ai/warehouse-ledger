@@ -24,6 +24,7 @@ import {
 import { isSystemAdmin, canAddDepartment } from '../lib/permissions'
 import { logAuditEvent } from '../lib/auditLogger'
 import { WAREHOUSES } from '../lib/custody'
+import { notify, confirmDialog } from '../lib/dialogs'
 
 type DisbursementRequestsPageProps = {
   session?: Session | null
@@ -130,7 +131,7 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
     e.preventDefault()
     if (!canAdd) return
     if (!itemName.trim() || !quantity || Number(quantity) <= 0 || !purpose.trim()) {
-      alert('يرجى ملء جميع الحقول الإلزامية وتحديد كمية أكبر من صفر.')
+      notify('يرجى ملء جميع الحقول الإلزامية وتحديد كمية أكبر من صفر.')
       return
     }
 
@@ -168,14 +169,14 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
         user: session?.user,
       })
     } catch {
-      alert('حدث خطأ أثناء حفظ طلب الصرف.')
+      notify('حدث خطأ أثناء حفظ طلب الصرف.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleApprove = async (req: DisbursementRequest) => {
-    if (!window.confirm(`هل أنت متأكد من اعتماد طلب الصرف رقم ${req.request_number}؟`)) return
+    if (!(await confirmDialog(`هل أنت متأكد من اعتماد طلب الصرف رقم ${req.request_number}؟`, { confirmLabel: 'اعتماد' }))) return
     setIsSubmitting(true)
     try {
       const approver = session?.user?.user_metadata?.displayName || session?.user?.email || 'مدير النظام'
@@ -209,7 +210,7 @@ export default function DisbursementRequestsPage({ session }: DisbursementReques
   }
 
   const handleIssue = async (req: DisbursementRequest) => {
-    if (!window.confirm(`تأكيد تنفيذ الصرف الفعلي وتسليم العهدة للصنف: ${req.item_name}؟`)) return
+    if (!(await confirmDialog(`تأكيد تنفيذ الصرف الفعلي وتسليم العهدة للصنف: ${req.item_name}؟`, { confirmLabel: 'تنفيذ الصرف' }))) return
     setIsSubmitting(true)
     try {
       await updateDisbursementRequestStatus(req.id, 'issued', {

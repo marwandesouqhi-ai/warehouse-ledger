@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import {
   ArrowDownToLine,
   ArrowRight,
+  FileUp,
   ArrowUpDown,
   Building2,
   CheckCircle2,
@@ -28,6 +29,7 @@ import { matchesSearch } from '../lib/searchUtils'
 
 import { fetchActiveSuppliers, type Supplier } from '../lib/suppliersRepository'
 import { formatCurrency } from '../lib/currency'
+import MovementImportPanel from '../components/MovementImportPanel'
 
 type PurchasesPageProps = {
   movements: FixtureMovement[]
@@ -40,6 +42,7 @@ type PurchasesPageProps = {
   session?: Session | null
   globalSearchTerm?: string
   initialTab?: 'list' | 'add'
+  onImportMovements?: (movements: FixtureMovement[]) => Promise<{ added: number; skipped: number }>
 }
 
 function sanitizeExcelCell<T>(value: T): T {
@@ -59,7 +62,9 @@ export default function PurchasesPage({
   session,
   globalSearchTerm = '',
   initialTab = 'list',
+  onImportMovements,
 }: PurchasesPageProps) {
+  const [showImport, setShowImport] = useState(false)
   const [activeTab, setActiveTab] = useState<'list' | 'add'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search).get('tab')
@@ -545,6 +550,11 @@ export default function PurchasesPage({
               </span>
             </div>
             <div className="headline-actions">
+              {isSystemAdmin && onImportMovements && (
+                <button type="button" className="secondary-btn" onClick={() => setShowImport((v) => !v)} aria-expanded={showImport} id="btn-import-purchases-excel">
+                  <FileUp size={17} /> استيراد Excel
+                </button>
+              )}
               <button type="button" className="secondary-btn" onClick={handleExportExcel}>
                 <ArrowDownToLine size={17} /> تصدير Excel
               </button>
@@ -555,6 +565,10 @@ export default function PurchasesPage({
               )}
             </div>
           </div>
+
+          {showImport && onImportMovements && (
+            <MovementImportPanel onImport={onImportMovements} session={session} />
+          )}
 
           {addSuccessMessage && (
             <div className="inline-message success purchases-alert-banner">

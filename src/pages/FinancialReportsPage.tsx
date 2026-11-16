@@ -22,6 +22,7 @@ import { isSystemAdmin, canAddDepartment, getDashboardScope } from '../lib/permi
 import { logAuditEvent } from '../lib/auditLogger'
 import { formatCurrency } from '../lib/currency'
 import { safePrint } from '../lib/printUtils'
+import { notify } from '../lib/dialogs'
 
 type FinancialReportsPageProps = {
   session?: Session | null
@@ -104,7 +105,7 @@ export default function FinancialReportsPage({ session, currency = 'EGP' }: Fina
     e.preventDefault()
     if (!canAdd) return
     if (!reportTitle.trim() || !periodFrom || !periodTo) {
-      alert('يرجى تعبئة عنوان التقرير والفترة الزمنية.')
+      notify('يرجى تعبئة عنوان التقرير والفترة الزمنية.')
       return
     }
 

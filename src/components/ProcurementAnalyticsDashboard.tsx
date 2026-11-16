@@ -1,11 +1,8 @@
 import { useState, useMemo } from 'react'
-import { NavLink } from 'react-router-dom'
 import {
   Building2,
   DollarSign,
-  Download,
   Package,
-  Plus,
   Receipt,
   Search,
   TrendingUp,
@@ -142,6 +139,9 @@ export function ProcurementAnalyticsDashboard({
     XLSX.writeFile(wb, `تقرير-تحليلات-المشتريات-${getCairoDateString()}.xlsx`)
   }
 
+  // Kept for the Excel export (button removed from the dashboard; logic preserved)
+  void handleExportExcel
+
   return (
     <div className={`proc-dash-wrapper ${isDashboardEmbed ? 'dashboard-embed' : ''}`}>
       {/* رأس القسم والإجراءات السريعة */}
@@ -156,25 +156,6 @@ export function ProcurementAnalyticsDashboard({
           </span>
         </div>
 
-        <div className="proc-dash-actions">
-          <button
-            type="button"
-            onClick={() => void handleExportExcel()}
-            className="proc-dash-export-btn"
-          >
-            <Download size={15} />
-            تصدير تقرير المشتريات Excel
-          </button>
-
-          <NavLink
-            to="/purchases?tab=add"
-            className="primary-btn"
-            
-          >
-            <Plus size={16} />
-            فاتورة وتوريد جديد
-          </NavLink>
-        </div>
       </div>
 
       {/* بطاقات المؤشرات الـ 4 الرئيسية */}
@@ -242,11 +223,6 @@ export function ProcurementAnalyticsDashboard({
               <Building2 size={20} />
             </div>
           </div>
-          <div className="proc-dash-kpi-sub">
-            <NavLink to="/purchases/suppliers" className="text-accent font-semibold">
-              عرض سجل الموردين ←
-            </NavLink>
-          </div>
         </div>
       </div>
 
@@ -264,7 +240,7 @@ export function ProcurementAnalyticsDashboard({
               style={{ borderInlineStartColor: step.color }}
             >
               <div className="proc-dash-pipeline-item-label">{step.name}</div>
-              <div className="proc-dash-pipeline-item-val" style={{ color: step.color }}>
+              <div className="proc-dash-pipeline-item-val">
                 {step.isCurrency ? formatCurrency(step.count, currency) : step.count.toLocaleString('ar-EG')}
               </div>
               <div className="proc-dash-pipeline-item-sub">{step.desc}</div>
@@ -296,12 +272,6 @@ export function ProcurementAnalyticsDashboard({
                 className="proc-dash-search-input"
               />
             </div>
-            <NavLink
-              to="/purchases"
-              className="proc-dash-view-all-link"
-            >
-              عرض كافة الفواتير ←
-            </NavLink>
           </div>
         </div>
 

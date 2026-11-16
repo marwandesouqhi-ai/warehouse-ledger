@@ -91,6 +91,7 @@ import type { FixtureMovement } from '../lib/fixture'
 import { getStoredMovements } from '../lib/backup'
 import { canCreateDisbursement } from '../lib/permissions'
 import { getCairoDateString } from '../lib/dateUtils'
+import { notify } from '../lib/dialogs'
 
 const ICONS_MAP: Record<WarehouseDefinition['iconKey'], React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   Warehouse,
@@ -360,7 +361,7 @@ export default function CustodyPage({
     if (!canEdit) return
     const exists = items.some((i) => i.id === item.id)
     if (exists && !isSystemAdmin) {
-      alert('تعديل الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
+      notify('تعديل الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
       return
     }
 
@@ -392,7 +393,7 @@ export default function CustodyPage({
 
   function handleDeleteItem(item: CustodyItem) {
     if (!isSystemAdmin) {
-      alert('حذف الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
+      notify('حذف الأصناف مقتصر حصرياً على مدير النظام (System Admin).')
       return
     }
 
@@ -2680,7 +2681,7 @@ function ImportCustodyModal({
       await downloadCustodyTemplate(currency)
     } catch (err) {
       console.error('Template download error:', err)
-      alert('حدث خطأ أثناء تنزيل النموذج، يرجى المحاولة مرة أخرى.')
+      notify('حدث خطأ أثناء تنزيل النموذج، يرجى المحاولة مرة أخرى.')
     } finally {
       setIsDownloadingTemplate(false)
     }

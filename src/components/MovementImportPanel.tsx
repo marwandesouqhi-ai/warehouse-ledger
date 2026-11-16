@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, FileUp, RotateCcw, ShieldAlert } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, FileUp, RotateCcw } from 'lucide-react'
 
 import type { FixtureMovement } from '../lib/fixture'
 import {
@@ -16,7 +16,7 @@ import { getDashboardScope } from '../lib/permissions'
 
 type ImportResult = { added: number; skipped: number }
 
-type ImportPageProps = {
+type MovementImportPanelProps = {
     onImport: (movements: FixtureMovement[]) => Promise<ImportResult>
     session?: Session | null
 }
@@ -39,7 +39,7 @@ function normalizeExcelDates(rows: Array<Record<string, unknown>>, XLSX: typeof 
     })))
 }
 
-export default function ImportPage({ onImport, session }: ImportPageProps) {
+export default function MovementImportPanel({ onImport, session }: MovementImportPanelProps) {
     const canEdit = isSystemAdmin(session)
     const scope = getDashboardScope(session)
     const [preview, setPreview] = useState<FixtureMovement[]>([])
@@ -54,34 +54,7 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
         rejectedRows: RowValidationError[]
     } | null>(null)
 
-    if (!canEdit) {
-        return (
-            <section className="page-stack import-page">
-                <header className="page-intro">
-                    <div className="page-intro-icon modal-icon-danger">
-                        <ShieldAlert size={22} />
-                    </div>
-                    <div>
-                        <p className="eyebrow text-bad">صلاحية وصول مقيدة</p>
-                        <h2>استيراد حركات المخزن من Excel</h2>
-                        <p>خاص ومقتصر على المحررين ومديري النظام لإضافة وتحديث بيانات المخزن.</p>
-                    </div>
-                </header>
-
-                <div className="card-surface audit-restricted-card">
-                    <div className="audit-restricted-icon">
-                        <ShieldAlert size={34} />
-                    </div>
-                    <h3 className="m-0 mb-2 text-lg text-ink">
-                        صلاحية العرض فقط (Viewer)
-                    </h3>
-                    <p className="text-muted font-sm leading-normal mb-5">
-                        عذراً، استيراد وتعديل حركات المخزن متاح حصرياً لحسابات <strong>المحررين (Editors)</strong> و<strong>مديري النظام (Admins)</strong>. حسابك الحالي يملك صلاحية المشاهدة والاستعراض فقط.
-                    </p>
-                </div>
-            </section>
-        )
-    }
+    if (!canEdit) return null
 
     async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0]
@@ -167,57 +140,12 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
         try {
             const XLSX = await import('xlsx')
             const isPurchases = scope === 'purchases_only'
-            const sampleRows = isPurchases ? [
-                {
-                    'الصنف': 'أجهزة حاسب آلي مكتبي Lenovo Core i7',
-                    'التاريخ': '2026-10-11',
-                    'المورد': 'شركة تكنولوجيا المعلومات المتقدمة',
-                    'المستلم': 'المخزن الرئيسي',
-                    'الوارد': 25,
-                    'السعر': 14500,
-                    'رقم الفاتورة': 'INV-2026-901',
-                    'ملاحظات': 'توريد أجهزة لمعامل الحاسب',
-                },
-                {
-                    'الصنف': 'طابعات ليزر شبكية HP LaserJet',
-                    'التاريخ': '2026-10-10',
-                    'المورد': 'شركة النيل للحلول المكتبية',
-                    'المستلم': 'المخزن الرئيسي',
-                    'الوارد': 10,
-                    'السعر': 8900,
-                    'رقم الفاتورة': 'INV-2026-902',
-                    'ملاحظات': 'فاتورة شراء معتمدة ومسددة',
-                },
-            ] : [
-                {
-                    'الصنف': 'أجهزة حاسب آلي مكتبي Lenovo Core i7',
-                    'التاريخ': '2026-10-11',
-                    'المورد': 'شركة تكنولوجيا المعلومات',
-                    'المستلم': 'المخزن الرئيسي',
-                    'الوارد': 25,
-                    'المنصرف': '',
-                    'السعر': 14500,
-                    'رقم الفاتورة': 'INV-2026-901',
-                    'رقم الاذن': 'PRM-441',
-                    'تاريخ الصرف': '',
-                    'ملاحظات': 'توريد عهدة مستديمة جديدة معتمدة',
-                },
-                {
-                    'الصنف': 'شاشات عرض ذكية 65 بوصة 4K',
-                    'التاريخ': '2026-10-10',
-                    'المورد': 'المخزن الرئيسي',
-                    'المستلم': 'معمل الحاسبات المركزي',
-                    'الوارد': '',
-                    'المنصرف': 3,
-                    'السعر': 22000,
-                    'رقم الفاتورة': '',
-                    'رقم الاذن': 'DISP-882',
-                    'تاريخ الصرف': '2026-10-10',
-                    'ملاحظات': 'صرف عهدة لمعامل الكلية',
-                },
-            ]
-
-            const worksheet = XLSX.utils.json_to_sheet(sampleRows)
+            // Headers only: the template must download empty, with no sample data
+            const headers = isPurchases
+                ? ['الصنف', 'التاريخ', 'المورد', 'المستلم', 'الوارد', 'السعر', 'رقم الفاتورة', 'ملاحظات']
+                : ['الصنف', 'التاريخ', 'المورد', 'المستلم', 'الوارد', 'المنصرف', 'السعر', 'رقم الفاتورة', 'رقم الاذن', 'تاريخ الصرف', 'ملاحظات']
+            const worksheet = XLSX.utils.aoa_to_sheet([headers])
+            worksheet['!cols'] = headers.map((h) => ({ wch: Math.max(14, h.length + 4) }))
             const workbook = XLSX.utils.book_new()
             const sheetName = isPurchases ? 'فواتير الشراء' : 'حركات المخزن'
             const fileName = isPurchases ? 'نموذج_استيراد_فواتير_المشتريات.xlsx' : 'نموذج_استيراد_حركات_المخزن.xlsx'
@@ -230,15 +158,6 @@ export default function ImportPage({ onImport, session }: ImportPageProps) {
 
     return (
         <section className="page-stack import-page">
-            <header className="page-intro">
-                <div className="page-intro-icon"><FileSpreadsheet size={22} /></div>
-                <div>
-                    <p className="eyebrow">{scope === 'purchases_only' ? 'إدارة المشتريات والتوريدات' : scope === 'warehouse_only' ? 'إدارة المخازن والتشغيل' : 'إدارة البيانات'}</p>
-                    <h2>{scope === 'purchases_only' ? 'استيراد فواتير وتوريدات الشراء من Excel' : scope === 'warehouse_only' ? 'استيراد حركات وأرصدة المخزن من Excel' : 'استيراد الحركات وفواتير الشراء من Excel'}</h2>
-                    <p>{scope === 'purchases_only' ? 'ارفع ملف Excel بفواتير المشتريات وبيانات الموردين، راجع المعاينة، ثم أضفها إلى السجل.' : 'ارفع ملف Excel، راجع معاينة الصفوف، ثم أضفها إلى السجل الحالي.'}</p>
-                </div>
-            </header>
-
             <label className="import-dropzone">
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} disabled={isReading} />
                 <span className="dropzone-icon"><FileUp size={23} /></span>

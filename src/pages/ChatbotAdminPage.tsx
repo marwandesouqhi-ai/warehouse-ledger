@@ -245,7 +245,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                   <Terminal size={17} className="text-primary" />
                   محرر أوامر التطوير البرمجي
                 </span>
-                <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">
+                <span className="text-[13px] bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">
                   Full-Stack AI DBA
                 </span>
               </div>
@@ -282,7 +282,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
 
               {/* Suggestions */}
               <div className="border-t pt-3">
-                <span className="text-[11px] text-muted block mb-2 font-semibold">قوالب تطوير سريعة:</span>
+                <span className="text-[13px] text-muted block mb-2 font-semibold">قوالب تطوير سريعة:</span>
                 <div className="flex flex-wrap gap-1.5">
                   {[
                     'إضافة حقل رقم السجل التجاري لجدول الموردين',
@@ -294,7 +294,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                       key={i}
                       type="button"
                       onClick={() => setDeveloperPrompt(sugg)}
-                      className="text-[10px] bg-muted/40 hover:bg-muted p-1.5 rounded transition-colors text-right"
+                      className="text-[13px] bg-muted/40 hover:bg-muted p-1.5 rounded transition-colors text-right"
                     >
                       {sugg}
                     </button>
@@ -313,7 +313,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <button
                   type="button"
                   onClick={handleSaveDirectives}
-                  className="secondary-btn text-[11px] py-1 px-2.5"
+                  className="secondary-btn text-[13px] py-1 px-2.5"
                 >
                   حفظ التعليمات
                 </button>
@@ -325,7 +325,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 className="w-full p-2 border rounded text-xs bg-background leading-normal font-sans"
               />
               {saveDirectivesNotice && (
-                <span className="text-[11px] text-emerald-600 block">{saveDirectivesNotice}</span>
+                <span className="text-[13px] text-emerald-600 block">{saveDirectivesNotice}</span>
               )}
             </div>
           </div>
@@ -354,7 +354,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <div className="flex-1 flex flex-col items-center justify-center text-muted p-12">
                   <RotateCw size={36} className="animate-spin text-primary mb-3" />
                   <p className="text-xs font-semibold text-ink">جارٍ صياغة الكود والهجرة عبر Gemini AI...</p>
-                  <span className="text-[11px] text-muted mt-1">
+                  <span className="text-[13px] text-muted mt-1">
                     يتم تحليل هيكل الجداول وسياسات الأمان وتطبيق التزامن الثلاثي
                   </span>
                 </div>
@@ -491,17 +491,17 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
               <div key={idx} className="p-3 border rounded-lg bg-background space-y-1.5 text-xs shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-primary">{tbl.name}</span>
-                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{tbl.rls}</span>
+                  <span className="text-[13px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{tbl.rls}</span>
                 </div>
-                <div className="font-semibold text-ink text-[11px]">{tbl.title}</div>
-                <p className="text-[10px] text-muted leading-relaxed font-mono break-words">{tbl.cols}</p>
+                <div className="font-semibold text-ink text-[13px]">{tbl.title}</div>
+                <p className="text-[13px] text-muted leading-relaxed font-mono break-words">{tbl.cols}</p>
               </div>
             ))}
           </div>
 
           <div className="p-4 bg-muted/20 border rounded-lg text-xs space-y-2">
             <h4 className="font-bold text-ink">قواعد الأمان والمعمارية الإلزامية للمساعد الذكي:</h4>
-            <ul className="list-disc list-inside space-y-1 text-muted text-[11px]">
+            <ul className="list-disc list-inside space-y-1 text-muted text-[13px]">
               <li><strong>التزامن الإلزامي:</strong> كل تعديل يجب أن ينعكس في الفرونت إند والباك إند وقاعدة البيانات.</li>
               <li><strong>الحساب المشرف المحمي:</strong> حساب مدير النظام (marwan-desouky) محمي بقفل أمان صلب يمنع الحذف أو خفض الصلاحية.</li>
               <li><strong>ممنوع النشر على Vercel:</strong> المنظومة تعمل حصرياً على بيئة التطوير واستضافة العميل ولا يتم تفعيل أي أمر أو سكربت نشر على فيرسل.</li>
@@ -520,7 +520,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <span className="text-2xl font-bold text-ink">{qualitySummary.total}</span>
                 <span className="text-xs text-muted">تنبيه وملاحظة مسجلة</span>
               </div>
-              <div className="text-[11px] text-muted flex gap-2">
+              <div className="text-[13px] text-muted flex gap-2">
                 <span className="text-amber-500 font-semibold">{qualitySummary.warnings} تحذير</span>
                 <span>•</span>
                 <span className="text-red-500 font-semibold">{qualitySummary.errors} خطأ</span>
@@ -537,7 +537,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <span>{repairRunning ? 'جارٍ الإصلاح الذاتي...' : 'تشغيل أداة الإصلاح الذاتي آلياً'}</span>
               </button>
               {repairResult && (
-                <div className="text-[11px] text-emerald-600 bg-emerald-500/10 p-2 rounded mt-2">
+                <div className="text-[13px] text-emerald-600 bg-emerald-500/10 p-2 rounded mt-2">
                   ✓ {repairResult.message} (تمت معالجة {repairResult.repairedCount} حركة)
                 </div>
               )}
@@ -558,7 +558,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                   <RotateCw size={13} className={loadingStats ? 'animate-spin' : ''} />
                 </button>
               </div>
-              <div className="max-h-28 overflow-y-auto space-y-1 text-[11px] font-mono text-muted">
+              <div className="max-h-28 overflow-y-auto space-y-1 text-[13px] font-mono text-muted">
                 {Object.entries(tableStats).map(([tbl, cnt]) => (
                   <div key={tbl} className="flex justify-between border-b pb-0.5">
                     <span>{tbl}:</span>
@@ -574,7 +574,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <CheckCircle2 size={16} />
                 <span>قاعدة بيانات Supabase نشطة ومحمية</span>
               </div>
-              <p className="text-[11px] text-muted leading-relaxed">
+              <p className="text-[13px] text-muted leading-relaxed">
                 يتم تمرير لقطة حية (Live Snapshot) تلقائياً للمساعد الذكي عند كل استعلام مع كاش ذكي 60 ثانية لتسريع الإجابة.
               </p>
             </div>
@@ -587,9 +587,9 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                 <Activity size={15} className="text-primary" />
                 اللقطة الحية المباشرة المرسلة للذكاء الاصطناعي (Live Context Payload)
               </span>
-              <span className="text-[10px] text-muted">متزامنة مع حركات المخزن وعقود التوريد</span>
+              <span className="text-[13px] text-muted">متزامنة مع حركات المخزن وعقود التوريد</span>
             </div>
-            <pre className="max-h-60 overflow-auto bg-black/90 text-emerald-400 p-3 rounded font-mono text-[11px] leading-relaxed">
+            <pre className="max-h-60 overflow-auto bg-black/90 text-emerald-400 p-3 rounded font-mono text-[13px] leading-relaxed">
               {liveContextPayload || 'جارٍ جلب اللقطة الحية...'}
             </pre>
           </div>
@@ -662,7 +662,7 @@ export default function ChatbotAdminPage({ session }: ChatbotAdminPageProps) {
                   onChange={(e) => setTemperature(Number(e.target.value))}
                   className="mt-2"
                 />
-                <span className="text-[10px] text-muted">
+                <span className="text-[13px] text-muted">
                   0.0 = صارم ودقيق للأكواد وSQL • 0.7 = إبداعي للشروحات والحلول
                 </span>
               </label>

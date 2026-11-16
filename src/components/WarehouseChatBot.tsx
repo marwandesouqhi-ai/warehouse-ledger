@@ -506,7 +506,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                         <span className="chatbot-kpi-val">
                           {liveContext.totalItemsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="text-[10px] text-muted font-medium">
+                        <span className="text-[13px] text-muted font-medium">
                           {liveContext.totalCustodyUnits.toLocaleString('ar-EG')} وحدة عهدة
                         </span>
                       </div>
@@ -522,7 +522,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                         <span className="chatbot-kpi-val text-amber-600">
                           {liveContext.pendingRequestsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="text-[10px] text-muted font-medium">
+                        <span className="text-[13px] text-muted font-medium">
                           بانتظار الاعتماد المخزني
                         </span>
                       </div>
@@ -538,7 +538,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                         <span className="chatbot-kpi-val text-emerald-600">
                           {liveContext.activeContractsCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="text-[10px] text-muted font-medium">
+                        <span className="text-[13px] text-muted font-medium">
                           عقد توريد سارٍ بالجامعة
                         </span>
                       </div>
@@ -552,7 +552,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                           </div>
                         </div>
                         <span className="chatbot-kpi-val text-indigo-600">8</span>
-                        <span className="text-[10px] text-muted font-medium">
+                        <span className="text-[13px] text-muted font-medium">
                           مربوطة بالمخزن الرئيسي
                         </span>
                       </div>
@@ -573,7 +573,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                         <span className={`chatbot-kpi-val ${qualityCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                           {qualityCount.toLocaleString('ar-EG')}
                         </span>
-                        <span className="text-[10px] text-muted font-medium">
+                        <span className="text-[13px] text-muted font-medium">
                           {qualityCount > 0 ? 'انقر للإصلاح الذاتي 🛠️' : 'سجل سليم 100% 🟢'}
                         </span>
                       </div>
@@ -583,7 +583,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                     <div className="chatbot-sidebar-card">
                       <div className="chatbot-sidebar-title">
                         <span>مخازن وكليات الجامعة (8)</span>
-                        <span className="text-[10px] text-muted">اضغط للاستعلام الفوري</span>
+                        <span className="text-[13px] text-muted">اضغط للاستعلام الفوري</span>
                       </div>
                       <div className="chatbot-warehouse-list">
                         {liveContext.warehouses.map((wh) => (
@@ -618,7 +618,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                           <Link
                             to="/disbursement-requests"
                             onClick={() => setIsOpen(false)}
-                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-bold"
+                            className="text-[13px] text-primary hover:underline flex items-center gap-0.5 font-bold"
                           >
                             عرض الكل <ChevronLeft size={11} />
                           </Link>
@@ -631,7 +631,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
                             >
                               <div>
                                 <span className="font-bold text-ink block">{r.item}</span>
-                                <span className="text-[10px] text-muted">طلب #{r.requestNumber} • كلية {r.dept}</span>
+                                <span className="text-[13px] text-muted">طلب #{r.requestNumber} • كلية {r.dept}</span>
                               </div>
                               <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/50">
                                 {r.qty} وحدة
@@ -696,7 +696,7 @@ function AdminWarehouseChatBot({ session }: WarehouseChatBotProps) {
 
                       {msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
                         <div className="mt-3.5 pt-3 border-t border-border/40 flex flex-col gap-1.5">
-                          <span className="text-[11px] text-muted font-bold flex items-center gap-1">
+                          <span className="text-[13px] text-muted font-bold flex items-center gap-1">
                             <HelpCircle size={12} /> مقترحات المتابعة:
                           </span>
                           <div className="flex flex-wrap gap-1.5">

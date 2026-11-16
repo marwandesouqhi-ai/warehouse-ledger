@@ -31,6 +31,7 @@ export function getAccessIdentity(): string {
 }
 
 const recentSecurityDenialCache = new Map<string, number>()
+let lastSessionInvalidSignal = 0
 
 /** Discard a response belonging to the previous account, including in-flight cache fills, and surface RLS/API 401/403 denials. */
 export async function accessScopedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -42,6 +43,22 @@ export async function accessScopedFetch(input: RequestInfo | URL, init?: Request
     return new Response(JSON.stringify({ message: 'تغير الحساب؛ أعد تحميل البيانات.', code: 'ACCESS_CONTEXT_CHANGED' }), {
       status: 409, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  // A 401 on an authenticated data call means the JWT is no longer valid (expired/revoked). Tell the app so it can
+  // refresh the session or ask the user to sign in again, instead of silently showing empty data.
+  if (
+    typeof window !== 'undefined' &&
+    currentSession &&
+    response.status === 401 &&
+    /\/(rest|storage)\/v1\//.test(url) &&
+    !/\/(audit_logs|login_attempts|rpc\/record_security_event)/.test(url)
+  ) {
+    const now = Date.now()
+    if (now - lastSessionInvalidSignal > 15_000) {
+      lastSessionInvalidSignal = now
+      window.dispatchEvent(new CustomEvent('znu-session-invalid'))
+    }
   }
 
   // Capture PostgREST RLS (401/403) and Edge API denials when authenticated without causing recursion

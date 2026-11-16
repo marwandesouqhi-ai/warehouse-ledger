@@ -60,6 +60,7 @@ import {
     setGoogleSheetsWebhookUrl,
     pushMovementToGoogleSheet,
 } from '../lib/googleSheetsRealtimeSync'
+import { notify } from '../lib/dialogs'
 
 type SettingsPageProps = {
     settings: AppSettings
@@ -228,7 +229,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
         let nextDays: number[]
         if (currentDays.includes(dayVal)) {
             if (currentDays.length === 1) {
-                alert('يجب تحديد يوم واحد على الأقل للنسخ الاحتياطي.')
+                notify('يجب تحديد يوم واحد على الأقل للنسخ الاحتياطي.')
                 return
             }
             nextDays = currentDays.filter((d) => d !== dayVal)
@@ -1076,7 +1077,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <h4>الربط والنسخ التلقائي الشامل (Real-Time Auto-Backup)</h4>
-                                                <span className="badge badge-success text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                                <span className="badge badge-success text-[13px] px-2 py-0.5 rounded-full font-bold">
                                                     {autoBackupEnabled ? '● نشط وتلقائي' : 'متوقف'}
                                                 </span>
                                             </div>
@@ -1117,7 +1118,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <h4>جدول ومواعيد النسخ الاحتياطي التلقائي (Scheduled Planner)</h4>
-                                                <span className={`badge text-[10px] px-2 py-0.5 rounded-full font-bold ${scheduleConfig.enabled ? 'badge-success bg-blue-600 text-white' : 'badge-neutral'}`}>
+                                                <span className={`badge text-[13px] px-2 py-0.5 rounded-full font-bold ${scheduleConfig.enabled ? 'badge-success bg-blue-600 text-white' : 'badge-neutral'}`}>
                                                     {scheduleConfig.enabled ? 'مجدول ونشط' : 'الجدولة معطلة'}
                                                 </span>
                                             </div>
@@ -1139,7 +1140,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                         <div className="flex items-center gap-2.5">
                                             <Clock size={16} className="text-blue-500 shrink-0" />
                                             <div>
-                                                <span className="text-muted-foreground block text-[11px]">موعد النسخ الاحتياطي التلقائي القادم:</span>
+                                                <span className="text-muted-foreground block text-[13px]">موعد النسخ الاحتياطي التلقائي القادم:</span>
                                                 <strong className="text-sm text-foreground mt-0.5 block">
                                                     {formatNextScheduledRunArabic(computeNextScheduledRun(scheduleConfig))}
                                                 </strong>
@@ -1168,7 +1169,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'realtime_and_scheduled' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
                                                     >
                                                         <span>نسخ فوري + مجدول (موصى به)</span>
-                                                        <span className="text-[10px] opacity-75 font-normal">لقطة فورية عند التعديل + نسخة شاملة في الموعد المجدول</span>
+                                                        <span className="text-[13px] opacity-75 font-normal">لقطة فورية عند التعديل + نسخة شاملة في الموعد المجدول</span>
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1176,7 +1177,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'scheduled_only' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
                                                     >
                                                         <span>نسخ مجدول فقط (بالساعة)</span>
-                                                        <span className="text-[10px] opacity-75 font-normal">نسخ فقط في اليوم والساعة المحددة دون نسخ فوري مستمر</span>
+                                                        <span className="text-[13px] opacity-75 font-normal">نسخ فقط في اليوم والساعة المحددة دون نسخ فوري مستمر</span>
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1184,7 +1185,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                         className={`p-2.5 rounded-lg border text-right transition-all flex flex-col gap-1 ${scheduleConfig.mode === 'realtime_only' ? 'border-blue-500 bg-blue-500/10 font-bold text-blue-400' : 'border-border/50 bg-surface hover:bg-surface-hover'}`}
                                                     >
                                                         <span>نسخ فوري فقط</span>
-                                                        <span className="text-[10px] opacity-75 font-normal">نسخ فوري لحظي فقط عند حفظ الحركات وتعديل البيانات</span>
+                                                        <span className="text-[13px] opacity-75 font-normal">نسخ فوري لحظي فقط عند حفظ الحركات وتعديل البيانات</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -1195,7 +1196,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                     <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border/40">
                                                         <div>
                                                             <span className="font-semibold block text-foreground">وقت تنفيذ النسخة الاحتياطية:</span>
-                                                            <span className="text-muted-foreground text-[11px]">حدد الساعة والدقيقة التي يبدأ فيها النسخ التلقائي</span>
+                                                            <span className="text-muted-foreground text-[13px]">حدد الساعة والدقيقة التي يبدأ فيها النسخ التلقائي</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             <input
@@ -1216,14 +1217,14 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleSaveSchedule({ ...scheduleConfig, frequency: 'daily', daysOfWeek: [0, 1, 2, 3, 4, 5, 6] })}
-                                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium border ${scheduleConfig.daysOfWeek.length === 7 ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
+                                                                    className={`px-2 py-0.5 rounded text-[13px] font-medium border ${scheduleConfig.daysOfWeek.length === 7 ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
                                                                 >
                                                                     يومياً (كل الأيام)
                                                                 </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleSaveSchedule({ ...scheduleConfig, frequency: 'custom_days', daysOfWeek: [6, 0, 1, 2, 3, 4] })}
-                                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium border ${scheduleConfig.daysOfWeek.length === 6 && !scheduleConfig.daysOfWeek.includes(5) ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
+                                                                    className={`px-2 py-0.5 rounded text-[13px] font-medium border ${scheduleConfig.daysOfWeek.length === 6 && !scheduleConfig.daysOfWeek.includes(5) ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface border-border text-muted-foreground'}`}
                                                                 >
                                                                     أيام العمل (السبت - الخميس)
                                                                 </button>
@@ -1720,7 +1721,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className={`badge text-[10px] px-2.5 py-1 rounded-full font-bold ${sheetsWebhook.trim() ? 'badge-success bg-emerald-600 text-white' : 'badge-neutral'}`}>
+                            <span className={`badge text-[13px] px-2.5 py-1 rounded-full font-bold ${sheetsWebhook.trim() ? 'badge-success bg-emerald-600 text-white' : 'badge-neutral'}`}>
                                 {sheetsWebhook.trim() ? '● المزامنة اللحظية مفعلة' : 'المزامنة متوقفة (أدخل الرابط)'}
                             </span>
                         </div>
@@ -1792,7 +1793,7 @@ export default function SettingsPage({ settings, darkMode, session, onSave, onTo
                             </div>
                         )}
 
-                        <div className="text-[11px] text-muted-foreground bg-surface p-3 rounded-lg border border-border/40 space-y-1">
+                        <div className="text-[13px] text-muted-foreground bg-surface p-3 rounded-lg border border-border/40 space-y-1">
                             <strong className="block text-foreground">💡 كيف تعمل المزامنة اللحظية؟</strong>
                             <p>
                                 بمجرد تسجيل أو حفظ أي حركة جديدة (إضافة رصيد، توريد، صرف إذن عهدة) في أي مخزن، يرسلها النظام في الخلفية خلال أجزاء من الثانية إلى تبويب <code>AppSheet_DB</code>، فتقوم معادلات الشيت بتحديث كشف الكلية المعنية والأرصدة ولوحة المؤشرات تلقائياً.
