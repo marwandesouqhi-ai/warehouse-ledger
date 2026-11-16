@@ -1709,7 +1709,7 @@ function App() {
                   return
                 }
                 if (searchTerm.trim()) {
-                  navigate('/purchases')
+                  navigate(canAccessRoute(session, '/purchases') ? '/purchases' : '/custody')
                 }
               }}
             >
@@ -2864,7 +2864,7 @@ function App() {
             path="/quality"
             element={
               canAccessRoute(session, '/quality') ? (
-                <QualityPage session={session} movements={movements} onInspect={(item) => { setSearchTerm(item); navigate('/purchases') }} />
+                <QualityPage session={session} movements={movements} onInspect={(item) => { setSearchTerm(item); navigate(canAccessRoute(session, '/purchases') ? '/purchases' : '/custody') }} />
               ) : (
                 <RestrictedScreen
                   title="فحص الجودة"
@@ -3197,20 +3197,24 @@ function App() {
           <LayoutDashboard size={20} />
           <span>الرئيسية</span>
         </NavLink>
-        <NavLink to="/purchases" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
-          <Receipt size={20} />
-          <span>المشتريات</span>
-        </NavLink>
+        {canAccessRoute(session, '/purchases') && (
+          <NavLink to="/purchases" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+            <Receipt size={20} />
+            <span>المشتريات</span>
+          </NavLink>
+        )}
         {canViewPage(session, 'custody') && (
           <NavLink to="/custody" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
             <Boxes size={20} />
             <span>المخازن</span>
           </NavLink>
         )}
-        <NavLink to="/reports" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
-          <FileSpreadsheet size={20} />
-          <span>التقارير</span>
-        </NavLink>
+        {canAccessRoute(session, '/reports') && (
+          <NavLink to="/reports" className={({ isActive }) => `bottom-dock-item ${isActive ? 'active' : ''}`}>
+            <FileSpreadsheet size={20} />
+            <span>التقارير</span>
+          </NavLink>
+        )}
         <button
           type="button"
           className={`bottom-dock-item ${mobileMenuOpen ? 'active' : ''}`}
