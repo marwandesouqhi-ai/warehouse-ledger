@@ -19,6 +19,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run check:supabase
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  e2e:
+    # Browser smoke tests for signed-out flows. Non-blocking until it has run green for a while.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

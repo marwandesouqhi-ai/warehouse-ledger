@@ -1,0 +1,51 @@
+name: Deploy Supabase (manual)
+
+# Manual, on-demand deployment of edge functions and migrations so what runs in production always matches `main`.
+# Required repository secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_DB_PASSWORD.
+on:
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: 'Deploy edge functions'
+        type: boolean
+        default: true
+      migrations:
+        description: 'Apply pending database migrations'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:supabase
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link project
+        run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Apply migrations
+        if: ${{ inputs.migrations }}
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Deploy edge functions
+        if: ${{ inputs.functions }}
+        # verify_jwt per function is read from supabase/config.toml
+        run: supabase functions deploy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
