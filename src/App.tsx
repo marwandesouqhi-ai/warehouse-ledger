@@ -287,7 +287,7 @@ function App() {
     if (hash.includes('error=')) return false
     return hash.includes('type=invite') || search.includes('type=invite')
   })
-  const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(supabase ? 'loading' : 'local')
+  const [, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(supabase ? 'loading' : 'local')
   const [syncError, setSyncError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -1742,11 +1742,6 @@ function App() {
           </div>
         </header>
 
-        <div className="workspace-meta">
-          <span><CalendarDays size={15} /> كل الحركات</span>
-          <span><Package size={15} /> {movements.length.toLocaleString('ar-EG')} حركة مسجلة</span>
-          <span className="local-status"><i />{syncStatus === 'synced' ? 'متزامنة مع Supabase' : syncStatus === 'error' ? 'تعذرت المزامنة' : 'محفوظة على هذا الجهاز'}</span>
-        </div>
         {syncError && <div className="inline-message error" role="alert">{syncError}</div>}
 
         <AnimatePresence mode="wait">
