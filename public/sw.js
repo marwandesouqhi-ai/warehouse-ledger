@@ -44,6 +44,40 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+// Web Push: show the notification and open the related page on tap.
+self.addEventListener('push', (event) => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch { data = { title: 'إشعار جديد', body: event.data ? event.data.text() : '' } }
+  const title = data.title || 'ZNU-Warehouse-Ledger'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.tag || undefined,
+      dir: 'rtl',
+      lang: 'ar',
+      data: { url: typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/notifications' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = (event.notification.data && event.notification.data.url) || '/notifications'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate(target).catch(() => undefined)
+          return client.focus()
+        }
+      }
+      return self.clients.openWindow(target)
+    })
+  )
+})
+
 // Fetch event: Bounded navigation strategy for documents, stale-while-revalidate for static assets
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)

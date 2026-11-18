@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { isSafeInternalRoute } from '../lib/security'
+import { disablePush, enablePush, getPushState, type PushState } from '../lib/pushNotifications'
 import {
   fetchNotifications,
   markNotificationAsRead,
@@ -52,6 +53,30 @@ export default function NotificationsPage(_props: NotificationsPageProps) {
   useEffect(() => {
     void loadNotifications()
   }, [])
+
+  const [pushState, setPushState] = useState<PushState>('unsupported')
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushError, setPushError] = useState('')
+
+  useEffect(() => {
+    void getPushState().then(setPushState)
+  }, [])
+
+  const handleTogglePush = async () => {
+    setPushBusy(true)
+    setPushError('')
+    try {
+      if (pushState === 'enabled') {
+        await disablePush()
+      } else {
+        const res = await enablePush()
+        if (!res.ok) setPushError(res.error || 'تعذر تفعيل الإشعارات.')
+      }
+      setPushState(await getPushState())
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   const handleMarkAsRead = async (id: string) => {
     await markNotificationAsRead(id)
@@ -98,6 +123,31 @@ export default function NotificationsPage(_props: NotificationsPageProps) {
           )}
         </div>
       </header>
+
+      {pushState !== 'unsupported' && (
+        <div className="card-surface p-4 flex items-center justify-between gap-3 flex-wrap" role="region" aria-label="إشعارات الهاتف">
+          <div>
+            <strong>إشعارات الهاتف</strong>
+            <p className="font-sm text-muted">
+              {pushState === 'enabled' && 'مفعّلة على هذا الجهاز: ستصلك الإشعارات حتى والتطبيق مغلق.'}
+              {pushState === 'disabled' && 'فعّلها لتصلك الإشعارات الجديدة على شاشة هذا الجهاز.'}
+              {pushState === 'denied' && 'الإشعارات محظورة من إعدادات المتصفح لهذا الموقع. اسمح بها ثم أعد المحاولة.'}
+              {pushState === 'needs-install' && 'على الآيفون: اضغط زر المشاركة ثم "إضافة إلى الشاشة الرئيسية"، وافتح التطبيق من أيقونته ثم فعّل الإشعارات.'}
+            </p>
+            {pushError && <p className="font-sm" role="alert" style={{ color: 'var(--bad)' }}>{pushError}</p>}
+          </div>
+          {(pushState === 'enabled' || pushState === 'disabled') && (
+            <button
+              type="button"
+              className={pushState === 'enabled' ? 'secondary-btn' : 'primary-btn'}
+              onClick={handleTogglePush}
+              disabled={pushBusy}
+            >
+              <Bell size={16} /> {pushState === 'enabled' ? 'إيقاف إشعارات الهاتف' : 'تفعيل إشعارات الهاتف'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="card-surface p-4">
