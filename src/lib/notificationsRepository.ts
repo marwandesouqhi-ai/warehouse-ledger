@@ -51,9 +51,13 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
 
   if (supabase) {
     try {
+      // The `notifications` table is shared with another system (rows carry company_id / legacy_firebase_id).
+      // Only rows that do not belong to it are this app's notifications.
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .is('company_id', null)
+        .is('legacy_firebase_id', null)
         .order('created_at', { ascending: false })
         .limit(100)
       if (!error && Array.isArray(data)) {
@@ -83,7 +87,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
 export async function markAllNotificationsAsRead(): Promise<void> {
   if (supabase) {
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false)
+      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false).is('company_id', null).is('legacy_firebase_id', null)
     } catch {
       // fallback
     }

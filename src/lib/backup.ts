@@ -1687,7 +1687,7 @@ export async function restoreFromCloud(session?: Session | null): Promise<Restor
 
   // 16. Notifications
   try {
-    const { data: cloudNotifs } = await supabase.from('notifications').select('*').order('created_at', { ascending: false })
+    const { data: cloudNotifs } = await supabase.from('notifications').select('*').is('company_id', null).is('legacy_firebase_id', null).order('created_at', { ascending: false })
     if (cloudNotifs && Array.isArray(cloudNotifs)) {
       saveLocalNotifications(cloudNotifs)
       counts.notifications = cloudNotifs.length
