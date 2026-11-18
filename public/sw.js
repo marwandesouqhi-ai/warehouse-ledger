@@ -1,7 +1,7 @@
 // Service Worker for Warehouse Ledger PWA
 // Fulfills Issue #41: Bounded navigation strategy in the service worker with a build-generated precache manifest.
 
-const CACHE_VERSION = 'v2-bounded'
+const CACHE_VERSION = 'v3-no-html-as-script'
 const CACHE_NAME = `warehouse-ledger-${CACHE_VERSION}`
 const NAVIGATION_TIMEOUT_MS = 2500
 
@@ -107,17 +107,23 @@ self.addEventListener('fetch', (event) => {
   ) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
+        // A cached "script/style" that is really HTML (SPA rewrite of a deleted hashed file) must never be reused.
+        const isBadCached = cachedResponse && /text\/html/i.test(cachedResponse.headers.get('content-type') || '')
+        const usableCache = isBadCached ? undefined : cachedResponse
+
         const fetchPromise = fetch(event.request)
           .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
+            const type = (networkResponse && networkResponse.headers.get('content-type')) || ''
+            // Only cache real assets: after a deploy a missing hashed file comes back as 200 index.html.
+            if (networkResponse && networkResponse.status === 200 && !/text\/html/i.test(type)) {
               const clone = networkResponse.clone()
               caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
             }
             return networkResponse
           })
-          .catch(() => cachedResponse)
+          .catch(() => usableCache || Response.error())
 
-        return cachedResponse || fetchPromise
+        return usableCache || fetchPromise
       })
     )
     return

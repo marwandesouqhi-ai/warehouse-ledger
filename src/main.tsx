@@ -15,6 +15,21 @@ import './index.css'
 registerServiceWorker()
 installClientErrorReporter()
 
+// After a deploy, an open tab may still reference deleted hashed chunks. Reload once to pick up the new build.
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    if (sessionStorage.getItem('znu-chunk-reload') === '1') return
+    sessionStorage.setItem('znu-chunk-reload', '1')
+    event.preventDefault()
+    window.location.reload()
+  } catch {
+    // ignore
+  }
+})
+window.addEventListener('load', () => {
+  window.setTimeout(() => { try { sessionStorage.removeItem('znu-chunk-reload') } catch { /* ignore */ } }, 10_000)
+})
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
