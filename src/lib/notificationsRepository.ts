@@ -45,25 +45,37 @@ export function saveLocalNotifications(items: AppNotification[]) {
   }
 }
 
+type CloudNotification = Omit<AppNotification, 'is_read'> & { read_by?: string[] | null }
+
+async function currentUserId(): Promise<string | null> {
+  try {
+    const { data } = await supabase!.auth.getSession()
+    return data.session?.user.id ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Notifications are created server-side by database triggers on real events (see app_notifications migration). */
 export async function fetchNotifications(): Promise<AppNotification[]> {
   // Always clean local demo cache first
   purgeLocalDemoData()
 
   if (supabase) {
     try {
-      // The `notifications` table is shared with another system (rows carry company_id / legacy_firebase_id).
-      // Only rows that do not belong to it are this app's notifications.
+      const uid = await currentUserId()
       const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .is('company_id', null)
-        .is('legacy_firebase_id', null)
+        .from('app_notifications')
+        .select('id, user_id, title, body, type, action_url, related_id, related_type, created_at, read_by')
         .order('created_at', { ascending: false })
         .limit(100)
       if (!error && Array.isArray(data)) {
-        const cleaned = data.filter((n: AppNotification) => !DEMO_NOTIF_IDS.has(n.id))
-        saveLocalNotifications(cleaned)
-        return cleaned
+        const mapped: AppNotification[] = (data as CloudNotification[]).map(({ read_by, ...n }) => ({
+          ...n,
+          is_read: Boolean(uid && Array.isArray(read_by) && read_by.includes(uid)),
+        }))
+        saveLocalNotifications(mapped)
+        return mapped
       }
     } catch {
       // fallback
@@ -75,7 +87,7 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
 export async function markNotificationAsRead(id: string): Promise<void> {
   if (supabase) {
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+      await supabase.rpc('mark_notification_read', { p_id: id })
     } catch {
       // fallback
     }
@@ -87,7 +99,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
 export async function markAllNotificationsAsRead(): Promise<void> {
   if (supabase) {
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false).is('company_id', null).is('legacy_firebase_id', null)
+      await supabase.rpc('mark_all_notifications_read')
     } catch {
       // fallback
     }
@@ -96,6 +108,7 @@ export async function markAllNotificationsAsRead(): Promise<void> {
   saveLocalNotifications(local.map((n) => ({ ...n, is_read: true })))
 }
 
+/** Local-only notice (e.g. offline feedback). Server events are created by database triggers. */
 export async function createNotification(
   item: Omit<AppNotification, 'id' | 'created_at' | 'is_read'>
 ): Promise<AppNotification> {
@@ -105,20 +118,6 @@ export async function createNotification(
     is_read: false,
     created_at: new Date().toISOString(),
   }
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('notifications').insert([newNotif]).select().single()
-      if (!error && data) {
-        const local = getLocalNotifications()
-        saveLocalNotifications([data, ...local])
-        return data
-      }
-    } catch {
-      // fallback
-    }
-  }
-
   const local = getLocalNotifications()
   saveLocalNotifications([newNotif, ...local])
   return newNotif
@@ -127,7 +126,7 @@ export async function createNotification(
 export async function deleteNotification(id: string): Promise<void> {
   if (supabase) {
     try {
-      await supabase.from('notifications').delete().eq('id', id)
+      await supabase.from('app_notifications').delete().eq('id', id)
     } catch {
       // fallback
     }

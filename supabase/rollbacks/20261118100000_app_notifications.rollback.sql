@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS notify_registration_request ON public.registration_requests;
+DROP TRIGGER IF EXISTS notify_disbursement_request ON public.disbursement_requests;
+DROP TRIGGER IF EXISTS notify_purchase_request ON public.purchase_requests;
+DROP TRIGGER IF EXISTS notify_security_event ON public.security_events;
+DROP FUNCTION IF EXISTS public.trg_notify_registration_request();
+DROP FUNCTION IF EXISTS public.trg_notify_disbursement_request();
+DROP FUNCTION IF EXISTS public.trg_notify_purchase_request();
+DROP FUNCTION IF EXISTS public.trg_notify_security_event();
+DROP FUNCTION IF EXISTS public.mark_all_notifications_read();
+DROP FUNCTION IF EXISTS public.mark_notification_read(uuid);
+DROP FUNCTION IF EXISTS public.notify_roles(text[], text, text, text, text, text, text);
+DROP TABLE IF EXISTS public.app_notifications;
