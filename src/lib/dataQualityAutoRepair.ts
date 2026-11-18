@@ -9,12 +9,22 @@
 import { supabase } from './supabase'
 import { evaluateLedgerQuality, type QualityFinding } from './quality'
 import { num } from './parse'
-import { fixtureMovements, type FixtureMovement } from './fixture'
+import type { FixtureMovement } from './fixture'
 import { saveMovements } from './movementsRepository'
 import { loadCustodyItems, saveCustodyItems } from './custody'
 import { logAuditEvent } from './auditLogger'
 
 const MOVEMENTS_STORAGE_KEY = 'warehouse-ledger-movements'
+
+function readStoredMovements(): FixtureMovement[] {
+  try {
+    const raw = localStorage.getItem(MOVEMENTS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? (parsed as FixtureMovement[]) : []
+  } catch {
+    return []
+  }
+}
 
 export type AutoRepairReport = {
   success: boolean
@@ -39,17 +49,9 @@ export function getQualityIssuesSummary(): {
   notes: number
   findings: Array<{ movement: FixtureMovement; finding: QualityFinding }>
 } {
-  let moves: FixtureMovement[] = []
-  try {
-    const raw = localStorage.getItem(MOVEMENTS_STORAGE_KEY)
-    if (raw) {
-      moves = JSON.parse(raw)
-    } else {
-      moves = fixtureMovements
-    }
-  } catch {
-    moves = fixtureMovements
-  }
+  // Only the user's real movements are evaluated. Never fall back to the bundled demo fixture: that produced
+  // phantom alerts (and made the repair write demo rows into the ledger) whenever the local cache was still empty.
+  const moves = readStoredMovements()
 
   const findings: Array<{ movement: FixtureMovement; finding: QualityFinding }> = []
   const ledgerFindings = evaluateLedgerQuality(moves as unknown as Array<Record<string, unknown>>)
@@ -76,16 +78,20 @@ export function getQualityIssuesSummary(): {
  * تشغيل أداة الإصلاح الذاتي التلقائي عبر جميع الطبقات
  */
 export async function runDataQualityAutoRepair(sessionUserId?: string): Promise<AutoRepairReport> {
-  let moves: FixtureMovement[] = []
-  try {
-    const raw = localStorage.getItem(MOVEMENTS_STORAGE_KEY)
-    if (raw) {
-      moves = JSON.parse(raw)
-    } else {
-      moves = [...fixtureMovements]
+  const moves = readStoredMovements()
+  if (moves.length === 0) {
+    return {
+      success: true,
+      initialFindingsCount: 0,
+      remainingFindingsCount: 0,
+      fixedPriceCount: 0,
+      fixedInvoiceCount: 0,
+      fixedDateCount: 0,
+      fixedPermitCount: 0,
+      totalRepairedRows: 0,
+      cloudSynced: false,
+      message: 'لا توجد حركات محلية لفحصها.',
     }
-  } catch {
-    moves = [...fixtureMovements]
   }
 
   const initialSummary = getQualityIssuesSummary()
